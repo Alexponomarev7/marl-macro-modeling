@@ -1,26 +1,47 @@
 import fire
+import pickle
+import hashlib
 import importlib
-import pandas as pd
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from loguru import logger
 from typing import (
     Union,
-    List,
+    Dict,
 )
 
 from lib.config import RAW_DATA_DIR
 
 
-def generate_env_data(env, num_steps: int, seed: int = 42):
+def generate_hash(params: Dict) -> str:
+    """
+    Generate a hash from the sorted parameters.
+
+    :param params: Dictionary of parameters
+    :return: Short hash string
+    """
+    sorted_params = sorted(params.items())
+    params_str = ','.join(f"{k}={v}" for k, v in sorted_params)
+    return hashlib.md5(params_str.encode()).hexdigest()[:8]
+
+
+def generate_env_data(env, num_steps: int = 1000, seed: int = 42) -> Dict:
     """
     Generate data from the given environment using its analytical solution.
 
     :param env: The environment instance
     :param num_steps: Number of steps to run the environment
     :param seed: Random seed for reproducibility
-    :return: DataFrame containing the generated data
+    :return: A dictionary containing:
+        - 'env_params': The parameters of the environment.
+        - 'tracks': A DataFrame containing the generated data with columns:
+            - 'state': The state of the environment at each step.
+            - 'reward': The reward received at each step.
+            - 'done': A boolean indicating if the episode is done.
+            - 'truncated': A boolean indicating if the episode was truncated.
+            - 'info': Additional information from the environment at each step.
     """
     np.random.seed(seed)
     env.reset(seed=seed)
@@ -36,7 +57,10 @@ def generate_env_data(env, num_steps: int, seed: int = 42):
             "info": info
         })
 
-    return pd.DataFrame(data)
+    return {
+        'env_params': env.params,
+        'tracks': pd.DataFrame(data),
+    }
 
 
 def main(
@@ -70,9 +94,13 @@ def main(
     logger.info("Generating data...")
     data = generate_env_data(env, num_steps, seed)
 
+    logger.info("Generating hash for parameters...")
+    params_hash = generate_hash(env_params)
+
     logger.info("Saving data...")
-    output_file = output_folder / f"{class_name}.csv"
-    data.to_csv(output_file, index=False)
+    output_file = Path(output_folder) / f"{class_name}_{params_hash}.pkl"
+    with open(output_file, "wb") as f:
+        pickle.dump(data, f)
 
     logger.success(f"Data saved to {str(output_file)}")
 
