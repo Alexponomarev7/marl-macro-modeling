@@ -1,6 +1,9 @@
-import warnings; warnings.filterwarnings("ignore")
+import warnings;
+
+warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
+import sympy as sp
 import gymnasium as gym
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
@@ -35,7 +38,7 @@ class RBCEnv(gym.Env):
         - Leisure: Time allocated to leisure
         - Consumption rate: Fraction of output for consumption
 
-    :param discount_rate: Time preference parameter, defaults to 0.99
+    :param discount_rate: Time preference parameter (discount factor in RL), defaults to 0.99
     :param marginal_disutility_of_labor: Weight on leisure in utility, defaults to 1.0
     :param depreciation_rate: Capital depreciation rate, defaults to 0.025
     :param capital_share_of_output: Capital share in production function, defaults to 0.36
@@ -232,6 +235,81 @@ class RBCEnv(gym.Env):
             "consumption": consumption,
             "utility": reward,
             "output": current_output
+        }
+
+        return self._get_state(), reward, done, False, info
+
+    def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
+        """
+        Calculate the analytical solution for the RBC model for one time step.
+
+        :return: Tuple containing:
+                - state: Dictionary of current state variables
+                - reward: Utility value for current period
+                - terminated: Whether episode has ended (always False)
+                - truncated: Whether episode was truncated (always False)
+                - info: Dictionary with additional information
+        """
+        # todo: revise code
+        # Define symbols for consumption (C), labor (L), and capital (K)
+        C, L, K = sp.symbols('C L K')
+
+        # Define the production function
+        A = sp.exp(self.technology)
+        alpha = self.capital_share_of_output
+        Y = A * (K ** alpha) * (L ** (1 - alpha))
+
+        # Define the utility function
+        if self.utility_function == log_utility:
+            utility = sp.log(C) + self.utility_params['A'] * sp.log(1 - L)
+        elif self.utility_function == ces_utility:
+            sigma = self.utility_params['sigma']
+            eta = self.utility_params['eta']
+            A = self.utility_params['A']
+            utility = (C ** (1 - sigma)) / (1 - sigma) + A * ((1 - L) ** (1 - eta)) / (1 - eta)
+        else:
+            raise ValueError("Unknown utility function")
+
+        # Define the budget constraint
+        I = Y - C  # Investment
+        K_next = (1 - self.depreciation_rate) * K + I  # Capital next period
+
+        # Define the Euler equation for consumption
+        euler_eq = sp.diff(utility, C) - self.discount_rate * sp.diff(utility.subs(C, C * (1 + self.depreciation_rate)), C)
+
+        # Solve the system of equations
+        solution = sp.solve([euler_eq, Y - C - I, K_next - K], (C, L, K))
+
+        # Extract the solutions
+        optimal_C = solution[C]
+        optimal_L = solution[L]
+        optimal_K = solution[K]
+
+        # Calculate the new state variables
+        new_capital = optimal_K
+        new_labor = optimal_L
+        new_technology = self.technology_shock_persistence * self.technology + np.random.normal(0, self.technology_shock_variance)
+        new_output = np.exp(new_technology) * (new_capital ** self.capital_share_of_output) * (new_labor ** (1 - self.capital_share_of_output))
+
+        # Calculate the reward (utility)
+        reward = self.calculate_utility(optimal_C, new_labor)
+
+        # Update the state
+        self.capital = new_capital
+        self.labor = new_labor
+        self.technology = new_technology
+        self.output = new_output
+
+        # Check if episode should terminate
+        self.current_step += 1
+        done = False  # RBC models typically run indefinitely - there's no natural endpoint to the economic simulation
+
+        # Additional information
+        info = {
+            "investment": new_output - optimal_C,
+            "consumption": optimal_C,
+            "utility": reward,
+            "output": new_output
         }
 
         return self._get_state(), reward, done, False, info
