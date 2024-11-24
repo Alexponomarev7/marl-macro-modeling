@@ -1,9 +1,7 @@
-import warnings;
+import warnings; warnings.filterwarnings("ignore")
 
-warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
-import sympy as sp
 import gymnasium as gym
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
@@ -251,48 +249,30 @@ class RBCEnv(gym.Env):
                 - info: Dictionary with additional information
         """
         # todo: revise code
-        # Define symbols for consumption (C), labor (L), and capital (K)
-        C, L, K = sp.symbols('C L K')
-
-        # Define the production function
-        A = sp.exp(self.technology)
+        # Define parameters
         alpha = self.capital_share_of_output
-        Y = A * (K ** alpha) * (L ** (1 - alpha))
+        beta = self.discount_rate
+        delta = self.depreciation_rate
+        A = np.exp(self.technology)
 
-        # Define the utility function
-        if self.utility_function == log_utility:
-            utility = sp.log(C) + self.utility_params['A'] * sp.log(1 - L)
-        elif self.utility_function == ces_utility:
-            sigma = self.utility_params['sigma']
-            eta = self.utility_params['eta']
-            A = self.utility_params['A']
-            utility = (C ** (1 - sigma)) / (1 - sigma) + A * ((1 - L) ** (1 - eta)) / (1 - eta)
-        else:
-            raise ValueError("Unknown utility function")
+        # Calculate steady-state values
+        steady_state_labor = (1 - alpha) / (1 - alpha + self.marginal_disutility_of_labor)
+        steady_state_output = A * (self.capital ** alpha) * (steady_state_labor ** (1 - alpha))
+        steady_state_consumption = steady_state_output - delta * self.capital
+        steady_state_investment = delta * self.capital
 
-        # Define the budget constraint
-        I = Y - C  # Investment
-        K_next = (1 - self.depreciation_rate) * K + I  # Capital next period
+        # Update technology shock
+        technology_shock = np.random.normal(0, self.technology_shock_variance)
+        new_technology = self.technology_shock_persistence * self.technology + technology_shock
 
-        # Define the Euler equation for consumption
-        euler_eq = sp.diff(utility, C) - self.discount_rate * sp.diff(utility.subs(C, C * (1 + self.depreciation_rate)), C)
+        # Calculate new state variables
+        new_capital = (1 - delta) * self.capital + steady_state_investment
+        new_capital = np.clip(new_capital, 0, self.max_capital)
+        new_labor = steady_state_labor
+        new_output = np.exp(new_technology) * (new_capital ** alpha) * (new_labor ** (1 - alpha))
 
-        # Solve the system of equations
-        solution = sp.solve([euler_eq, Y - C - I, K_next - K], (C, L, K))
-
-        # Extract the solutions
-        optimal_C = solution[C]
-        optimal_L = solution[L]
-        optimal_K = solution[K]
-
-        # Calculate the new state variables
-        new_capital = optimal_K
-        new_labor = optimal_L
-        new_technology = self.technology_shock_persistence * self.technology + np.random.normal(0, self.technology_shock_variance)
-        new_output = np.exp(new_technology) * (new_capital ** self.capital_share_of_output) * (new_labor ** (1 - self.capital_share_of_output))
-
-        # Calculate the reward (utility)
-        reward = self.calculate_utility(optimal_C, new_labor)
+        # Calculate reward (utility)
+        reward = self.calculate_utility(steady_state_consumption, new_labor)
 
         # Update the state
         self.capital = new_capital
@@ -306,8 +286,8 @@ class RBCEnv(gym.Env):
 
         # Additional information
         info = {
-            "investment": new_output - optimal_C,
-            "consumption": optimal_C,
+            "investment": steady_state_investment,
+            "consumption": steady_state_consumption,
             "utility": reward,
             "output": new_output
         }
