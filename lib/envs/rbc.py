@@ -1,4 +1,6 @@
-import warnings; warnings.filterwarnings("ignore")
+import warnings;
+
+warnings.filterwarnings("ignore")
 
 import numpy as np
 import pandas as pd
@@ -13,13 +15,14 @@ from typing import (
     Union,
 )
 
+from lib.envs.environment_base import AbstractEconomicEnv
 from lib.utility_funcs import (
     log_utility,
     ces_utility,
 )
 
 
-class RBCEnv(gym.Env):
+class RBCEnv(AbstractEconomicEnv):
     """
     A Real Business Cycle (RBC) environment implementing a standard RBC model.
     The agent acts as a representative consumer-worker making decisions about
@@ -308,6 +311,26 @@ class RBCEnv(gym.Env):
         """Clean up resources"""
         # included for compatibility with the Gymnasium API
         pass
+
+    @property
+    def params(self) -> Dict[str, Union[float, str, dict]]:
+        """
+        Get the current parameters of the RBC environment.
+
+        :return: Dictionary containing the current parameters of the environment
+        """
+        return {
+            "discount_rate": self.discount_rate,
+            "marginal_disutility_of_labor": self.marginal_disutility_of_labor,
+            "depreciation_rate": self.depreciation_rate,
+            "capital_share_of_output": self.capital_share_of_output,
+            "technology_shock_persistence": self.technology_shock_persistence,
+            "technology_shock_variance": self.technology_shock_variance,
+            "initial_capital": self.initial_capital,
+            "max_capital": self.max_capital,
+            "utility_function": self.utility_function.__name__,
+            "utility_params": self.utility_params,
+        }
 
     @property
     def state_description(self):
