@@ -58,6 +58,7 @@ def generate_env_data(env, num_steps: int = 1000, seed: int = 42) -> Dict:
         })
 
     return {
+        'env_name': env.__class__.__name__,
         'env_params': env.params,
         'tracks': pd.DataFrame(data),
     }
