@@ -1,4 +1,3 @@
-import yaml
 import fire
 import pickle
 import hashlib
@@ -12,9 +11,8 @@ from typing import (
     Union,
     Dict,
 )
-from omegaconf import OmegaConf
 import hydra
-from hydra.utils import instantiate
+from omegaconf import OmegaConf
 
 from lib.config import (
     RAW_DATA_DIR,
