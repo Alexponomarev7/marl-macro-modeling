@@ -1,3 +1,4 @@
+import yaml
 import fire
 import pickle
 import hashlib
@@ -11,8 +12,14 @@ from typing import (
     Union,
     Dict,
 )
+from omegaconf import OmegaConf
+import hydra
+from hydra.utils import instantiate
 
-from lib.config import RAW_DATA_DIR
+from lib.config import (
+    RAW_DATA_DIR,
+    PARAMS_CONFIG,
+)
 
 
 def generate_hash(params: Dict) -> str:
@@ -64,7 +71,7 @@ def generate_env_data(env, num_steps: int = 1000, seed: int = 42) -> Dict:
     }
 
 
-def main(
+def run_generation(
         env_class: str,
         num_steps: int = 1000,
         output_folder: Union[Path, str] = RAW_DATA_DIR,
@@ -106,5 +113,75 @@ def main(
     logger.success(f"Data saved to {str(output_file)}")
 
 
+def run_generation_batch(config_path="../conf", config_name="config"):
+    """
+    Run batch data generation using Hydra config for all specified environments.
+    """
+    with hydra.initialize(version_base=None, config_path=config_path):
+        config = hydra.compose(config_name=config_name)
+
+    # Get environment config
+    env_config = config.envs
+    logger.info(f"Generating data for environment")
+
+    num_steps = env_config.num_steps
+    num_combinations = env_config.num_combinations
+
+    # Generate parameter combinations for current environment
+    params_list = []
+    for _ in range(num_combinations):
+        params = {}
+
+        for param_name, param_spec in env_config.params.items():
+            # Extract the target function and its arguments
+            target_func = param_spec._target_
+            func_args = {k: v for k, v in param_spec.items() if k != "_target_" and not k.startswith("_")}
+
+            # Sample the parameter value using the specified numpy function
+            value = getattr(np.random, target_func)(**func_args)
+
+            # Clip the value if _low and _high are specified
+            if "_low" in param_spec:
+                value = np.clip(value, a_min=param_spec._low, a_max=None)
+            if "_high" in param_spec:
+                value = np.clip(value, a_min=None, a_max=param_spec._high)
+
+            # Convert to float for numerical parameters
+            if param_name != 'utility_function':
+                value = float(value)
+
+            params[param_name] = value
+
+        # Add CES utility parameters if CES is selected
+        if params.get('utility_function') == 'ces':
+            params['utility_params'] = OmegaConf.to_container(
+                env_config.utility_params.ces, resolve=True
+            )
+
+        params_list.append(params)
+
+    # Run generation for each parameter combination
+    logger.info(f"Generating {num_combinations} combinations")
+    logger.info(f"Using {num_steps} steps per combination")
+
+    for i, params in enumerate(params_list, 1):
+        logger.info(f"Running combination {i}/{num_combinations}")
+        logger.info(f"Parameters: {params}")
+
+        try:
+            run_generation(
+                env_class=env_config.env_class,
+                num_steps=num_steps,
+                seed=config.get('seed', 42),
+                **params
+            )
+        except Exception as e:
+            logger.error(f"Error generating data, combination {i}: {e}")
+            continue
+
+
 if __name__ == '__main__':
-    fire.Fire(main)
+    fire.Fire({
+        'single': run_generation,
+        'batch': run_generation_batch,
+    })

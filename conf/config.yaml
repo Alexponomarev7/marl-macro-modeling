@@ -1,2 +1,6 @@
 defaults:
-  - env: rbc
+  - _self_
+  - envs: rbc
+  - override hydra/launcher: basic
+
+seed: 42
