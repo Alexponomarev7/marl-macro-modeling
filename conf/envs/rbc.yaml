@@ -27,10 +27,10 @@ params:
     low: 0.005
     high: 0.01
   initial_capital:
-    _target_: exponential
+    _target_: exponential  # sampling function from numpy.random module
     scale: 1
-    _low: 0.5
-    _high: 1.5
+    _low: 0.5   # add prefix to indicate non-function parameter; here it means lower clipping border
+    _high: 1.5  # upper clipping border
   max_capital:
     _target_: uniform
     low: 5.0

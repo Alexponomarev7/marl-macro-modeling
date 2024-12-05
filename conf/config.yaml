@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - envs: rbc
+  - envs: rbc  # add only environments with described .yaml file
   - override hydra/launcher: basic
 
 seed: 42
