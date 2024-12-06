@@ -1,6 +1,22 @@
-class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
+class rbc_economy_with_policy_env(abstract_economic_env):
     """
-    Extended RBC environment with fiscal and monetary policy effects.
+    Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms. 
+    It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks. 
+    Fiscal and Monetary Policy:
+   - The environment allows for the adjustment of tax rates, government spending, and the money supply, reflecting real-world policy levers.
+   - Actions include changes to these variables, influencing the overall economic trajectory.
+    Dynamic State Variables:
+   - The state includes `Capital`, `Technology`, `TaxRate`, `GovSpending`, and `MoneySupply`, among others, representing the key components of an economy.
+   - These variables evolve through the simulation based on economic dynamics and the policy choices made.
+    Technology Shocks:
+   - A persistent stochastic process governs technology (`Technology`), introducing randomness and mimicking real-world uncertainty in productivity.
+   - Economic output depends on labor and capital using a Cobb-Douglas production function, modified by technology.
+    Action and Observation Spaces:
+   - Actions include rates for investment, leisure, and adjustments to policy levers (tax rate, government spending, and money supply).
+   - Observations describe the current state of the economy, bounded appropriately to reflect real-world constraints.
+   - Rewards are tied to utility, promoting policies that balance consumption and labor while ensuring sustainable investment and capital growth.
+    Constraints and Bounds:
+   - Realistic constraints, such as maximum capital stock and non-negative government spending, are enforced to prevent implausible economic states.
     """
 
     def __init__(
