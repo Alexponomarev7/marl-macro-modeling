@@ -1,42 +1,43 @@
 env_class: lib.envs.rbc.RBCEnv
-num_steps: 1000  # Number of steps
+env_name: RBC
+num_steps: 100  # Number of steps
 num_combinations: 2  # Number of hyperparams combinations
 params:
   discount_rate:
-    _target_: uniform  # Use numpy.random functions
+    _target_: numpy.random.uniform  # Use numpy.random functions
     low: 0.5
     high: 1.0
   marginal_disutility_of_labor:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 0.05
     high: 1.0
   depreciation_rate:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 0.01
     high: 0.8
   capital_share_of_output:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 0.1
     high: 0.9
   technology_shock_persistence:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 0.0
     high: 1.0
   technology_shock_variance:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 0.005
     high: 0.01
   initial_capital:
-    _target_: exponential  # sampling function from numpy.random module
+    _target_: lib.utils.clipped_exponential
     scale: 1
-    _low: 0.5   # add prefix to indicate non-function parameter; here it means lower clipping border
-    _high: 1.5  # upper clipping border
+    low: 0.5
+    high: 1.5
   max_capital:
-    _target_: uniform
+    _target_: numpy.random.uniform
     low: 5.0
     high: 15.0
   utility_function:
-    _target_: choice
+    _target_: numpy.random.choice
     a: ["log", "ces"]
 
 utility_params:
