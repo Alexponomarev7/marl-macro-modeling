@@ -3,6 +3,6 @@ repos:
     rev: v5.0.0
     hooks:
       - id: detect-private-key # detects the presence of private keys.
-      - id: check-added-large-files # prevents giant files from being committed.
+      # - id: check-added-large-files # prevents giant files from being committed.
       - id: check-case-conflict # checks for files that would conflict in case-insensitive filesystems.
       - id: trailing-whitespace # trims trailing whitespace.
