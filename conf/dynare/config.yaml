@@ -1,0 +1,16 @@
+Gali_2008_chapter_2:
+  reward: lib.rewards.l1_norm
+  input:
+    data_path: ./data/raw/Gali_2008_chapter_2_raw.csv
+    state_columns:
+      - Consumption
+      - Real Wage
+      - Inflation
+      - Hours Worked
+      - Real Interest Rate
+      - Output
+      - Money Growth
+    action_columns:
+      - 'Nominal Interest Rate'
+  output:
+    data_path: ./data/processed/Gali_2008_chapter_2.pkl
