@@ -1,0 +1,16 @@
+---
+defaults:
+  - dataset: default
+  - train: default
+  - _self_
+  
+  - override hydra/launcher: basic
+
+metadata:
+  run_id: null # set by the pipeline
+  seed: 42
+  output_dir: ???
+  workdir: ${.output_dir}/${.run_id}
+  project: marl-macro
+  entity: v1
+  track: false
