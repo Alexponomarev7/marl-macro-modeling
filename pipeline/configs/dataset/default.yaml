@@ -1,0 +1,5 @@
+defaults:
+  - envs: rbc
+  - _self_
+
+workdir: ${metadata.workdir}/dataset
