@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import wandb
+import typing
+import clearml
 import hydra
 import hashlib
 import time
@@ -29,7 +30,7 @@ def create_dataset_node(dataset_cfg: dict[str, Any]):
 
     run_generation_batch(dataset_cfg['envs'], workdir)
 
-def create_train_node(train_cfg: dict[str, Any], track: bool):
+def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
     dataloader = DataLoader(
         Dataset(data_path=Path(train_cfg["data_root"])),
         batch_size=1, # used for testing
@@ -50,6 +51,9 @@ def create_train_node(train_cfg: dict[str, Any], track: bool):
 
     criterion = torch.nn.MSELoss()
     for epoch in range(train_cfg["epochs"]):
+        if task:
+            task.set_progress(int(100 * epoch / train_cfg["epochs"]))
+
         total_loss = 0.0
         for states, actions, task_ids in dataloader:
             states = states.to(device)
@@ -67,8 +71,8 @@ def create_train_node(train_cfg: dict[str, Any], track: bool):
 
         avg_loss = total_loss / len(dataloader.dataset)
         logger.info(f"Epoch: {epoch}, Loss: {avg_loss:.4f}")
-        if track:
-            wandb.log({"loss": avg_loss, "epoch": epoch})
+        if task:
+            task.get_logger().report_scalar("loss", "loss", value=avg_loss, iteration=epoch)
 
 
 def set_global_seed(seed: int):
@@ -84,10 +88,11 @@ def main(cfg: DictConfig) -> None:
     cfg = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     metadata = cfg['metadata']
     track = metadata["track"]
+    task = None
     if track:
-        wandb.init(project=metadata["project"], config=metadata)
-        wandb.run.name = metadata["run_id"]
-        wandb.run.save()
+        task = clearml.Task.init(project_name=metadata["project"], task_name=metadata["run_id"], task_type=clearml.Task.TaskTypes.training)
+        task = typing.cast(clearml.Task, task)
+        task.set_parameters_as_dict(cfg)
 
     set_global_seed(metadata['seed'])
     # post process the config
@@ -95,10 +100,10 @@ def main(cfg: DictConfig) -> None:
     
     # todo(aponomarev): make this like true pipeline?
     create_dataset_node(cfg['dataset'])
-    create_train_node(cfg['train'], track)
+    create_train_node(cfg['train'], task)
 
     if track:
-        wandb.finish()
+        task.close()
 
 if __name__ == '__main__':
     main()
