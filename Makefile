@@ -15,6 +15,13 @@ setup:
 	$(PYTHON_INTERPRETER) -m pip install -qr requirements.txt
 	@pre-commit install
 
+## Run Experiment Pipeline
+.PHONY: pipeline
+pipeline:
+	$(PYTHON_INTERPRETER) pipeline/run_pipeline.py \
+  	metadata.output_dir=marl_experiments \
+  	metadata.track=True
+
 
 
 #################################################################################
