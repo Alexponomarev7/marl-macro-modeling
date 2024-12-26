@@ -1,4 +1,4 @@
-class rbc_economy_with_policy_env(abstract_economic_env):
+class RBCEconomyWithPolicyEnv(abstract_economic_env):
     """
     Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms. 
     It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks. 
