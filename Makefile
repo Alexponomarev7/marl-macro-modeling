@@ -14,6 +14,7 @@ setup:
 	$(PYTHON_INTERPRETER) -m pip install -qU pip
 	$(PYTHON_INTERPRETER) -m pip install -qr requirements.txt
 	@pre-commit install
+	@wandb login
 
 ## Run Experiment Pipeline
 .PHONY: pipeline
