@@ -4,3 +4,4 @@ __pycache__
 .snakemake
 data
 .env
+/marl_experiments
