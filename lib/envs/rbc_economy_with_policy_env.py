@@ -1,7 +1,23 @@
-class RBCEconomyWithPolicyEnv(abstract_economic_env):
+import warnings; warnings.filterwarnings("ignore")
+
+import numpy as np
+import gymnasium as gym
+from typing import (
+    Optional,
+    Dict,
+    Tuple,
+)
+
+from lib.envs.environment_base import AbstractEconomicEnv
+from lib.utility_funcs import (
+    log_utility,
+    ces_utility,
+)
+
+class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     """
-    Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms. 
-    It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks. 
+    Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms.
+    It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks.
     Fiscal and Monetary Policy:
    - The environment allows for the adjustment of tax rates, government spending, and the money supply, reflecting real-world policy levers.
    - Actions include changes to these variables, influencing the overall economic trajectory.
