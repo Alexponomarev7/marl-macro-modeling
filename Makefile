@@ -18,7 +18,7 @@ setup:
 
 ## Run Experiment Pipeline
 .PHONY: pipeline
-pipeline:
+pipeline: setup
 	@$(PYTHON_INTERPRETER) pipeline/run_pipeline.py \
   	metadata.output_dir=marl_experiments \
   	metadata.track=True
