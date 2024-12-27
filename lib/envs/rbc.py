@@ -190,6 +190,7 @@ class RBCEnv(AbstractEconomicEnv):
                 - info: Dictionary with additional information
         """
         # Clip leisure between 0 and 1
+        # TODO(aponomarev): think about clipping
         leisure = np.clip(action[1], 0, 1)
 
         # Normalize only investment and consumption rates to sum to 1

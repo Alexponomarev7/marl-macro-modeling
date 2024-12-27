@@ -1,7 +1,5 @@
 import json
-from gymnasium import Env
 import hydra
-import fire
 import hashlib
 import pandas as pd
 from tqdm import tqdm
@@ -61,57 +59,54 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
     }
 
 
-def run_generation_batch(env_config: dict[str, Any], workdir: Path):
+def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], workdir: Path):
     """
     Run batch data generation using Hydra config for all specified environments.
     """
 
-    num_steps = env_config["num_steps"]
-    num_combinations = env_config["num_combinations"]
-
-    logger.info(f"Generating data for environment: {env_config['env_name']} ({num_combinations=}, {num_steps=})")
-
-    # Generate parameter combinations for current environment
-    params_list = []
-    for _ in range(num_combinations):
-        params = {}
-
-        for param_name, param_spec in env_config["params"].items():
-            params[param_name] = hydra.utils.instantiate(param_spec)
-
-        params_list.append(params)
-
-    # Run generation for each parameter combination
-    logger.info(f"Generating {num_combinations} combinations")
-    logger.info(f"Using {num_steps} steps per combination")
-
     metadata = []
-    for i, params in enumerate(params_list, 1):
-        logger.info(f"Running combination {i}/{num_combinations}")
-        logger.info(f"Parameters: {params}")
+    idx = 1
+    for env_config_metadata in dataset_cfg['envs']:
+        num_steps = env_config_metadata["num_steps"]
+        num_combinations = env_config_metadata["num_combinations"]
+        env_config = envs_cfg[env_config_metadata["env_name"]]
+        logger.info(f"Generating data for environment: {env_config['env_name']} ({num_combinations=}, {num_steps=})")
 
-        env = hydra.utils.instantiate({"_target_": env_config["env_class"]} | params)
-        try:
-            env_data = generate_env_data(env, num_steps)
-            params_hash = generate_hash(params)
-            output_path = workdir / f"{i}_{params_hash}.parquet"
-            env_data['tracks'].to_parquet(output_path)
-            metadata.append({
-                'env_name': env_data['env_name'],
-                'env_params': env_data['env_params'],
-                'output_dir': str(output_path),
-            })
-        except Exception as e:
-            logger.error(f"Error generating data, combination {i}")
-            logger.exception(e)
-            continue
+        # Generate parameter combinations for current environment
+        params_list = []
+        for _ in range(num_combinations):
+            params = {}
+
+            for param_name, param_spec in env_config["params"].items():
+                params[param_name] = hydra.utils.instantiate(param_spec)
+
+            params_list.append(params)
+
+        # Run generation for each parameter combination
+        logger.info(f"Generating {num_combinations} combinations")
+        logger.info(f"Using {num_steps} steps per combination")
+
+        for i, params in enumerate(params_list, 1):
+            logger.info(f"Running combination {i}/{num_combinations}")
+            logger.info(f"Parameters: {params}")
+
+            env = hydra.utils.instantiate({"_target_": env_config["env_class"]} | params)
+            try:
+                env_data = generate_env_data(env, num_steps)
+                params_hash = generate_hash(params)
+                output_path = workdir / f"{idx}_{params_hash}.parquet"
+                idx += 1
+
+                env_data['tracks'].to_parquet(output_path)
+                metadata.append({
+                    'env_name': env_data['env_name'],
+                    'env_params': env_data['env_params'],
+                    'output_dir': str(output_path),
+                })
+            except Exception as e:
+                logger.error(f"Error generating data, combination {i}")
+                logger.exception(e)
+                continue
             
     with open(workdir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)
-
-
-if __name__ == '__main__':
-    fire.Fire({
-        'single': run_generation,
-        'batch': run_generation_batch,
-    })
