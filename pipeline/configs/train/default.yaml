@@ -4,4 +4,18 @@ defaults:
 
 data_root: ${dataset.workdir}
 epochs: 1
+val_freq: 1
 device: cpu
+model:
+  _target_: lib.models.transformer.AlgorithmDistillationTransformer
+  state_dim: 1
+  action_dim: 1
+  num_tasks: 1
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.001
+  weight_decay: 0.0
+  amsgrad: false
+loss:
+  _target_: torch.nn.MSELoss
+  reduction: mean
