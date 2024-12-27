@@ -50,7 +50,14 @@ def create_dataloader(data_root: Path, stage: str) -> DataLoader:
         persistent_workers=True,
     )
 
-def validate_model(model: torch.nn.Module, criterion: torch.nn.Module, dataloader: DataLoader, device: torch.device, task: clearml.Task | None):
+def validate_model(
+    model: torch.nn.Module,
+    criterion: torch.nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    task: clearml.Task | None,
+    epoch: int,
+):
     model.eval()
     total_loss = 0.0
     with torch.no_grad():
@@ -66,7 +73,7 @@ def validate_model(model: torch.nn.Module, criterion: torch.nn.Module, dataloade
     avg_loss = total_loss / len(dataloader.dataset)
     logger.info(f"Validation Loss: {avg_loss:.4f}")
     if task:
-        task.get_logger().report_scalar("loss", "val_loss", value=avg_loss)
+        task.get_logger().report_scalar("loss", "val_loss", value=avg_loss, iteration=epoch)
 
 def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
     train_dataloader = create_dataloader(Path(train_cfg["data_root"]), "train")
@@ -104,7 +111,7 @@ def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
             task.get_logger().report_scalar("loss", "train_loss", value=avg_loss, iteration=epoch)
 
         if (epoch + 1) % train_cfg["val_freq"] == 0:
-            validate_model(model, criterion, val_dataloader, device, task)
+            validate_model(model, criterion, val_dataloader, device, task, epoch=epoch)
             torch.save(model.state_dict(), f"model_{epoch}.pth")
             model.train()
 
