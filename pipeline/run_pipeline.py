@@ -69,7 +69,7 @@ def validate_model(
             predicted_actions = model(states, task_ids)
             loss = criterion(predicted_actions, actions)
             total_loss += loss.item() * states.size(0)
-        
+
     avg_loss = total_loss / len(dataloader.dataset)
     logger.info(f"Validation Loss: {avg_loss:.4f}")
     if task:
@@ -98,11 +98,11 @@ def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
 
             optimizer.zero_grad()
             predicted_actions = model(states, task_ids)
-            
+
             loss = criterion(predicted_actions, actions)
             loss.backward()
             optimizer.step()
-            
+
             total_loss += loss.item() * states.size(0)
 
         avg_loss = total_loss / len(train_dataloader.dataset)
@@ -136,8 +136,8 @@ def main(cfg: DictConfig) -> None:
 
     set_global_seed(metadata['seed'])
     # post process the config
-    logger.info(f"WorkDir: {metadata["workdir"]}")
-    
+    # logger.info(f"WorkDir: {metadata["workdir"]}")
+
     # todo(aponomarev): make this like true pipeline?
     create_dataset_node(cfg['dataset'])
     create_train_node(cfg['train'], task)
