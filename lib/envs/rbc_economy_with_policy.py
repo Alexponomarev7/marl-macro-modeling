@@ -1,4 +1,6 @@
-import warnings; warnings.filterwarnings("ignore")
+import warnings;
+
+warnings.filterwarnings("ignore")
 
 import numpy as np
 import gymnasium as gym
@@ -6,6 +8,7 @@ from typing import (
     Optional,
     Dict,
     Tuple,
+    Union,
 )
 
 from lib.envs.environment_base import AbstractEconomicEnv
@@ -13,6 +16,8 @@ from lib.utility_funcs import (
     log_utility,
     ces_utility,
 )
+
+# todo: fix error: Consumption must be positive
 
 class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     """
@@ -36,20 +41,20 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     """
 
     def __init__(
-        self,
-        discount_rate: float = 0.99,
-        marginal_disutility_of_labor: float = 1.0,
-        depreciation_rate: float = 0.025,
-        capital_share_of_output: float = 0.36,
-        technology_shock_persistence: float = 0.95,
-        technology_shock_variance: float = 0.007,
-        initial_capital: float = 1.0,
-        initial_tax_rate: float = 0.2,
-        initial_gov_spending: float = 0.2,
-        initial_money_supply: float = 1.0,
-        max_capital: float = 10.0,
-        utility_function: str = "log",
-        utility_params: dict = None,
+            self,
+            discount_rate: float = 0.99,
+            marginal_disutility_of_labor: float = 1.0,
+            depreciation_rate: float = 0.025,
+            capital_share_of_output: float = 0.36,
+            technology_shock_persistence: float = 0.95,
+            technology_shock_variance: float = 0.007,
+            initial_capital: float = 1.0,
+            initial_tax_rate: float = 0.2,
+            initial_gov_spending: float = 0.2,
+            initial_money_supply: float = 1.0,
+            max_capital: float = 10.0,
+            utility_function: str = "log",
+            utility_params: dict = None,
     ):
         super().__init__()
 
@@ -109,8 +114,8 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
         # Technology shock
         self.technology += (
-            self.technology_shock_persistence * self.technology
-            + np.random.normal(0, self.technology_shock_variance)
+                self.technology_shock_persistence * self.technology
+                + np.random.normal(0, self.technology_shock_variance)
         )
 
         # Output calculation
@@ -155,7 +160,7 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
     def _calculate_output(self, labor: float) -> float:
         return np.exp(self.technology) * (
-            self.capital ** self.capital_share_of_output
+                self.capital ** self.capital_share_of_output
         ) * (labor ** (1 - self.capital_share_of_output))
 
     def _calculate_utility(self, consumption: float, labor: float) -> float:
@@ -163,6 +168,10 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
     def render(self):
         print("State:", self._get_state())
+
+    def close(self):
+        # todo: implement
+        pass
 
     def _get_state(self) -> Dict:
         return {
@@ -173,8 +182,26 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
         }
 
     def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
-        # Implement an analytical solution for testing purposes.
+        # todo: Implement an analytical solution for testing purposes.
         return self.step(self.action_space.sample())
+
+    @property
+    def params(self) -> Dict[str, Union[float, str, dict]]:
+        return {
+            "discount_rate": self.discount_rate,
+            "marginal_disutility_of_labor": self.marginal_disutility_of_labor,
+            "depreciation_rate": self.depreciation_rate,
+            "capital_share_of_output": self.capital_share_of_output,
+            "technology_shock_persistence": self.technology_shock_persistence,
+            "technology_shock_variance": self.technology_shock_variance,
+            "capital": self.capital,
+            "tax_rate": self.tax_rate,
+            "gov_spending": self.gov_spending,
+            "money_supply": self.money_supply,
+            "max_capital": self.max_capital,
+            "utility_function": self.utility_function.__name__,
+            "utility_params": self.utility_params,
+        }
 
     @property
     def state_description(self):
