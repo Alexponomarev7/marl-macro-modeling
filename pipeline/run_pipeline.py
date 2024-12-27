@@ -27,12 +27,15 @@ def create_dataset_node(dataset_cfg: dict[str, Any]):
     workdir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"WorkDir: {workdir}")
-
-    run_generation_batch(dataset_cfg['envs'], workdir)
+    for stage in ['train', 'val', 'test']:
+        logger.info(f"generating stage: {stage}")
+        stage_dir = workdir / stage
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        run_generation_batch(dataset_cfg[stage], dataset_cfg['envs'], stage_dir)
 
 def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
     dataloader = DataLoader(
-        Dataset(data_path=Path(train_cfg["data_root"])),
+        Dataset(data_path=Path(train_cfg["data_root"]) / "train"),
         batch_size=1, # used for testing
         shuffle=True,
         num_workers=1,
