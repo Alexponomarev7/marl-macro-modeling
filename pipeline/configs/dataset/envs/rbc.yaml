@@ -3,38 +3,38 @@ rbc:
   env_name: RBC
   params:
     discount_rate:
-      _target_: numpy.random.uniform  # Use numpy.random functions
-      low: 0.5
-      high: 1.0
+      _target_: numpy.random.beta  # Use numpy.random functions
+      a: 95
+      b: 4
     marginal_disutility_of_labor:
       _target_: numpy.random.uniform
       low: 0.05
       high: 1.0
     depreciation_rate:
-      _target_: numpy.random.uniform
-      low: 0.01
-      high: 0.8
+      _target_: numpy.random.beta
+      a: 8
+      b: 92
     capital_share_of_output:
       _target_: numpy.random.uniform
       low: 0.1
       high: 0.9
     technology_shock_persistence:
-      _target_: numpy.random.uniform
-      low: 0.0
-      high: 1.0
+      _target_: numpy.random.beta
+      a: 90
+      b: 5
     technology_shock_variance:
-      _target_: numpy.random.uniform
-      low: 0.005
-      high: 0.01
+      _target_: numpy.random.gamma
+      shape: 2
+      scale: 0.003
     initial_capital:
       _target_: lib.my_utils.clipped_exponential
       scale: 1
       low: 0.5
       high: 1.5
     max_capital:
-      _target_: numpy.random.uniform
-      low: 5.0
-      high: 15.0
+      _target_: numpy.random.gamma
+      shape: 10
+      scale: 1
     utility_function:
       _target_: numpy.random.choice
       a: ["log", "ces"]
