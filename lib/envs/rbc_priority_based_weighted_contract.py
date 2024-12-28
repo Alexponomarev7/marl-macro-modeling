@@ -216,6 +216,10 @@ class RBCPriorityBasedWeightedContractEnv(AbstractEconomicEnv):
             "utility_params": self.utility_params,
         }
 
+    def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
+        # todo: Implement an analytical solution
+        raise NotImplementedError
+
     @property
     def state_description(self):
         return {

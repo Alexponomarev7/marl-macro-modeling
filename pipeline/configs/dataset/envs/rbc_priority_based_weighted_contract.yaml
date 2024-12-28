@@ -1,0 +1,55 @@
+rbc_priority_based_weighted_contract:
+  env_class: lib.envs.rbc_priority_based_weighted_contract.RBCPriorityBasedWeightedContractEnv
+  env_name: RBCPriorityBasedWeightedContractEnv
+  params:
+    discount_rate:
+      _target_: numpy.random.uniform  # Use numpy.random functions
+      low: 0.5
+      high: 1.0
+    marginal_disutility_of_labor:
+      _target_: numpy.random.uniform
+      low: 0.05
+      high: 1.0
+    depreciation_rate:
+      _target_: numpy.random.uniform
+      low: 0.01
+      high: 0.8
+    capital_share_of_output:
+      _target_: numpy.random.uniform
+      low: 0.2
+      high: 0.7
+    technology_shock_persistence:
+      _target_: numpy.random.uniform
+      low: 0.0
+      high: 1.0
+    technology_shock_variance:
+      _target_: numpy.random.uniform
+      low: 0.005
+      high: 0.01
+    initial_capital:
+      _target_: lib.my_utils.clipped_exponential
+      scale: 1
+      low: 0.5
+      high: 1.5
+    max_capital:
+      _target_: numpy.random.uniform
+      low: 5.0
+      high: 15.0
+    utility_function:
+      _target_: numpy.random.choice
+      a: ["log", "ces"]
+    agent_weights:
+      agent_1:
+        _target_: numpy.random.uniform
+        low: 0.5
+        high: 1.5
+      agent_2:
+        _target_: numpy.random.uniform
+        low: 0.5
+        high: 1.5
+
+
+  utility_params:
+    ces:
+      sigma: 2.0  # coefficient of relative risk aversion
+      eta: 1.5  # inverse Frisch elasticity of labor supply

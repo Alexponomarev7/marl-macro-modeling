@@ -112,7 +112,7 @@ def create_train_node(train_cfg: dict[str, Any], task: clearml.Task | None):
 
         if (epoch + 1) % train_cfg["val_freq"] == 0:
             validate_model(model, criterion, val_dataloader, device, task, epoch=epoch)
-            torch.save(model.state_dict(), f"model_{epoch}.pth")
+            torch.save(model.state_dict(), f"models/model_{epoch}.pth")
             model.train()
 
 def set_global_seed(seed: int):

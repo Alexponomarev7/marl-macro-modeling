@@ -1,25 +1,33 @@
 defaults:
   - envs:
-    - rbc 
-    - ncg
+      - rbc
+      - ncg
+      - rbc_economy_with_policy
+      - rbc_priority_based_weighted_contract
   - _self_
 
 workdir: ${metadata.workdir}/dataset
 train:
   envs:
     - env_name: rbc
-      num_steps: 100
-      num_combinations: 2
+      num_steps: 1000
+      num_combinations: 100000
     - env_name: ncg
-      num_steps: 100
-      num_combinations: 2
+      num_steps: 1000
+      num_combinations: 100000
 val:
   envs:
     - env_name: rbc
-      num_steps: 100
-      num_combinations: 1
+      num_steps: 1000
+      num_combinations: 20000
+    - env_name: ncg
+      num_steps: 1000
+      num_combinations: 20000
 test:
   envs:
     - env_name: rbc
-      num_steps: 100
-      num_combinations: 1
+      num_steps: 1000
+      num_combinations: 20000
+    - env_name: ncg
+      num_steps: 1000
+      num_combinations: 20000
