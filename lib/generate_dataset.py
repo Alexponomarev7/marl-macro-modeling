@@ -55,6 +55,8 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
     return {
         'env_name': env.__class__.__name__,
         'env_params': env.params,
+        'action_description': env.action_description,
+        'state_description': env.state_description,
         'tracks': pd.DataFrame(data),
     }
 
@@ -107,6 +109,6 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
                 logger.error(f"Error generating data, combination {i}")
                 logger.exception(e)
                 continue
-            
+
     with open(workdir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=4)

@@ -1,13 +1,7 @@
-import warnings;
-
-warnings.filterwarnings("ignore")
+import warnings; warnings.filterwarnings("ignore")
 
 import numpy as np
-import pandas as pd
 import gymnasium as gym
-import statsmodels.api as sm
-import matplotlib.pyplot as plt
-from pandas_datareader.data import DataReader
 from typing import (
     Optional,
     Dict,
@@ -288,12 +282,28 @@ class RBCEnv(AbstractEconomicEnv):
         self.current_step += 1
         done = False  # RBC models typically run indefinitely - there's no natural endpoint to the economic simulation
 
+        # Get actions array
+        leisure = 1 - steady_state_labor
+        consumption_rate = steady_state_consumption / steady_state_output if steady_state_output > 0 else 0
+        investment_rate = steady_state_investment / steady_state_output if steady_state_output > 0 else 0
+
+        # Normalize investment and consumption rates to sum to 1
+        total_rate = consumption_rate + investment_rate
+        if total_rate > 0:
+            consumption_rate = consumption_rate / total_rate
+            investment_rate = investment_rate / total_rate
+
+        # Create action array matching the action space structure
+        action = [leisure, consumption_rate, investment_rate]
+
         # Additional information
+        # todo: add pydantic validation
         info = {
+            "action": action,
             "investment": steady_state_investment,
             "consumption": steady_state_consumption,
             "utility": reward,
-            "output": new_output
+            "output": new_output,
         }
 
         return self._get_state(), reward, done, False, info
@@ -355,7 +365,7 @@ class RBCEnv(AbstractEconomicEnv):
         :return: Dictionary mapping action variable names to their descriptions
         """
         return {
-            "investment_rate": "Fraction of output allocated to investment",
-            "leisure": "Time allocated to leisure",
-            "consumption_rate": "Fraction of output allocated to consumption"
+            "leisure": "Time allocated to leisure (zeroth element in array)",
+            "consumption_rate": "Fraction of output allocated to consumption (first element in array)",
+            "investment_rate": "Fraction of output allocated to investment (second element in array)",
         }
