@@ -6,7 +6,8 @@
 
 # Useful Commands
 1. Setup working env: `make setup`
-2. To generate data for a specific environment run python command (an example):\
+2. To run pipeline: `make pipeline`
+3. To generate data for a specific environment run python command (an example):\
 ```python lib/data/generate_data.py --env_class lib.envs.rbc.RBCEnv --num_steps 1000 --discount_rate 0.98```
 
 ## Project Organization
@@ -45,7 +46,7 @@
 │       ├── ncg.yaml            <- NCGEnv configuration file.
 │       └── marl_macroeconomics.yaml <- MARLMacroeconomicEnv configuration file.
 │
-└── Snakefile                   <- Snakemake pipeline definition.
+└── clearml.conf                <- clearml configuration file with credentials
 ```
 
 --------

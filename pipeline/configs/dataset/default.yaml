@@ -1,0 +1,25 @@
+defaults:
+  - envs:
+    - rbc 
+    - ncg
+  - _self_
+
+workdir: ${metadata.workdir}/dataset
+train:
+  envs:
+    - env_name: rbc
+      num_steps: 100
+      num_combinations: 2
+    - env_name: ncg
+      num_steps: 100
+      num_combinations: 2
+val:
+  envs:
+    - env_name: rbc
+      num_steps: 100
+      num_combinations: 1
+test:
+  envs:
+    - env_name: rbc
+      num_steps: 100
+      num_combinations: 1

@@ -11,3 +11,8 @@ docker/julia_dynare/dynare_models/*
 
 # Исключить файлы с определением самих моделей т.е. с расширением .mod
 !docker/julia_dynare/dynare_models/*.mod
+.snakemake
+data
+.env
+/marl_experiments
+clearml.conf

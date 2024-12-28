@@ -190,6 +190,7 @@ class RBCEnv(AbstractEconomicEnv):
                 - info: Dictionary with additional information
         """
         # Clip leisure between 0 and 1
+        # TODO(aponomarev): think about clipping
         leisure = np.clip(action[1], 0, 1)
 
         # Normalize only investment and consumption rates to sum to 1
@@ -261,7 +262,7 @@ class RBCEnv(AbstractEconomicEnv):
         # Calculate steady-state values
         steady_state_labor = (1 - alpha) / (1 - alpha + self.marginal_disutility_of_labor)
         steady_state_output = A * (self.capital ** alpha) * (steady_state_labor ** (1 - alpha))
-        steady_state_consumption = steady_state_output - delta * self.capital
+        steady_state_consumption = np.clip(steady_state_output - delta * self.capital, a_min=0, a_max=None)
         steady_state_investment = delta * self.capital
 
         # Update technology shock
