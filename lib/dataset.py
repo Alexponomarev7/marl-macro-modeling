@@ -5,6 +5,7 @@ import numpy as np
 
 from pathlib import Path
 
+
 class Dataset:
     def __init__(self, data_path: Path):
         metadata_path = data_path / "metadata.json"
@@ -16,10 +17,15 @@ class Dataset:
 
     def __getitem__(self, idx):
         data = pd.read_parquet(self.metadata[idx]["output_dir"])
-        
+
         states = []
         actions = []
         for _, row in data.iterrows():
             states.append(row["state"]["Capital"])
             actions.append(row["info"]["consumption"])
-        return torch.from_numpy(np.concatenate(states, dtype=np.float64)).reshape(-1, 1), torch.from_numpy(np.array(actions, dtype=np.float64)).reshape(-1, 1), torch.LongTensor([0])
+
+        return (
+            torch.from_numpy(np.concatenate(states, dtype=np.float64)).reshape(-1, 1),
+            torch.from_numpy(np.array(actions, dtype=np.float64)).reshape(-1, 1),
+            torch.LongTensor([0])
+        )
