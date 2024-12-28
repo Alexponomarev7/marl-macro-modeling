@@ -17,7 +17,6 @@ from lib.utility_funcs import (
     ces_utility,
 )
 
-# todo: fix error: Consumption must be positive
 
 class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     """
@@ -126,7 +125,8 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
         # Investment and consumption
         investment = investment_rate * net_output
-        consumption = (1 - investment_rate) * net_output
+        # todo: fix error: Consumption must be positive
+        consumption = np.clip((1 - investment_rate) * net_output, a_min=0.001, a_max=None)
 
         # Update capital
         self.capital = max(
