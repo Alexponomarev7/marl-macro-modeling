@@ -27,7 +27,7 @@ rbc_economy_with_policy:
       low: 0.005
       high: 0.01
     initial_capital:
-      _target_: lib.utils.clipped_exponential
+      _target_: lib.my_utils.clipped_exponential
       scale: 1
       low: 0.5
       high: 1.5
