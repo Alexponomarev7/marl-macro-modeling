@@ -294,9 +294,10 @@ class RBCEnv(AbstractEconomicEnv):
             investment_rate = investment_rate / total_rate
 
         # Create action array matching the action space structure
-        action = np.array([leisure, consumption_rate, investment_rate], dtype=np.float32)
+        action = [leisure, consumption_rate, investment_rate]
 
         # Additional information
+        # todo: add pydantic validation
         info = {
             "action": action,
             "investment": steady_state_investment,

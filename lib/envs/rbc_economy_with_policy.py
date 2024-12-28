@@ -175,30 +175,30 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
     def _get_state(self) -> Dict:
         return {
-            "Capital": self.capital,
-            "TaxRate": self.tax_rate,
-            "GovSpending": self.gov_spending,
-            "MoneySupply": self.money_supply,
+            "Capital": np.array([self.capital], dtype=np.float32),
+            "TaxRate": np.array([self.tax_rate], dtype=np.float32),
+            "GovSpending": np.array([self.gov_spending], dtype=np.float32),
+            "MoneySupply": np.array([self.money_supply], dtype=np.float32),
         }
 
     def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
         # todo: Implement an analytical solution for testing purposes.
-        return self.step(self.action_space.sample())
+        raise NotImplementedError
 
     @property
     def params(self) -> Dict[str, Union[float, str, dict]]:
         return {
-            "discount_rate": self.discount_rate,
-            "marginal_disutility_of_labor": self.marginal_disutility_of_labor,
-            "depreciation_rate": self.depreciation_rate,
-            "capital_share_of_output": self.capital_share_of_output,
-            "technology_shock_persistence": self.technology_shock_persistence,
-            "technology_shock_variance": self.technology_shock_variance,
-            "capital": self.capital,
-            "tax_rate": self.tax_rate,
-            "gov_spending": self.gov_spending,
-            "money_supply": self.money_supply,
-            "max_capital": self.max_capital,
+            "discount_rate": float(self.discount_rate),
+            "marginal_disutility_of_labor": float(self.marginal_disutility_of_labor),
+            "depreciation_rate": float(self.depreciation_rate),
+            "capital_share_of_output": float(self.capital_share_of_output),
+            "technology_shock_persistence": float(self.technology_shock_persistence),
+            "technology_shock_variance": float(self.technology_shock_variance),
+            "capital": float(self.capital),
+            "tax_rate": float(self.tax_rate),
+            "gov_spending": float(self.gov_spending),
+            "money_supply": float(self.money_supply),
+            "max_capital": float(self.max_capital),
             "utility_function": self.utility_function.__name__,
             "utility_params": self.utility_params,
         }
