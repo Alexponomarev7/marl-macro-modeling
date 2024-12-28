@@ -1,7 +1,27 @@
-class RBCEconomyWithPolicyEnv(abstract_economic_env):
+import warnings;
+
+warnings.filterwarnings("ignore")
+
+import numpy as np
+import gymnasium as gym
+from typing import (
+    Optional,
+    Dict,
+    Tuple,
+    Union,
+)
+
+from lib.envs.environment_base import AbstractEconomicEnv
+from lib.utility_funcs import (
+    log_utility,
+    ces_utility,
+)
+
+
+class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     """
-    Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms. 
-    It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks. 
+    Extention of Real Business Cycle (RBC) model with fiscal and monetary policy mechanisms.
+    It simulates a dynamic economic environment where the state evolves based on policy decisions, labor supply, and technology shocks.
     Fiscal and Monetary Policy:
    - The environment allows for the adjustment of tax rates, government spending, and the money supply, reflecting real-world policy levers.
    - Actions include changes to these variables, influencing the overall economic trajectory.
@@ -20,20 +40,20 @@ class RBCEconomyWithPolicyEnv(abstract_economic_env):
     """
 
     def __init__(
-        self,
-        discount_rate: float = 0.99,
-        marginal_disutility_of_labor: float = 1.0,
-        depreciation_rate: float = 0.025,
-        capital_share_of_output: float = 0.36,
-        technology_shock_persistence: float = 0.95,
-        technology_shock_variance: float = 0.007,
-        initial_capital: float = 1.0,
-        initial_tax_rate: float = 0.2,
-        initial_gov_spending: float = 0.2,
-        initial_money_supply: float = 1.0,
-        max_capital: float = 10.0,
-        utility_function: str = "log",
-        utility_params: dict = None,
+            self,
+            discount_rate: float = 0.99,
+            marginal_disutility_of_labor: float = 1.0,
+            depreciation_rate: float = 0.025,
+            capital_share_of_output: float = 0.36,
+            technology_shock_persistence: float = 0.95,
+            technology_shock_variance: float = 0.007,
+            initial_capital: float = 1.0,
+            initial_tax_rate: float = 0.2,
+            initial_gov_spending: float = 0.2,
+            initial_money_supply: float = 1.0,
+            max_capital: float = 10.0,
+            utility_function: str = "log",
+            utility_params: dict = None,
     ):
         super().__init__()
 
@@ -93,8 +113,8 @@ class RBCEconomyWithPolicyEnv(abstract_economic_env):
 
         # Technology shock
         self.technology += (
-            self.technology_shock_persistence * self.technology
-            + np.random.normal(0, self.technology_shock_variance)
+                self.technology_shock_persistence * self.technology
+                + np.random.normal(0, self.technology_shock_variance)
         )
 
         # Output calculation
@@ -105,7 +125,8 @@ class RBCEconomyWithPolicyEnv(abstract_economic_env):
 
         # Investment and consumption
         investment = investment_rate * net_output
-        consumption = (1 - investment_rate) * net_output
+        # todo: fix error: Consumption must be positive
+        consumption = np.clip((1 - investment_rate) * net_output, a_min=0.001, a_max=None)
 
         # Update capital
         self.capital = max(
@@ -139,7 +160,7 @@ class RBCEconomyWithPolicyEnv(abstract_economic_env):
 
     def _calculate_output(self, labor: float) -> float:
         return np.exp(self.technology) * (
-            self.capital ** self.capital_share_of_output
+                self.capital ** self.capital_share_of_output
         ) * (labor ** (1 - self.capital_share_of_output))
 
     def _calculate_utility(self, consumption: float, labor: float) -> float:
@@ -148,17 +169,39 @@ class RBCEconomyWithPolicyEnv(abstract_economic_env):
     def render(self):
         print("State:", self._get_state())
 
+    def close(self):
+        # todo: implement
+        pass
+
     def _get_state(self) -> Dict:
         return {
-            "Capital": self.capital,
-            "TaxRate": self.tax_rate,
-            "GovSpending": self.gov_spending,
-            "MoneySupply": self.money_supply,
+            "Capital": np.array([self.capital], dtype=np.float32),
+            "TaxRate": np.array([self.tax_rate], dtype=np.float32),
+            "GovSpending": np.array([self.gov_spending], dtype=np.float32),
+            "MoneySupply": np.array([self.money_supply], dtype=np.float32),
         }
 
     def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
-        # Implement an analytical solution for testing purposes.
-        return self.step(self.action_space.sample())
+        # todo: Implement an analytical solution for testing purposes.
+        raise NotImplementedError
+
+    @property
+    def params(self) -> Dict[str, Union[float, str, dict]]:
+        return {
+            "discount_rate": float(self.discount_rate),
+            "marginal_disutility_of_labor": float(self.marginal_disutility_of_labor),
+            "depreciation_rate": float(self.depreciation_rate),
+            "capital_share_of_output": float(self.capital_share_of_output),
+            "technology_shock_persistence": float(self.technology_shock_persistence),
+            "technology_shock_variance": float(self.technology_shock_variance),
+            "capital": float(self.capital),
+            "tax_rate": float(self.tax_rate),
+            "gov_spending": float(self.gov_spending),
+            "money_supply": float(self.money_supply),
+            "max_capital": float(self.max_capital),
+            "utility_function": self.utility_function.__name__,
+            "utility_params": self.utility_params,
+        }
 
     @property
     def state_description(self):
