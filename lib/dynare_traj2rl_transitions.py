@@ -3,6 +3,9 @@ from typing import Callable, Optional
 import pandas as pd
 import numpy as np
 import pickle
+import os
+import re
+from pathlib import Path
 
 from loguru import logger
 import hydra
@@ -39,28 +42,19 @@ def dynare_trajectories2rl_transitions(
     state_columns: list[str],
     action_columns: list[str],
     reward_func: Callable,
+    reward_kwargs: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Converts Dynare trajectories into reinforcement learning transitions.
-
-    This function reads a CSV file containing Dynare simulation data and transforms
-    it into a DataFrame of reinforcement learning transitions. Each transition includes
-    the current state, action, next state, reward, and additional metadata.
 
     Args:
         input_data_path (str): Path to the input CSV file containing Dynare data.
         state_columns (list[str]): List of column names representing the state variables.
         action_columns (list[str]): List of column names representing the action variables.
-        reward_func (Callable): A function that computes the reward based on the
-            current state, action, and next state.
+        reward_func (Callable): A function that computes the reward.
+        reward_kwargs (dict): Additional keyword arguments for the reward function.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the transitions with columns:
-            - state: The current state.
-            - action: The action taken.
-            - next_state: The next state.
-            - reward: The computed reward.
-            - truncated: A boolean indicating if the episode was truncated (always False).
-            - info: Additional metadata from the input data.
+        pd.DataFrame: A DataFrame containing the transitions.
     """
     data = pd.read_csv(input_data_path)
 
@@ -69,7 +63,7 @@ def dynare_trajectories2rl_transitions(
 
     transitions = []
     for idx, row in data.iterrows():
-        next_state = row[state_columns].to_numpy()
+        next_state = np.array([row.get(col, np.nan) for col in state_columns])
         next_action_columns_values = row[action_columns].to_numpy()
 
         if idx == 0:
@@ -78,7 +72,7 @@ def dynare_trajectories2rl_transitions(
             continue
 
         action = next_action_columns_values - action_columns_values
-        reward = reward_func(state, action, next_state)
+        reward = reward_func(state, action, next_state, **reward_kwargs) if reward_kwargs else reward_func(state, action, next_state)
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
@@ -100,35 +94,84 @@ def dynare_trajectories2rl_transitions(
     return pd.DataFrame(transitions)
 
 
+def process_model_data(model_name: str, model_params: dict, raw_data_path: str, output_dir: str) -> None:
+    """Processes raw Dynare data for a specific model and configuration."""
+    logger.info(f"Processing {model_name} with data from {raw_data_path}...")
+    rl_env_conf = model_params["rl_env_settings"]
+
+    # Extract configuration number from the filename (if any)
+    config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
+    config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
+
+    # Generate output path
+    output_path = Path(output_dir) / f"{model_name}{config_suffix}.pkl"
+
+    transitions = dynare_trajectories2rl_transitions(
+        input_data_path=raw_data_path,
+        state_columns=rl_env_conf["input"]["state_columns"],
+        action_columns=rl_env_conf["input"]["action_columns"],
+        reward_func=get_reward_object(rl_env_conf["reward"]),
+        reward_kwargs=rl_env_conf.get("reward_kwargs", None),
+    )
+    logger.info("Transitions successfully generated.")
+
+    logger.info("Saving data...")
+    data = {
+        "env_name": model_name,
+        "tracks": transitions,
+    }
+    with open(output_path, "wb") as f:
+        pickle.dump(data, f)
+
+    logger.info(f"Data saved to {output_path}")
+
+def extract_model_name(filename: str) -> str:
+    """Extracts the base model name from a filename.
+
+    Args:
+        filename (str): The filename, e.g., "Born_Pfeifer_2018_MP_config_1_raw.csv".
+
+    Returns:
+        str: The base model name, e.g., "Born_Pfeifer_2018_MP".
+    """
+    # Удаляем суффикс "_config_*_raw.csv"
+    if "_config_" in filename and "_raw" in filename:
+        return filename.split("_config_")[0]
+    # Если суффикса нет, возвращаем имя файла без расширения
+    return filename.replace("_raw", "")
+
+
 def main() -> None:
-    config_path = "../conf/dynare/"
+    config_path = "../dynare/conf/"
     config_name = "config"
 
     with hydra.initialize(version_base=None, config_path=config_path):
         config = hydra.compose(config_name=config_name)
 
-    for model_name, model_params in config.items():
-        logger.info("Processing dynare dynamics to RL transitions...")
-        transitions = dynare_trajectories2rl_transitions(
-            input_data_path=model_params.input.data_path,
-            state_columns=model_params.input.state_columns,
-            action_columns=model_params.input.action_columns,
-            reward_func=get_reward_object(model_params.reward),
-        )
-        logger.info("Transition successfully received.")
+    # Directory containing raw data files
+    raw_data_dir = "./data/raw"
+    output_dir = "./data/processed"
 
-        logger.info("Saving data...")
-        data = {
-            "env_name": model_name,
-            "transitions": transitions,
-        }
-        with open(model_params.output.data_path, "wb") as f:
-            pickle.dump(data, f)
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
 
-        logger.info(f"Data saved to {model_params.output.data_path}")
+    # Find all raw data files
+    raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
+
+    for raw_data_file in raw_data_files:
+        # Extract base model name from the filename
+        model_name = extract_model_name(raw_data_file.stem)
+
+        if model_name in config:
+            process_model_data(
+                model_name=model_name,
+                model_params=config[model_name],
+                raw_data_path=str(raw_data_file),
+                output_dir=output_dir,
+            )
+        else:
+            logger.warning(f"No configuration found for model: {model_name}")
 
 
 if __name__ == "__main__":
     main()
-
-
