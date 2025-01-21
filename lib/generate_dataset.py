@@ -1,3 +1,4 @@
+import time
 import json
 import hydra
 import hashlib
@@ -22,6 +23,8 @@ def generate_hash(params: Dict) -> str:
     params_str = ','.join(f"{k}={v}" for k, v in sorted_params)
     return hashlib.md5(params_str.encode()).hexdigest()[:8]
 
+def get_run_id():
+    return hashlib.md5(str(time.time()).encode()).hexdigest()
 
 def generate_env_data(env, num_steps: int = 1000) -> Dict:
     """

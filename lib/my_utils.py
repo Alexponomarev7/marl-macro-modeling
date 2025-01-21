@@ -1,5 +1,14 @@
+import torch
 import numpy as np
+from loguru import logger
 
+def set_global_seed(seed: int):
+    """Set random seed"""
+    import numpy as np
+    import torch
+    logger.info(f"setting global seed: {seed}")
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 def clipped_exponential(scale: float, low: float | None, high: float | None) -> float:
     """
