@@ -56,63 +56,6 @@ def sample_from_range(range_values: list[float]) -> float:
     return np.random.random() * (range_values[1] - range_values[0]) + range_values[0]
 
 
-# def generate_parameter_combinations(model_settings: dict, num_samples: int) -> tuple[list[list[str]], list[dict]]:
-#     parameter_combinations = []
-#     parameter_values = []
-
-#     for _ in range(num_samples):
-#         current_combination = []
-#         current_values = {}
-
-#         # Handle periods separately since it's not a range
-#         if "periods" in model_settings:
-#             current_combination.append(f"-Dperiods={model_settings['periods']}")
-#             current_values["periods"] = model_settings["periods"]
-
-#         # Sample from parameter ranges
-#         if "parameter_ranges" in model_settings:
-#             for param, range_values in model_settings["parameter_ranges"].items():
-#                 value = sample_from_range(range_values)
-#                 current_combination.append(f"-D{param}={value}")
-#                 current_values[param] = value
-
-#         if "shock_settings" in model_settings:
-#             shock_settings = model_settings["shock_settings"]
-#             num_shocks = shock_settings.get("num_shocks", 0)
-#             current_combination.append(f"-Dnum_shocks={num_shocks}")
-#             current_values["num_shocks"] = num_shocks
-
-#             periods_available = list(range(
-#                 shock_settings.get("period_range", [1, model_settings["periods"]])[0],
-#                 shock_settings.get("period_range", [1, model_settings["periods"]])[1] + 1
-#             ))
-
-#             if num_shocks > 0 and len(periods_available) >= num_shocks:
-#                 shock_periods = sorted(np.random.choice(periods_available, size=num_shocks, replace=False))
-#             else:
-#                 shock_periods = []
-
-#             value_range = shock_settings.get("value_range", [-0.05, 0.05])
-
-#             for i in range(num_shocks):
-#                 if i < len(shock_periods):
-#                     period = int(shock_periods[i])
-#                     value = sample_from_range(value_range)
-#                 else:
-#                     period = 1
-#                     value = 0.0
-
-#                 current_combination.append(f"-Dshock_period_{i+1}={period}")
-#                 current_combination.append(f"-Dshock_value_{i+1}={value}")
-#                 current_values[f"shock_period_{i+1}"] = period
-#                 current_values[f"shock_value_{i+1}"] = value
-
-#         parameter_combinations.append(current_combination)
-#         parameter_values.append(current_values)
-
-#     return parameter_combinations, parameter_values
-
-
 def _generate_shock_params(
     shock_settings: dict,
     periods: int,
