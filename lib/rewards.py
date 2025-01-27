@@ -62,4 +62,4 @@ def utility_reward(
     Returns:
         Значение полезности в следующем состоянии.
     """
-    return next_state[utility_index]
+    return next_state[utility_index][0]

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from loguru import logger
 import hydra
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 def get_reward_object(reward_object_path: str) -> Optional[Callable]:
@@ -77,10 +79,13 @@ def dynare_trajectories2rl_transitions(
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
 
+        # parquet problems with empty dict
+        if len(info) == 0:
+            info = {"dummy": "dummy"}
+
         transition = {
             "state": state,
             "action": action,
-            "next_state": next_state,
             "reward": reward,
             "truncated": False,
             "info": info,
@@ -104,7 +109,7 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
 
     # Generate output path
-    output_path = Path(output_dir) / f"{model_name}{config_suffix}.pkl"
+    output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
 
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
@@ -116,12 +121,11 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     logger.info("Transitions successfully generated.")
 
     logger.info("Saving data...")
-    data = {
-        "env_name": model_name,
-        "tracks": transitions,
-    }
-    with open(output_path, "wb") as f:
-        pickle.dump(data, f)
+
+    transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
+    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"])] * len(transitions))
+
+    transitions.to_parquet(output_path)
 
     logger.info(f"Data saved to {output_path}")
 

@@ -32,7 +32,7 @@ Aguiar_Gopinath_2007:
       action_columns:
         - Government Spending  # Управляемая переменная (государственные расходы)
     output:
-      data_path: ./data/processed/Aguiar_Gopinath_2007.pkl
+      data_path: ./data/processed/Aguiar_Gopinath_2007
 
 
 Born_Pfeifer_2018_MP:
@@ -82,7 +82,7 @@ Born_Pfeifer_2018_MP:
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
-      data_path: ./data/processed/Born_Pfeifer_2018_MP.pkl
+      data_path: ./data/processed/Born_Pfeifer_2018_MP
 
 
 Caldara_et_al_2012_raw:
@@ -113,7 +113,7 @@ Caldara_et_al_2012_raw:
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
-      data_path: ./data/processed/Caldara_et_al_2012.pkl
+      data_path: ./data/processed/Caldara_et_al_2012
 
 
 Collard_2001_example1:
@@ -136,7 +136,7 @@ Collard_2001_example1:
       action_columns:
         - Consumption  # Управляемая переменная (потребление)
     output:
-      data_path: ./data/processed/Collard_2001_example1.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/Collard_2001_example1  # Путь для сохранения обработанных данных
 
 
 Faia_2008:
@@ -179,7 +179,7 @@ Faia_2008:
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
-      data_path: ./data/processed/Faia_2008.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/Faia_2008  # Путь для сохранения обработанных данных
 
 
 FV_et_al_2007_ABCD:
@@ -200,7 +200,7 @@ FV_et_al_2007_ABCD:
       action_columns:
         - Consumption  # Управляемая переменная (потребление)
     output:
-      data_path: ./data/processed/FV_et_al_2007_ABCD.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
 
 
 Gali_2008_chapter_2:
@@ -227,7 +227,7 @@ Gali_2008_chapter_2:
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
-      data_path: ./data/processed/Gali_2008_chapter_2.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
 
 
 GarciaCicco_et_al_2010:
@@ -263,7 +263,7 @@ GarciaCicco_et_al_2010:
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
-      data_path: ./data/processed/GarciaCicco_et_al_2010.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
 
 
 Hansen_1985:
@@ -291,7 +291,7 @@ Hansen_1985:
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
-      data_path: ./data/processed/Hansen_1985.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/Hansen_1985  # Путь для сохранения обработанных данных
 
 
 McCandless_2008_Chapter_9:
@@ -319,7 +319,7 @@ McCandless_2008_Chapter_9:
       action_columns:
         - Real Consumption  # Управляемая переменная (реальное потребление)
     output:
-      data_path: ./data/processed/McCandless_2008_Chapter_9.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
 
 
 McCandless_2008_Chapter_13:
@@ -351,7 +351,7 @@ McCandless_2008_Chapter_13:
       action_columns:
         - 'Growth Rate Of Money Stock'
     output:
-      data_path: ./data/processed/McCandless_2008_Chapter_13.pkl
+      data_path: ./data/processed/McCandless_2008_Chapter_13
 
 
 RBC_baseline:
@@ -384,7 +384,7 @@ RBC_baseline:
       action_columns:
         - 'Government Spending'   # ghat (управляемая переменная)
     output:
-      data_path: ./data/processed/RBC_baseline.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/RBC_baseline  # Путь для сохранения обработанных данных
 
 
 RBC_capitalstock_shock:
@@ -409,7 +409,7 @@ RBC_capitalstock_shock:
       action_columns:
         - 'Investment'            # invest (управляемая переменная)
     output:
-      data_path: ./data/processed/RBC_capitalstock_shock.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/RBC_capitalstock_shock  # Путь для сохранения обработанных данных
 
 RBC_news_shock_model:
   dynare_model_settings:
@@ -434,7 +434,7 @@ RBC_news_shock_model:
       action_columns:
         - 'Investment'            # invest (управляемая переменная)
     output:
-      data_path: ./data/processed/RBC_news_shock_model.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/RBC_news_shock_model  # Путь для сохранения обработанных данных
 
 RBC_state_dependent_GIRF:
   dynare_model_settings:
@@ -460,7 +460,7 @@ RBC_state_dependent_GIRF:
       action_columns:
         - 'Government Spending'   # ghat (управляемая переменная)
     output:
-      data_path: ./data/processed/RBC_state_dependent_GIRF.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 
 SGU_2003:
   dynare_model_settings:
@@ -494,7 +494,7 @@ SGU_2003:
       action_columns:
         - 'Investment'
     output:
-      data_path: ./data/processed/SGU_2003.pkl
+      data_path: ./data/processed/SGU_2003
 
 SGU_2004:
   dynare_model_settings:
@@ -516,4 +516,4 @@ SGU_2004:
       action_columns:
         - 'Capital'               # k (управляемая переменная)
     output:
-      data_path: ./data/processed/SGU_2004.pkl  # Путь для сохранения обработанных данных
+      data_path: ./data/processed/SGU_2004  # Путь для сохранения обработанных данных
