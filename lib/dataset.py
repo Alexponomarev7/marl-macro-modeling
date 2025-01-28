@@ -1,8 +1,6 @@
 import json
 import torch
 import pandas as pd
-import numpy as np
-
 from pathlib import Path
 
 
@@ -16,6 +14,7 @@ class Dataset:
     1. State-level padding: Each state vector is padded/truncated to max_state_dim
     2. Sequence-level padding: The entire sequence is padded/truncated to max_total_dim
     """
+
     def __init__(self, data_path: Path, max_state_dim: int = 50, max_total_dim: int = 512):
         """
         Initialize the dataset with the given path and maximum lengths.
