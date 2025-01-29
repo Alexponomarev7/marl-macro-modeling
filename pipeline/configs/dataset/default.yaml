@@ -11,23 +11,23 @@ train:
   envs:
     - env_name: rbc
       num_steps: 1000
-      num_combinations: 100000
+      num_combinations: 2
     - env_name: ncg
       num_steps: 1000
-      num_combinations: 100000
+      num_combinations: 2
 val:
   envs:
     - env_name: rbc
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 2
     - env_name: ncg
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 2
 test:
   envs:
     - env_name: rbc
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 2
     - env_name: ncg
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 2
