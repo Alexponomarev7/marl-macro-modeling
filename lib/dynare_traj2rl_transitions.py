@@ -36,6 +36,7 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     except (ImportError, AttributeError) as e:
         logger.error(f"Error importing reward object: {e}")
 
+    assert reward_object is not None, f"reward object is not imported {reward_object_path=}"
     return reward_object
 
 
@@ -58,6 +59,9 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
+    if reward_kwargs is None:
+        reward_kwargs = {}
+
     data = pd.read_csv(input_data_path)
 
     state = np.zeros(len(state_columns))
@@ -74,7 +78,7 @@ def dynare_trajectories2rl_transitions(
             continue
 
         action = next_action_columns_values - action_columns_values
-        reward = reward_func(state, action, next_state, **reward_kwargs) if reward_kwargs else reward_func(state, action, next_state)
+        reward = reward_func(state, action, next_state, **reward_kwargs)
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()

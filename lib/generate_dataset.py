@@ -60,6 +60,40 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
         'tracks': pd.DataFrame(data),
     }
 
+def generate_env_data_dynare(dynare_file_path: Path):
+    df = pd.read_parquet(dynare_file_path)
+    df["done"] = False
+    return {
+        "env_name": dynare_file_path.name,
+        "env_params": dynare_file_path.name,
+        "action_description": df.iloc[0]["action_description"],
+        "state_description": df.iloc[0]["state_description"],
+        "tracks": df[["state", "reward", "done", "truncated", "info"]],
+    }
+
+class DatasetWriter:
+    def __init__(self, workdir: Path):
+        self.workdir = workdir
+        self.metadata = []
+        self.idx = 1
+
+    def __enter__(self):
+        return self
+
+    def write(self, env_data: dict[str, Any], hash: str):
+        output_path = self.workdir / f"{self.idx}_{hash}.parquet"
+        env_data['tracks'].to_parquet(output_path)
+        self.metadata.append({
+            'env_name': env_data['env_name'],
+            'env_params': env_data['env_params'],
+            'output_dir': str(output_path),
+        })
+
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        with open(self.workdir / "metadata.json", "w") as f:
+            json.dump(self.metadata, f, indent=4)
+
 
 def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], workdir: Path):
     """
@@ -67,7 +101,6 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
     """
 
     metadata = []
-    idx = 1
     for env_config_metadata in dataset_cfg['envs']:
         num_steps = env_config_metadata["num_steps"]
         num_combinations = env_config_metadata["num_combinations"]
@@ -88,27 +121,26 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
         logger.info(f"Generating {num_combinations} combinations")
         logger.info(f"Using {num_steps} steps per combination")
 
-        for i, params in enumerate(params_list, 1):
-            logger.info(f"Running combination {i}/{num_combinations}")
-            logger.info(f"Parameters: {params}")
+        with DatasetWriter(workdir) as writer:
+            for i, params in enumerate(params_list, 1):
+                logger.info(f"Running combination {i}/{num_combinations}")
+                logger.info(f"Parameters: {params}")
 
-            env = hydra.utils.instantiate({"_target_": env_config["env_class"]} | params)
-            try:
-                env_data = generate_env_data(env, num_steps)
-                params_hash = generate_hash(params)
-                output_path = workdir / f"{idx}_{params_hash}.parquet"
-                idx += 1
+                env = hydra.utils.instantiate({"_target_": env_config["env_class"]} | params)
+                try:
+                    env_data = generate_env_data(env, num_steps)
+                    params_hash = generate_hash(params)
+                    writer.write(env_data, params_hash)
+                except Exception as e:
+                    logger.error(f"Error generating data, combination {i}")
+                    logger.exception(e)
+                    continue
 
-                env_data['tracks'].to_parquet(output_path)
-                metadata.append({
-                    'env_name': env_data['env_name'],
-                    'env_params': env_data['env_params'],
-                    'output_dir': str(output_path),
-                })
-            except Exception as e:
-                logger.error(f"Error generating data, combination {i}")
-                logger.exception(e)
-                continue
-
-    with open(workdir / "metadata.json", "w") as f:
-        json.dump(metadata, f, indent=4)
+def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
+    processed_path = dynare_output_path / "processed"
+    assert processed_path.exists()
+    with DatasetWriter(workdir) as writer:
+        for file in processed_path.glob("*.parquet"):
+            env_data = generate_env_data_dynare(file)
+            params_hash = generate_hash({"file_name": file.name})
+            writer.write(env_data, params_hash)

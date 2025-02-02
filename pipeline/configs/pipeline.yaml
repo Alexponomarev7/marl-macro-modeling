@@ -3,7 +3,6 @@ defaults:
   - dataset: default
   - train: default
   - _self_
-  
   - override hydra/launcher: basic
 
 metadata:
