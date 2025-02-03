@@ -16,6 +16,9 @@ from omegaconf import (
 )
 
 import lightning as L
+from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
+from lib.dataset import Dataset
+
 from torch.utils.data import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 
@@ -195,6 +198,43 @@ class EconomicPolicyModel(L.LightningModule):
 
         return float(np.mean(total_rewards))
 
+class DatasetGenerator:
+    """Handles the creation and organization of datasets."""
+
+    def __init__(self, dataset_cfg: dict[str, Any]):
+        """
+        Initialize DatasetCreator with configuration.
+        Args:
+            dataset_cfg: Configuration dictionary for dataset creation
+        """
+        self.cfg = dataset_cfg
+        self.workdir = Path(dataset_cfg['workdir'])
+        self.enabled = dataset_cfg['enabled']
+
+    # todo: rm
+    def create(self):
+        """Generate datasets for all stages (train, val, test)."""
+        if not self.enabled:
+            logger.info("dataset generation is disabled, skipping")
+            return
+
+        logger.info("stage 1: data generation")
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"WorkDir: {self.workdir}")
+
+        for stage in ['train', 'val', 'test']:
+            logger.info(f"generating stage: {stage}")
+            stage_dir = self.workdir / stage
+            stage_dir.mkdir(parents=True, exist_ok=True)
+
+            stage_cfg = self.cfg[stage]
+            if stage_cfg['type'] == 'envs':
+                run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
+            elif stage_cfg['type'] == 'dynare':
+                run_generation_batch_dynare(Path(stage_cfg['dynare_output_path']), stage_dir)
+            else:
+                raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
+
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
 def main(cfg: DictConfig) -> None:
@@ -216,9 +256,12 @@ def main(cfg: DictConfig) -> None:
 
     # Set random seed
     set_global_seed(metadata['seed'])
+    dataset_generator = DatasetGenerator(cfg['dataset'])
+    dataset_generator.create()
 
     # Create test environments
     test_envs = create_test_envs(cfg['dataset'])
+
 
     # Initialize model and data module
     model = EconomicPolicyModel(
