@@ -11,7 +11,7 @@ from pathlib import Path
 
 import torch
 
-from lib.generate_dataset import run_generation_batch
+from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
 from lib.dataset import Dataset
 
 from torch.utils.data import DataLoader
@@ -29,7 +29,14 @@ def create_dataset_node(dataset_cfg: dict[str, Any]):
         logger.info(f"generating stage: {stage}")
         stage_dir = workdir / stage
         stage_dir.mkdir(parents=True, exist_ok=True)
-        run_generation_batch(dataset_cfg[stage], dataset_cfg['envs'], stage_dir)
+
+        stage_cfg = dataset_cfg[stage]
+        if stage_cfg['type'] == 'envs':
+            run_generation_batch(stage_cfg, dataset_cfg['envs'], stage_dir)
+        elif stage_cfg['type'] == 'dynare':
+            run_generation_batch_dynare(Path(stage_cfg['dynare_output_path']), stage_dir)
+        else:
+            raise ValueError(f"Unknown dataset type: {dataset_cfg['type']}")
 
 def create_model(model_cfg: dict[str, Any]) -> torch.nn.Module:
     return hydra.utils.instantiate(model_cfg)
