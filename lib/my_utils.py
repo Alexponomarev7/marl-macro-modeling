@@ -1,4 +1,21 @@
+import time
+import hashlib
 import numpy as np
+from loguru import logger
+
+
+def set_global_seed(seed: int):
+    """Set global random seeds for reproducibility."""
+    import numpy as np
+    import torch
+    logger.info(f"setting global seed: {seed}")
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def get_run_id():
+    """Generate a unique run ID based on current timestamp."""
+    return hashlib.md5(str(time.time()).encode()).hexdigest()
 
 
 def clipped_exponential(scale: float, low: float | None, high: float | None) -> float:
