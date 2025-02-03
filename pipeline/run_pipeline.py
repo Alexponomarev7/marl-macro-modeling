@@ -71,10 +71,10 @@ class DataModule(L.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = EconomicsDataset(self.data_root / "train")
-            self.val_dataset = EconomicsDataset(self.data_root / "val")
+            self.train_dataset = EconomicsDataset(self.data_root / "train", self.state_max_dim)
+            self.val_dataset = EconomicsDataset(self.data_root / "val", self.state_max_dim)
         if stage == "test":
-            self.test_dataset = EconomicsDataset(self.data_root / "test")
+            self.test_dataset = EconomicsDataset(self.data_root / "test", self.state_max_dim)
 
     def train_dataloader(self):
         """Create training dataloader."""

@@ -87,7 +87,7 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         inp = torch.cat([task_emb, state_emb], dim=1)  # [bs, seq_len+1, d_model]
         inp = inp.transpose(0, 1)
-        inp = self.positional_encoding(inp)
+        # inp = self.positional_encoding(inp)
 
         encoded = self.transformer(inp)  # [seq_len+1, bs, d_model]
         encoded = encoded[1:]  # [seq_len, bs, d_model]

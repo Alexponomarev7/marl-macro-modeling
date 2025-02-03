@@ -16,7 +16,7 @@ class EconomicsDataset(Dataset):
     2. Sequence-level padding: The entire sequence is padded/truncated to max_total_dim
     """
 
-    def __init__(self, data_path: Path, max_state_dim: int = 50, max_total_dim: int = 512):
+    def __init__(self, data_path: Path, max_state_dim: int, max_total_dim: int = 512):
         """
         Initialize the dataset with the given path and maximum lengths.
 
@@ -110,27 +110,29 @@ class EconomicsDataset(Dataset):
         # First pad the states to max_state_len (feature dimension padding)
         padded_states = self.pad_sequence(states, self.max_state_dim)
 
-        embeds = torch.cat([
-            # environment_embed,
-            # self.sw_state_embed,
-            padded_states,
-            # self.sw_action_embed,
-            actions,
-            # self.sw_reward_embed,
-            rewards
+        # TODO(aponomarev): fix
+        return padded_states, actions, torch.tensor([0])
+        # embeds = torch.cat([
+        #     # environment_embed,
+        #     # self.sw_state_embed,
+        #     padded_states,
+        #     # self.sw_action_embed,
+        #     actions,
+        #     # self.sw_reward_embed,
+        #     rewards
 
-        ], dim=1)
+        # ], dim=1)
 
-        padded_embeds = self.pad_sequence(embeds, self.max_total_dim)
+        # padded_embeds = self.pad_sequence(embeds, self.max_total_dim)
 
-        # Create mask for valid dimensions
-        mask = torch.zeros(padded_embeds.shape[0], padded_embeds.shape[1], dtype=torch.bool)
+        # # Create mask for valid dimensions
+        # mask = torch.zeros(padded_embeds.shape[0], padded_embeds.shape[1], dtype=torch.bool)
 
-        # Mark valid state dimensions
-        mask[:, :original_state_dim] = True
-        # Mark valid action dimensions
-        mask[:, self.max_state_dim:self.max_state_dim + action_dim] = True
-        # Mark valid reward dimension
-        mask[:, self.max_state_dim + action_dim] = True
+        # # Mark valid state dimensions
+        # mask[:, :original_state_dim] = True
+        # # Mark valid action dimensions
+        # mask[:, self.max_state_dim:self.max_state_dim + action_dim] = True
+        # # Mark valid reward dimension
+        # mask[:, self.max_state_dim + action_dim] = True
 
-        return padded_embeds, mask
+        # return padded_embeds, mask

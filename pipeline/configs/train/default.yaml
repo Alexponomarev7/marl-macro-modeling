@@ -9,9 +9,9 @@ device: cpu
 max_state_dim: 10
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
-  state_max_dim: ${train.max_state_dim}
-  action_max_dim: 10
-  # num_tasks: 1
+  state_dim: ${train.max_state_dim}
+  action_dim: 10
+  num_tasks: 1
 optimizer:
   _target_: torch.optim.Adam
   lr: 0.001
