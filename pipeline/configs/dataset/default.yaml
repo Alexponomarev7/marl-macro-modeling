@@ -8,26 +8,23 @@ defaults:
 
 workdir: ${metadata.workdir}/dataset
 train:
-  envs:
-    - env_name: rbc
-      num_steps: 1000
-      num_combinations: 100000
-    - env_name: ncg
-      num_steps: 1000
-      num_combinations: 100000
+  type: dynare
+  dynare_output_path: ???
 val:
+  type: envs
   envs:
     - env_name: rbc
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 20
     - env_name: ncg
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 20
 test:
+  type: envs
   envs:
     - env_name: rbc
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 20
     - env_name: ncg
       num_steps: 1000
-      num_combinations: 20000
+      num_combinations: 20
