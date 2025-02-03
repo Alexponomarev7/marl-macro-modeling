@@ -109,6 +109,7 @@ class NCGEnv(AbstractEconomicEnv):
             "consumption": c_star,
             "consumption_fraction": c_star / K_t if K_t > 0 else 0.0,
         }
+        info["action"] = [info["consumption_fraction"]]
 
         return self._get_state(), reward, done, truncated, info
 

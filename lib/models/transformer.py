@@ -25,7 +25,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             dropout: float = 0.1,
     ):
         super().__init__()
-        # self.task_embedding = ...
+        self.task_embedding = nn.Embedding(1, d_model)
         self.state_embedding = nn.Linear(state_max_dim, d_model)
 
         # Position encoding for sequence

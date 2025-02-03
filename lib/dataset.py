@@ -18,7 +18,7 @@ class Dataset:
     by converting them all to fixed-length vectors.
     """
 
-    def __init__(self, data_path: Path, max_state_dim: int = 50, max_sequence_length: int = 512):
+    def __init__(self, data_path: Path, max_state_dim: int, max_sequence_length: int = 512):
         """
         Initialize dataset parameters and load metadata.
 
@@ -106,31 +106,34 @@ class Dataset:
         """
         data = pd.read_parquet(self.metadata[idx]["output_dir"])
 
+        # TODO(aponomarev): potential bug with order
         states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
         actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
-
         # First pad the states to max_state_dim
         padded_states = self.pad_sequence(states, self.max_state_dim, dim=1)
 
+        return padded_states, actions, torch.tensor([0])
         # Concatenate states, actions, and rewards for each step
-        step_embeds = torch.cat([
-            padded_states,
-            actions,
-            rewards
-        ], dim=1)
+        # print("HERE")
+        # print(padded_states.shape, actions.shape, rewards.shape)
+        # step_embeds = torch.cat([
+        #     padded_states,
+        #     actions,
+        #     rewards
+        # ], dim=1)
 
-        # Flatten the entire episode into a single vector
-        flattened_episode = step_embeds.reshape(-1)
-        episode_mask = torch.ones_like(flattened_episode, dtype=torch.bool)
+        # # Flatten the entire episode into a single vector
+        # flattened_episode = step_embeds.reshape(-1)
+        # episode_mask = torch.ones_like(flattened_episode, dtype=torch.bool)
 
-        # Create output tensors of exact size max_sequence_length
-        padded_episode = torch.zeros(self.max_sequence_length, dtype=torch.float32)
-        padded_mask = torch.zeros(self.max_sequence_length, dtype=torch.bool)
+        # # Create output tensors of exact size max_sequence_length
+        # padded_episode = torch.zeros(self.max_sequence_length, dtype=torch.float32)
+        # padded_mask = torch.zeros(self.max_sequence_length, dtype=torch.bool)
 
-        # Copy actual data (truncating or padding as needed)
-        length = min(len(flattened_episode), self.max_sequence_length)
-        padded_episode[:length] = flattened_episode[:length]
-        padded_mask[:length] = episode_mask[:length]
+        # # Copy actual data (truncating or padding as needed)
+        # length = min(len(flattened_episode), self.max_sequence_length)
+        # padded_episode[:length] = flattened_episode[:length]
+        # padded_mask[:length] = episode_mask[:length]
 
-        return padded_episode, padded_mask
+        # return padded_episode, padded_mask

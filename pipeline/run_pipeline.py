@@ -14,6 +14,10 @@ from omegaconf import (
     DictConfig,
     OmegaConf,
 )
+
+from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
+from lib.dataset import Dataset
+
 from torch.utils.data import DataLoader
 import lightning as L
 # from pytorch_lightning.callbacks import ModelCheckpoint
@@ -39,10 +43,15 @@ class DatasetGenerator:
         """
         self.cfg = dataset_cfg
         self.workdir = Path(dataset_cfg['workdir'])
+        self.enabled = dataset_cfg['enabled']
 
     # todo: rm
     def create(self):
         """Generate datasets for all stages (train, val, test)."""
+        if not self.enabled:
+            logger.info("skipping data generation, using cached dataset")
+            return
+
         logger.info("stage 1: data generation")
         self.workdir.mkdir(parents=True, exist_ok=True)
         logger.info(f"WorkDir: {self.workdir}")
@@ -51,7 +60,13 @@ class DatasetGenerator:
             logger.info(f"generating stage: {stage}")
             stage_dir = self.workdir / stage
             stage_dir.mkdir(parents=True, exist_ok=True)
-            run_generation_batch(self.cfg[stage], self.cfg['envs'], stage_dir)
+
+            if self.cfg[stage]['type'] == 'envs':
+                run_generation_batch(self.cfg[stage], self.cfg['envs'], stage_dir)
+            elif self.cfg[stage]['type'] == 'dynare':
+                run_generation_batch_dynare(Path(self.cfg[stage]['dynare_output_path']), stage_dir)
+            else:
+                raise ValueError(f"Unknown dataset type: {self.cfg[stage]['type']}")
 
     @staticmethod
     def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
@@ -79,7 +94,7 @@ class DatasetGenerator:
 class DataModule(L.LightningDataModule):
     """PyTorch Lightning data module for handling datasets."""
 
-    def __init__(self, data_root: Path, batch_size: int = 32):
+    def __init__(self, data_root: Path, state_max_dim: int, batch_size: int = 32):
         """
         Initialize DataModule.
 
@@ -90,14 +105,15 @@ class DataModule(L.LightningDataModule):
         super().__init__()
         self.data_root = data_root
         self.batch_size = batch_size
+        self.state_max_dim = state_max_dim
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = Dataset(self.data_root / "train")
-            self.val_dataset = Dataset(self.data_root / "val")
+            self.train_dataset = Dataset(self.data_root / "train", self.state_max_dim)
+            self.val_dataset = Dataset(self.data_root / "val", self.state_max_dim)
         if stage == "test":
-            self.test_dataset = Dataset(self.data_root / "test")
+            self.test_dataset = Dataset(self.data_root / "test", self.state_max_dim)
 
     def train_dataloader(self):
         """Create training dataloader."""
@@ -131,6 +147,7 @@ class EconomicPolicyModel(L.LightningModule):
             optimizer_cfg: dict[str, Any],
             criterion_cfg: dict[str, Any],
             test_envs: list[tuple[str, AbstractEconomicEnv]],
+            state_max_dim: int,
             val_episodes: int = 10
     ):
         """
@@ -151,7 +168,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.optimizer_cfg = optimizer_cfg
         self.test_envs = test_envs
         self.val_episodes = val_episodes
-
+        self.state_max_dim = state_max_dim
     def forward(self, states, task_ids):
         """Forward pass of the model."""
         return self.model(states, task_ids)
@@ -208,8 +225,10 @@ class EconomicPolicyModel(L.LightningModule):
             terminated = truncated = False
 
             while not (terminated or truncated):
-                state = torch.FloatTensor([list(state_dict.values())]).to(self.device)
-                task_id = torch.tensor([0]).to(self.device)
+                # TODO(aponomarev): fix this, should pass the history of states
+                state = torch.FloatTensor([list([value[0] for value in state_dict.values()])]).unsqueeze(0).to(self.device)
+                state = torch.nn.functional.pad(state, (0, self.state_max_dim - state.shape[2], 0, 0, 0, 0), "constant", 0)
+                task_id = torch.tensor([[0]]).to(self.device)
 
                 with torch.no_grad():
                     action = self(state, task_id)
@@ -217,6 +236,7 @@ class EconomicPolicyModel(L.LightningModule):
 
                 state_dict, reward, terminated, truncated, _ = env.step(action)
                 episode_reward += reward
+                break # TODO(aponomarev): fix this becase while loop is infinite
 
             total_rewards.append(episode_reward)
 
@@ -258,11 +278,13 @@ def main(cfg: DictConfig) -> None:
         optimizer_cfg=cfg['train']['optimizer'],
         criterion_cfg=cfg['train']['loss'],
         test_envs=test_envs,
-        val_episodes=cfg['train'].get('val_episodes', 10)
+        val_episodes=cfg['train'].get('val_episodes', 10),
+        state_max_dim=cfg['train']['max_state_dim'],
     )
 
     data_module = DataModule(
         data_root=Path(cfg['train']['data_root']),
+        state_max_dim=cfg['train']['max_state_dim'],
         batch_size=cfg['train'].get('batch_size', 32)
     )
 
