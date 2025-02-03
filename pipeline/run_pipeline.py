@@ -15,15 +15,14 @@ from omegaconf import (
     OmegaConf,
 )
 
+import lightning as L
 from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
 from lib.dataset import Dataset
 
 from torch.utils.data import DataLoader
-import lightning as L
-# from pytorch_lightning.callbacks import ModelCheckpoint
-# from pytorch_lightning.loggers import TensorBoardLogger
+from lightning.pytorch.callbacks import ModelCheckpoint
 
-from lib.dataset import Dataset
+from lib.dataset import EconomicsDataset
 from lib.my_utils import (
     set_global_seed,
     get_run_id,
@@ -31,64 +30,26 @@ from lib.my_utils import (
 from lib.envs.environment_base import AbstractEconomicEnv
 
 
-class DatasetGenerator:
-    """Handles the creation and organization of datasets."""
+def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
+    """Create test environments for validation."""
+    test_envs = []
+    for env_config in dataset_cfg['test']['envs']:
+        env_name = env_config['env_name']
+        env_cfg = dataset_cfg['envs'][env_name]
 
-    def __init__(self, dataset_cfg: dict[str, Any]):
-        """
-        Initialize DatasetCreator with configuration.
+        module_path, class_name = env_cfg['env_class'].rsplit('.', 1)
+        module = __import__(module_path, fromlist=[class_name])
+        env_class = getattr(module, class_name)
 
-        Args:
-            dataset_cfg: Configuration dictionary for dataset creation
-        """
-        self.cfg = dataset_cfg
-        self.workdir = Path(dataset_cfg['workdir'])
-        self.enabled = dataset_cfg['enabled']
+        env_params = {
+            k: hydra.utils.instantiate(v) if isinstance(v, dict) and '_target_' in v else v
+            for k, v in env_cfg['params'].items()
+        }
 
-    # todo: rm
-    def create(self):
-        """Generate datasets for all stages (train, val, test)."""
-        if not self.enabled:
-            logger.info("skipping data generation, using cached dataset")
-            return
+        env = env_class(**env_params)
+        test_envs.append((env_name, env))
 
-        logger.info("stage 1: data generation")
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"WorkDir: {self.workdir}")
-
-        for stage in ['train', 'val', 'test']:
-            logger.info(f"generating stage: {stage}")
-            stage_dir = self.workdir / stage
-            stage_dir.mkdir(parents=True, exist_ok=True)
-
-            if self.cfg[stage]['type'] == 'envs':
-                run_generation_batch(self.cfg[stage], self.cfg['envs'], stage_dir)
-            elif self.cfg[stage]['type'] == 'dynare':
-                run_generation_batch_dynare(Path(self.cfg[stage]['dynare_output_path']), stage_dir)
-            else:
-                raise ValueError(f"Unknown dataset type: {self.cfg[stage]['type']}")
-
-    @staticmethod
-    def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
-        """Create test environments for validation."""
-        test_envs = []
-        for env_config in dataset_cfg['test']['envs']:
-            env_name = env_config['env_name']
-            env_cfg = dataset_cfg['envs'][env_name]
-
-            module_path, class_name = env_cfg['env_class'].rsplit('.', 1)
-            module = __import__(module_path, fromlist=[class_name])
-            env_class = getattr(module, class_name)
-
-            env_params = {
-                k: hydra.utils.instantiate(v) if isinstance(v, dict) and '_target_' in v else v
-                for k, v in env_cfg['params'].items()
-            }
-
-            env = env_class(**env_params)
-            test_envs.append((env_name, env))
-
-        return test_envs
+    return test_envs
 
 
 class DataModule(L.LightningDataModule):
@@ -110,10 +71,10 @@ class DataModule(L.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = Dataset(self.data_root / "train", self.state_max_dim)
-            self.val_dataset = Dataset(self.data_root / "val", self.state_max_dim)
+            self.train_dataset = EconomicsDataset(self.data_root / "train")
+            self.val_dataset = EconomicsDataset(self.data_root / "val")
         if stage == "test":
-            self.test_dataset = Dataset(self.data_root / "test", self.state_max_dim)
+            self.test_dataset = EconomicsDataset(self.data_root / "test")
 
     def train_dataloader(self):
         """Create training dataloader."""
@@ -242,6 +203,43 @@ class EconomicPolicyModel(L.LightningModule):
 
         return float(np.mean(total_rewards))
 
+class DatasetGenerator:
+    """Handles the creation and organization of datasets."""
+
+    def __init__(self, dataset_cfg: dict[str, Any]):
+        """
+        Initialize DatasetCreator with configuration.
+        Args:
+            dataset_cfg: Configuration dictionary for dataset creation
+        """
+        self.cfg = dataset_cfg
+        self.workdir = Path(dataset_cfg['workdir'])
+        self.enabled = dataset_cfg['enabled']
+
+    # todo: rm
+    def create(self):
+        """Generate datasets for all stages (train, val, test)."""
+        if not self.enabled:
+            logger.info("dataset generation is disabled, skipping")
+            return
+
+        logger.info("stage 1: data generation")
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"WorkDir: {self.workdir}")
+
+        for stage in ['train', 'val', 'test']:
+            logger.info(f"generating stage: {stage}")
+            stage_dir = self.workdir / stage
+            stage_dir.mkdir(parents=True, exist_ok=True)
+
+            stage_cfg = self.cfg[stage]
+            if stage_cfg['type'] == 'envs':
+                run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
+            elif stage_cfg['type'] == 'dynare':
+                run_generation_batch_dynare(Path(stage_cfg['dynare_output_path']), stage_dir)
+            else:
+                raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
+
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
 def main(cfg: DictConfig) -> None:
@@ -263,14 +261,12 @@ def main(cfg: DictConfig) -> None:
 
     # Set random seed
     set_global_seed(metadata['seed'])
-
-    # Generate datasets
-    # todo: replace with Dynare files reading
     dataset_generator = DatasetGenerator(cfg['dataset'])
     dataset_generator.create()
 
     # Create test environments
-    test_envs = DatasetGenerator.create_test_envs(cfg['dataset'])
+    test_envs = create_test_envs(cfg['dataset'])
+
 
     # Initialize model and data module
     model = EconomicPolicyModel(
@@ -292,15 +288,14 @@ def main(cfg: DictConfig) -> None:
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
         accelerator='gpu' if torch.cuda.is_available() else 'cpu',
-        # logger=TensorBoardLogger("lightning_logs", name=metadata['run_id']),
-        # callbacks=[
-        #     ModelCheckpoint(
-        #         dirpath='checkpoints',
-        #         filename='{epoch}-{val_loss:.2f}',
-        #         save_top_k=3,
-        #         monitor='val_loss'
-        #     )
-        # ],
+        callbacks=[
+            ModelCheckpoint(
+                dirpath='checkpoints',
+                filename='{epoch}-{val_loss:.2f}',
+                save_top_k=3,
+                monitor='val_loss'
+            )
+        ],
         val_check_interval=cfg['train']['val_freq']
     )
 

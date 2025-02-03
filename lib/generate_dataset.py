@@ -5,7 +5,6 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from loguru import logger
-import itertools
 from typing import (
     Any,
     Dict,
@@ -45,20 +44,13 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
     data = []
     for _ in tqdm(range(num_steps)):
         state, reward, done, truncated, info = env.analytical_step()
-
-        def extract_array_from_dict(d: dict):
-            assert isinstance(d, dict), f"expected a dictionary {d=}"
-            return list(itertools.chain.from_iterable(d.values()))
-
         data.append({
-            "state": extract_array_from_dict(state),
-            "action": info["action"],
+            "state": state,
             "reward": reward,
             "done": done,
             "truncated": truncated,
             "info": info
         })
-
 
     return {
         'env_name': env.__class__.__name__,
@@ -76,7 +68,7 @@ def generate_env_data_dynare(dynare_file_path: Path):
         "env_params": dynare_file_path.name,
         "action_description": df.iloc[0]["action_description"],
         "state_description": df.iloc[0]["state_description"],
-        "tracks": df[["state", "action", "reward", "done", "truncated", "info"]],
+        "tracks": df[["state", "reward", "done", "truncated", "info"]],
     }
 
 class DatasetWriter:
