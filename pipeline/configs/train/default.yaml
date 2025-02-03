@@ -6,10 +6,11 @@ data_root: ${dataset.workdir}
 epochs: 1
 val_freq: 1
 device: cpu
+max_state_dim: 10
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
-  state_dim: 1
-  action_dim: 1
+  state_dim: ${train.max_state_dim}
+  action_dim: 10
   num_tasks: 1
 optimizer:
   _target_: torch.optim.Adam
