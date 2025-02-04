@@ -1,6 +1,48 @@
 Aguiar_Gopinath_2007:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+    parameters:
+      growth_rate:
+        distribution: normal
+        mean: 0.00655  # log(1.0066)
+        std: 0.05
+      debt_share:
+        distribution: normal
+        mean: 0.1
+        std: 0.05
+      discount_rate:
+        distribution: normal
+        mean: 0.98039  # 1/1.02
+        std: 0.05
+      depreciation:
+        distribution: normal
+        mean: 0.05
+        std: 0.05
+      capital_adjustment_cost:
+        distribution: normal
+        mean: 4
+        std: 0.05
+      labor_share:
+        distribution: normal
+        mean: 0.36
+        std: 0.05
+      elasticity_substitution:
+        distribution: normal
+        mean: 0.001
+        std: 0.05
+      steady_state_debt:
+        distribution: normal
+        mean: 0.1
+        std: 0.05
+      persistence_productivity:
+        distribution: normal
+        mean: 0.95
+        std: 0.05
+      persistence_gov_spending:
+        distribution: normal
+        mean: 0.01
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -38,10 +80,79 @@ Aguiar_Gopinath_2007:
 Born_Pfeifer_2018_MP:
   dynare_model_settings:
     periods: 1000
-    fixed_WPC_slope: [0, 1]
-    SGU_framework: [0, 1]
-    Calvo: [0, 1]
-    taxes: [0, 1]
+    num_simulations: 100
+
+    parameters:
+      capital_share:
+        distribution: normal
+        mean: 0.25  # 1/4
+        std: 0.05
+      discount_factor:
+        distribution: normal
+        mean: 0.99
+        std: 0.05
+      persistence_technology:
+        distribution: normal
+        mean: 0.9
+        std: 0.05
+      persistence_monetary:
+        distribution: normal
+        mean: 0.5
+        std: 0.05
+      persistence_preference:
+        distribution: normal
+        mean: 0.5
+        std: 0.05
+      inverse_eis:
+        distribution: normal
+        mean: 1.0
+        std: 0.05
+      inverse_frisch:
+        distribution: normal
+        mean: 5.0
+        std: 0.05
+      taylor_inflation:
+        distribution: normal
+        mean: 1.5
+        std: 0.05
+      taylor_output:
+        distribution: normal
+        mean: 0.125
+        std: 0.05
+      money_demand_elasticity:
+        distribution: normal
+        mean: 3.77
+        std: 0.05
+      goods_demand_elasticity:
+        distribution: normal
+        mean: 9.0
+        std: 0.05
+      calvo_prices:
+        distribution: normal
+        mean: 0.75  # 3/4
+        std: 0.05
+      labor_demand_elasticity:
+        distribution: normal
+        mean: 4.5
+        std: 0.05
+      labor_subsidy:
+        distribution: normal
+        mean: 0.0
+        std: 0.05
+      wage_phillips_slope:
+        distribution: normal
+        mean: 0.03
+        std: 0.05
+      steady_state_tax:
+        distribution: normal
+        mean: 0.0
+        std: 0.05
+
+    flags:
+      fixed_WPC_slope: [0, 1]
+      SGU_framework: [0, 1]
+      Calvo: [0, 1]
+      taxes: [0, 1]
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -85,10 +196,54 @@ Born_Pfeifer_2018_MP:
       data_path: ./data/processed/Born_Pfeifer_2018_MP
 
 
-Caldara_et_al_2012_raw:
+Caldara_et_al_2012:
   dynare_model_settings:
     periods: 1000
-    extreme_calibration: [0, 1]
+    num_simulations: 100
+    parameters:
+      beta:
+        distribution: normal
+        mean: 0.991  # Дефолтное значение
+        std: 0.05
+      nu:
+        distribution: normal
+        mean: 0.362184314170512  # Дефолтное значение
+        std: 0.05
+      zeta:
+        distribution: normal
+        mean: 0.3  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.0196  # Дефолтное значение
+        std: 0.05
+      lambda:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 0.5  # Дефолтное значение
+        std: 0.05
+      gammma:
+        distribution: normal
+        mean: 40.0  # Дефолтное значение для extreme_calibration=1
+        std: 5.0
+      sigma_bar:
+        distribution: normal
+        mean: -1.67778  # Дефолтное значение для extreme_calibration=1
+        std: 0.05
+      eta:
+        distribution: normal
+        mean: 0.1  # Дефолтное значение для extreme_calibration=1
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.9  # Дефолтное значение
+        std: 0.05
+
+    flags:
+      extreme_calibration: [0, 1]
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -119,6 +274,40 @@ Caldara_et_al_2012_raw:
 Collard_2001_example1:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+    parameters:
+      alpha:
+        distribution: normal
+        mean: 0.36  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      tau:
+        distribution: normal
+        mean: 0.025  # Дефолтное значение
+        std: 0.05
+      beta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.025  # Дефолтное значение
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 0.0  # Дефолтное значение
+        std: 0.05
+      theta:
+        distribution: normal
+        mean: 2.95  # Дефолтное значение
+        std: 0.05
+      phi:
+        distribution: normal
+        mean: 0.1  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -142,7 +331,74 @@ Collard_2001_example1:
 Faia_2008:
   dynare_model_settings:
     periods: 1000
-    Ramsey: [0, 1]
+    num_simulations: 100
+    parameters:
+      betta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      siggma:
+        distribution: normal
+        mean: 2  # Дефолтное значение
+        std: 0.05
+      epsilon:
+        distribution: normal
+        mean: 6  # Дефолтное значение
+        std: 0.05
+      Psi:
+        distribution: normal
+        mean: 50  # Дефолтное значение
+        std: 0.05
+      xi:
+        distribution: normal
+        mean: 0.4  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.08  # Дефолтное значение
+        std: 0.05
+      varsigma:
+        distribution: normal
+        mean: 0.5  # Дефолтное значение
+        std: 0.05
+      b_w_target:
+        distribution: normal
+        mean: 0.5  # Дефолтное значение
+        std: 0.05
+      lambda_par:
+        distribution: normal
+        mean: 0.6  # Дефолтное значение
+        std: 0.05
+      g_share:
+        distribution: normal
+        mean: 0.25  # Дефолтное значение
+        std: 0.05
+      rho_Z:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      rho_G:
+        distribution: normal
+        mean: 0.9  # Дефолтное значение
+        std: 0.05
+      phi_R:
+        distribution: normal
+        mean: 0.9  # Дефолтное значение для Ramsey=0
+        std: 0.05
+      phi_pi:
+        distribution: normal
+        mean: 5  # Дефолтное значение для Ramsey=0
+        std: 0.05
+      phi_y:
+        distribution: normal
+        mean: 0  # Дефолтное значение для Ramsey=0
+        std: 0.05
+      phi_u:
+        distribution: normal
+        mean: 0  # Дефолтное значение для Ramsey=0
+        std: 0.05
+    flags:
+      Ramsey: [0, 1]
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -185,6 +441,17 @@ Faia_2008:
 FV_et_al_2007_ABCD:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+
+    parameters:
+      R:
+        distribution: normal
+        mean: 1.2  # Дефолтное значение
+        std: 0.05
+      sigma_w:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -206,6 +473,37 @@ FV_et_al_2007_ABCD:
 Gali_2008_chapter_2:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+
+    parameters:
+      alppha:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
+      betta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.9  # Дефолтное значение
+        std: 0.05
+      siggma:
+        distribution: normal
+        mean: 1.0  # Дефолтное значение
+        std: 0.05
+      phi:
+        distribution: normal
+        mean: 1.0  # Дефолтное значение
+        std: 0.05
+      phi_pi:
+        distribution: normal
+        mean: 1.5  # Дефолтное значение
+        std: 0.05
+      eta:
+        distribution: normal
+        mean: 4.0  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -233,8 +531,74 @@ Gali_2008_chapter_2:
 GarciaCicco_et_al_2010:
   dynare_model_settings:
     periods: 1000
-    RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
-
+    num_simulations: 100
+    flags:
+      RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
+    parameters:
+      beta:
+        distribution: normal
+        mean: 0.92236816  # Дефолтное значение
+        std: 0.05
+      gammma:
+        distribution: normal
+        mean: 2  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.12550881  # Дефолтное значение
+        std: 0.05
+      alpha:
+        distribution: normal
+        mean: 0.32  # Дефолтное значение
+        std: 0.05
+      omega:
+        distribution: normal
+        mean: 1.6  # Дефолтное значение
+        std: 0.05
+      theta:
+        distribution: normal
+        mean: 2.24  # Дефолтное значение
+        std: 0.05
+      phi:
+        distribution: normal
+        mean: 4.810804146604144  # Дефолтное значение
+        std: 0.05
+      dbar:
+        distribution: normal
+        mean: 0.007  # Дефолтное значение
+        std: 0.05
+      gbar:
+        distribution: normal
+        mean: 1.009890776104921  # Дефолтное значение для RBC=0
+        std: 0.05
+      rho_a:
+        distribution: normal
+        mean: 0.864571930755821  # Дефолтное значение для RBC=0
+        std: 0.05
+      rho_g:
+        distribution: normal
+        mean: 0.323027844166870  # Дефолтное значение для RBC=0
+        std: 0.05
+      rho_nu:
+        distribution: normal
+        mean: 0.850328786147732  # Дефолтное значение
+        std: 0.05
+      rho_s:
+        distribution: normal
+        mean: 0.205034667802314  # Дефолтное значение
+        std: 0.05
+      rho_mu:
+        distribution: normal
+        mean: 0.906802888826967  # Дефолтное значение
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 2.867166241970346  # Дефолтное значение для RBC=0
+        std: 0.05
+      s_share:
+        distribution: normal
+        mean: 0.10  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -269,7 +633,38 @@ GarciaCicco_et_al_2010:
 Hansen_1985:
   dynare_model_settings:
     periods: 1000
-    indivisible_labor: [0, 1]
+    num_simulations: 100
+    flags:
+      indivisible_labor: [0, 1]
+    parameters:
+      beta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.025  # Дефолтное значение
+        std: 0.05
+      theta:
+        distribution: normal
+        mean: 0.36  # Дефолтное значение
+        std: 0.05
+      gammma:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      A:
+        distribution: normal
+        mean: 2  # Дефолтное значение
+        std: 0.05
+      sigma_eps:
+        distribution: normal
+        mean: 0.00712  # Дефолтное значение
+        std: 0.05
+      h_0:
+        distribution: normal
+        mean: 0.53  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -297,7 +692,44 @@ Hansen_1985:
 McCandless_2008_Chapter_9:
   dynare_model_settings:
     periods: 1000
-
+    num_simulations: 100
+    parameters:
+      beta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.025  # Дефолтное значение
+        std: 0.05
+      theta:
+        distribution: normal
+        mean: 0.36  # Дефолтное значение
+        std: 0.05
+      A:
+        distribution: normal
+        mean: 1.72  # Дефолтное значение
+        std: 0.05
+      h_0:
+        distribution: normal
+        mean: 0.583  # Дефолтное значение
+        std: 0.05
+      gamma:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      pi:
+        distribution: normal
+        mean: 0.48  # Дефолтное значение
+        std: 0.05
+      g_bar:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
+      D:
+        distribution: normal
+        mean: 0.01  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -325,7 +757,60 @@ McCandless_2008_Chapter_9:
 McCandless_2008_Chapter_13:
   dynare_model_settings:
     periods: 1000
-
+    num_simulations: 100
+    parameters:
+      kappa:
+        distribution: normal
+        mean: 0.5  # Дефолтное значение
+        std: 0.05
+      beta:
+        distribution: normal
+        mean: 0.99  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.025  # Дефолтное значение
+        std: 0.05
+      theta:
+        distribution: normal
+        mean: 0.36  # Дефолтное значение
+        std: 0.05
+      rstar:
+        distribution: normal
+        mean: 0.03  # Дефолтное значение
+        std: 0.05
+      a:
+        distribution: normal
+        mean: 0.01  # Дефолтное значение
+        std: 0.05
+      B:
+        distribution: normal
+        mean: -2.58  # Дефолтное значение
+        std: 0.05
+      gamma_lambda:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      gamma_g:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      gamma_pstar:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      sigma_lambda:
+        distribution: normal
+        mean: 0.01  # Дефолтное значение
+        std: 0.05
+      sigma_g:
+        distribution: normal
+        mean: 0.01  # Дефолтное значение
+        std: 0.05
+      sigma_pstar:
+        distribution: normal
+        mean: 0.01  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -357,6 +842,44 @@ McCandless_2008_Chapter_13:
 RBC_baseline:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 50
+    parameters:
+      sigma:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
+      alpha:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
+      i_y:
+        distribution: normal
+        mean: 0.25  # Дефолтное значение
+        std: 0.05
+      k_y:
+        distribution: normal
+        mean: 10.4  # Дефолтное значение
+        std: 0.05
+      x:
+        distribution: normal
+        mean: 0.0055  # Дефолтное значение
+        std: 0.05
+      n:
+        distribution: normal
+        mean: 0.0027  # Дефолтное значение
+        std: 0.05
+      rhoz:
+        distribution: normal
+        mean: 0.97  # Дефолтное значение
+        std: 0.05
+      rhog:
+        distribution: normal
+        mean: 0.989  # Дефолтное значение
+        std: 0.05
+      gshare:
+        distribution: normal
+        mean: 0.2038  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -390,6 +913,36 @@ RBC_baseline:
 RBC_capitalstock_shock:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+    parameters:
+      alpha:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
+      i_y:
+        distribution: normal
+        mean: 0.25  # Дефолтное значение
+        std: 0.05
+      k_y:
+        distribution: normal
+        mean: 10.4  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.97  # Дефолтное значение
+        std: 0.05
+      beta:
+        distribution: normal
+        mean: 0.98  # Дефолтное значение (вычислено как 1 / (alpha / k_y + (1 - delta)))
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.024  # Дефолтное значение (вычислено как i_y / k_y)
+        std: 0.05
+      l_ss:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -411,10 +964,40 @@ RBC_capitalstock_shock:
     output:
       data_path: ./data/processed/RBC_capitalstock_shock  # Путь для сохранения обработанных данных
 
+
 RBC_news_shock_model:
   dynare_model_settings:
     periods: 1000
-
+    num_simulations: 100
+    parameters:
+      sigma:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
+      alpha:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
+      i_y:
+        distribution: normal
+        mean: 0.25  # Дефолтное значение
+        std: 0.05
+      k_y:
+        distribution: normal
+        mean: 10.4  # Дефолтное значение
+        std: 0.05
+      x:
+        distribution: normal
+        mean: 0.0055  # Дефолтное значение
+        std: 0.05
+      n:
+        distribution: normal
+        mean: 0.0027  # Дефолтное значение
+        std: 0.05
+      rhoz:
+        distribution: normal
+        mean: 0.97  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -436,9 +1019,48 @@ RBC_news_shock_model:
     output:
       data_path: ./data/processed/RBC_news_shock_model  # Путь для сохранения обработанных данных
 
+
 RBC_state_dependent_GIRF:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+    parameters:
+      sigma:
+        distribution: normal
+        mean: 5  # Дефолтное значение
+        std: 0.05
+      alpha:
+        distribution: normal
+        mean: 0.33  # Дефолтное значение
+        std: 0.05
+      i_y:
+        distribution: normal
+        mean: 0.25  # Дефолтное значение
+        std: 0.05
+      k_y:
+        distribution: normal
+        mean: 10.4  # Дефолтное значение
+        std: 0.05
+      x:
+        distribution: normal
+        mean: 0.0055  # Дефолтное значение
+        std: 0.05
+      n:
+        distribution: normal
+        mean: 0.0027  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.97  # Дефолтное значение
+        std: 0.05
+      rhog:
+        distribution: normal
+        mean: 0.98  # Дефолтное значение
+        std: 0.05
+      gshare:
+        distribution: normal
+        mean: 0.2038  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -462,15 +1084,67 @@ RBC_state_dependent_GIRF:
     output:
       data_path: ./data/processed/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 
+
 SGU_2003:
   dynare_model_settings:
     periods: 1000
-    model1: [0, 1]
-    model1a: [0, 1]
-    model2: [0, 1]
-    model3: [0, 1]
-    model4: [0, 1]
-    model5: [0, 1]
+    num_simulations: 100
+    flags:
+      model1: [0, 1]
+      model1a: [0, 1]
+      model2: [0, 1]
+      model3: [0, 1]
+      model4: [0, 1]
+      model5: [0, 1]
+    parameters:
+      gammma:
+        distribution: normal
+        mean: 2  # Дефолтное значение
+        std: 0.05
+      omega:
+        distribution: normal
+        mean: 1.455  # Дефолтное значение
+        std: 0.05
+      rho:
+        distribution: normal
+        mean: 0.42  # Дефолтное значение
+        std: 0.05
+      sigma_tfp:
+        distribution: normal
+        mean: 0.0129  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.1  # Дефолтное значение
+        std: 0.05
+      alpha:
+        distribution: normal
+        mean: 0.32  # Дефолтное значение
+        std: 0.05
+      phi:
+        distribution: normal
+        mean: 0.028  # Дефолтное значение
+        std: 0.05
+      r_bar:
+        distribution: normal
+        mean: 0.04  # Дефолтное значение
+        std: 0.05
+      d_bar:
+        distribution: normal
+        mean: 0.7442  # Дефолтное значение
+        std: 0.05
+      psi_2:
+        distribution: normal
+        mean: 0.000742  # Дефолтное значение
+        std: 0.05
+      psi_3:
+        distribution: normal
+        mean: 0.00074  # Дефолтное значение
+        std: 0.05
+      psi_4:
+        distribution: normal
+        mean: 0  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.utility_reward
@@ -496,9 +1170,32 @@ SGU_2003:
     output:
       data_path: ./data/processed/SGU_2003
 
+
 SGU_2004:
   dynare_model_settings:
     periods: 1000
+    num_simulations: 100
+    parameters:
+      BETTA:
+        distribution: normal
+        mean: 0.95  # Дефолтное значение
+        std: 0.05
+      DELTA:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
+      ALFA:
+        distribution: normal
+        mean: 0.3  # Дефолтное значение
+        std: 0.05
+      RHO:
+        distribution: normal
+        mean: 0  # Дефолтное значение
+        std: 0.05
+      SIG:
+        distribution: normal
+        mean: 2  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -517,3 +1214,4 @@ SGU_2004:
         - 'Capital'               # k (управляемая переменная)
     output:
       data_path: ./data/processed/SGU_2004  # Путь для сохранения обработанных данных
+

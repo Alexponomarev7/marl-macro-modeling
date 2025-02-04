@@ -2,6 +2,46 @@
     @#define periods = 100
 @#endif
 
+@#ifndef kappa
+    @#define kappa = 0.5
+@#endif
+@#ifndef beta
+    @#define beta = 0.99
+@#endif
+@#ifndef delta
+    @#define delta = 0.025
+@#endif
+@#ifndef theta
+    @#define theta = 0.36
+@#endif
+@#ifndef rstar
+    @#define rstar = 0.03
+@#endif
+@#ifndef a
+    @#define a = 0.01
+@#endif
+@#ifndef B
+    @#define B = -2.58
+@#endif
+@#ifndef gamma_lambda
+    @#define gamma_lambda = 0.95
+@#endif
+@#ifndef gamma_g
+    @#define gamma_g = 0.95
+@#endif
+@#ifndef gamma_pstar
+    @#define gamma_pstar = 0.95
+@#endif
+@#ifndef sigma_lambda
+    @#define sigma_lambda = 0.01
+@#endif
+@#ifndef sigma_g
+    @#define sigma_g = 0.01
+@#endif
+@#ifndef sigma_pstar
+    @#define sigma_pstar = 0.01
+@#endif
+
 var w           $W$         (long_name='Real Wage')
     r           $r$         (long_name='Real Return On Capital')
     c           $C$         (long_name='Real Consumption')
@@ -36,19 +76,19 @@ parameters beta         ${\beta}$    (long_name='Discount Factor')
            sigma_g      ${\sigma_g}$ (long_name='Standard Deviation Money Shock')
            sigma_pstar  ${\sigma_{P^*}}$ (long_name='Standard Deviation Foreign Price Shock');
 
-kappa = 0.5;
-beta = 0.99;
-delta = 0.025;
-theta = 0.36;
-rstar = 0.03;
-a = 0.01;
-B = -2.58;
-gamma_lambda = 0.95;
-gamma_g = 0.95;
-gamma_pstar = 0.95;
-sigma_lambda = 0.01;
-sigma_g = 0.01;
-sigma_pstar = 0.01;
+kappa = @{kappa};
+beta = @{beta};
+delta = @{delta};
+theta = @{theta};
+rstar = @{rstar};
+a = @{a};
+B = @{B};
+gamma_lambda = @{gamma_lambda};
+gamma_g = @{gamma_g};
+gamma_pstar = @{gamma_pstar};
+sigma_lambda = @{sigma_lambda};
+sigma_g = @{sigma_g};
+sigma_pstar = @{sigma_pstar};
 
 model;
     0 = e / (p(+1) * c(+1)) - beta * e(+1) * (1 + rf) / (p(+2) * c(+2));

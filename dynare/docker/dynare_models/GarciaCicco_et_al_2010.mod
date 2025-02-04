@@ -5,6 +5,71 @@
 @#define RBC = 0
 //set to 1 for RBC model and to 0 for Financial Frictions Model
 
+@#ifndef beta
+    @#define beta = 0.98^4
+@#endif
+@#ifndef gammma
+    @#define gammma = 2
+@#endif
+@#ifndef delta
+    @#define delta = 0.12550881
+@#endif
+@#ifndef alpha
+    @#define alpha = 0.32
+@#endif
+@#ifndef omega
+    @#define omega = 1.6
+@#endif
+@#ifndef theta
+    @#define theta = 1.4*omega
+@#endif
+@#ifndef phi
+    @#define phi = 4.810804146604144
+@#endif
+@#ifndef dbar
+    @#define dbar = 0.007
+@#endif
+@#ifndef gbar
+    @#if RBC == 1
+        @#define gbar = 1.0050
+    @#else
+        @#define gbar = 1.009890776104921
+    @#endif
+@#endif
+@#ifndef rho_a
+    @#if RBC == 1
+        @#define rho_a = 0.7650
+    @#else
+        @#define rho_a = 0.864571930755821
+    @#endif
+@#endif
+@#ifndef rho_g
+    @#if RBC == 1
+        @#define rho_g = 0.8280
+    @#else
+        @#define rho_g = 0.323027844166870
+    @#endif
+@#endif
+@#ifndef rho_nu
+    @#define rho_nu = 0.850328786147732
+@#endif
+@#ifndef rho_s
+    @#define rho_s = 0.205034667802314
+@#endif
+@#ifndef rho_mu
+    @#define rho_mu = 0.906802888826967
+@#endif
+@#ifndef psi
+    @#if RBC == 1
+        @#define psi = 0.001
+    @#else
+        @#define psi = 2.867166241970346
+    @#endif
+@#endif
+@#ifndef s_share
+    @#define s_share = 0.10
+@#endif
+
 var c       $c$                  (long_name='Consumption')
     k       $k$                  (long_name='Capital')
     a       $a$                  (long_name='Total Factor Productivity')
@@ -60,38 +125,23 @@ varexo eps_a ${\varepsilon_a}$    (long_name='Temporary Technology Shock')
     @# endif
 ;
 
-@#if RBC == 1
-    gbar  = 1.0050; % Gross growth rate of output
-    rho_g = 0.8280; % Serial correlation of innovation in permanent technology shock
-    rho_a = 0.7650; % Serial correlation of transitory technology shock
-    phi   = 3.3000; % Adjustment cost parameter
-@# else
-    gbar  = 1.009890776104921;
-    rho_g = 0.323027844166870;
-    rho_a = 0.864571930755821;
-    phi   = 4.810804146604144;
-@# endif
+beta = @{beta};
+gamma = @{gammma};
+delta = @{delta};
+alpha = @{alpha};
+omega = @{omega};
+theta = @{theta};
+phi = @{phi};
+dbar = @{dbar};
+gbar = @{gbar};
+rho_a = @{rho_a};
+rho_g = @{rho_g};
+rho_nu = @{rho_nu};
+rho_s = @{rho_s};
+rho_mu = @{rho_mu};
+psi = @{psi};
+s_share = @{s_share};
 
-% Parameters only used for Financial Frictions model, irrelevant for RBC where volatilities are 0
-rho_nu = 0.850328786147732;
-rho_s  = 0.205034667802314;
-rho_mu = 0.906802888826967;
-
-% From Table 2, except for psi, which is estimated for Financial Frictions model
-gamma = 2; % Intertemporal elasticity of substitution
-delta = 1.03^4-1; % Depreciation rate
-alpha = 0.32; % Capital elasticity of the production function
-omega = 1.6; % Exponent of labor in utility function
-theta = 1.4*omega;
-beta = 0.98^4; % Discount factor
-dbar = 0.007;
-
-@#if RBC == 1
-    psi = 0.001;
-@# else
-    psi = 2.867166241970346; % Parameter governing the debt elasticity of the interest rate
-    s_share = 0.10; % Share of public spending in GDP
-@# endif
 
 model;
 #RSTAR = 1/beta * gbar^gamma; % World interest rate

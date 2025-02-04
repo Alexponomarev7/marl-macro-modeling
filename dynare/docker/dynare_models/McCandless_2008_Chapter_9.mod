@@ -2,6 +2,34 @@
     @#define periods = 100
 @#endif
 
+@#ifndef beta
+    @#define beta = 0.99
+@#endif
+@#ifndef delta
+    @#define delta = 0.025
+@#endif
+@#ifndef theta
+    @#define theta = 0.36
+@#endif
+@#ifndef A
+    @#define A = 1.72
+@#endif
+@#ifndef h_0
+    @#define h_0 = 0.583
+@#endif
+@#ifndef gamma
+    @#define gamma = 0.95
+@#endif
+@#ifndef pi
+    @#define pi = 0.48
+@#endif
+@#ifndef g_bar
+    @#define g_bar = 1
+@#endif
+@#ifndef D
+    @#define D = 0.01
+@#endif
+
 var w           $W$         (long_name='Real Wage')
     r           $r$         (long_name='Real Return On Capital')
     c           $C$         (long_name='Real Consumption')
@@ -29,15 +57,15 @@ parameters beta         ${\beta}$    (long_name='Discount Factor')
 
 predetermined_variables k;
 
-beta = 0.99;
-delta = 0.025;
-theta = 0.36;
-A = 1.72;
-h_0 = 0.583;
-gamma = 0.95;
-pi = 0.48;
-g_bar = 1;
-D = 0.01;
+beta = @{beta};
+delta = @{delta};
+theta = @{theta};
+A = @{A};
+h_0 = @{h_0};
+gamma = @{gamma};
+pi = @{pi};
+g_bar = @{g_bar};
+D = @{D};
 
 model;
     c + k(+1) + m / p = w * h + r * k + (1 - delta) * k + m(-1) / p + (g - 1) * m(-1) / p;

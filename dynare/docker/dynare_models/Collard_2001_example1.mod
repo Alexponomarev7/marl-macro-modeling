@@ -2,6 +2,31 @@
     @#define periods = 100
 @#endif
 
+@#ifndef alpha
+    @#define alpha = 0.36
+@#endif
+@#ifndef rho
+    @#define rho = 0.95
+@#endif
+@#ifndef tau
+    @#define tau = 0.025
+@#endif
+@#ifndef beta
+    @#define beta = 0.99
+@#endif
+@#ifndef delta
+    @#define delta = 0.025
+@#endif
+@#ifndef psi
+    @#define psi = 0
+@#endif
+@#ifndef theta
+    @#define theta = 2.95
+@#endif
+@#ifndef phi
+    @#define phi = 0.1
+@#endif
+
 var y $y$                              (long_name='Output')
     c $c$                              (long_name='Consumption')
     k $k$                              (long_name='Capital')
@@ -21,14 +46,14 @@ parameters beta $\beta$                (long_name='Discount Factor')
            tau $\tau$                  (long_name='Spillover Between Shocks')
            phi $\phi$                  (long_name='Correlation Between Shocks');
 
-alpha = 0.36;
-rho   = 0.95;
-tau   = 0.025;
-beta  = 0.99;
-delta = 0.025;
-psi   = 0;
-theta = 2.95;
-phi   = 0.1;
+alpha = @{alpha};
+rho   = @{rho};
+tau   = @{tau};
+beta  = @{beta};
+delta = @{delta};
+psi   = @{psi};
+theta = @{theta};
+phi   = @{phi};
 
 model;
     c * theta * h^(1 + psi) = (1 - alpha) * y;

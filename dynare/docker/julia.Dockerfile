@@ -2,4 +2,4 @@ FROM julia:latest
 
 WORKDIR /app
 
-RUN julia -e 'using Pkg; Pkg.add("Dynare"); Pkg.add("DataFrames"); Pkg.add("CSV"); Pkg.add("ArgParse"); Pkg.add("YAML")'
+RUN julia -e 'using Pkg; Pkg.add("Dynare"); Pkg.add("DataFrames"); Pkg.add("CSV"); Pkg.add("ArgParse"); Pkg.add("YAML"); Pkg.add("Distributions"); Pkg.add("Random"); Pkg.add("SHA")'

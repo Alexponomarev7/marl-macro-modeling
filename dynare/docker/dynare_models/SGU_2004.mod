@@ -2,6 +2,22 @@
     @#define periods = 100
 @#endif
 
+@#ifndef BETTA
+    @#define BETTA = 0.95
+@#endif
+@#ifndef DELTA
+    @#define DELTA = 1
+@#endif
+@#ifndef ALFA
+    @#define ALFA = 0.3
+@#endif
+@#ifndef RHO
+    @#define RHO = 0
+@#endif
+@#ifndef SIG
+    @#define SIG = 2
+@#endif
+
 var c ${c}$ (long_name='Consumption')
     k ${k}$ (long_name='Capital')
     a ${a}$ (long_name='Technology Shock');
@@ -16,11 +32,11 @@ parameters SIG ${\sigma}$ (long_name='Intertemporal Elasticity Of Substitution')
            BETTA ${\beta}$ (long_name='Discount Factor')
            RHO ${\rho}$ (long_name='Persistence Of Technology Shock');
 
-BETTA = 0.95;
-DELTA = 1;
-ALFA = 0.3;
-RHO = 0;
-SIG = 2;
+BETTA = @{BETTA};
+DELTA = @{DELTA};
+ALFA = @{ALFA};
+RHO = @{RHO};
+SIG = @{SIG};
 
 model;
     0 = exp(c) + exp(k(+1)) - (1 - DELTA) * exp(k) - exp(a) * exp(k)^ALFA;
