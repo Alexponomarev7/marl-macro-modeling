@@ -1,9 +1,59 @@
 @#ifndef periods
     @#define periods = 100
 @#endif
-
 @#ifndef Ramsey
     @#define Ramsey = 0
+@#endif
+
+@#ifndef betta
+    @#define betta = 0.99
+@#endif
+@#ifndef siggma
+    @#define siggma = 2
+@#endif
+@#ifndef epsilon
+    @#define epsilon = 6
+@#endif
+@#ifndef Psi
+    @#define Psi = 50
+@#endif
+@#ifndef xi
+    @#define xi = 0.4
+@#endif
+@#ifndef rho
+    @#define rho = 0.08
+@#endif
+@#ifndef varsigma
+    @#define varsigma = 0.5
+@#endif
+@#ifndef b_w_target
+    @#define b_w_target = 0.5
+@#endif
+@#ifndef lambda_par
+    @#define lambda_par = 0.6
+@#endif
+@#ifndef g_share
+    @#define g_share = 0.25
+@#endif
+@#ifndef rho_Z
+    @#define rho_Z = 0.95
+@#endif
+@#ifndef rho_G
+    @#define rho_G = 0.9
+@#endif
+@#if Ramsey == 0
+    @#ifndef phi_R
+        @#define phi_R = 0.9
+    @#endif
+    @#ifndef phi_pi
+        @#define phi_pi = 5
+    @#endif
+    @#ifndef phi_y
+        @#define phi_y = 0
+    @#endif
+    @#ifndef phi_u
+        @#define phi_u = 0
+    @#endif
 @#endif
 
 var lambda  ${\Lambda}$     (long_name='Lagrange Multiplier A')
@@ -30,10 +80,8 @@ var lambda  ${\Lambda}$     (long_name='Lagrange Multiplier A')
     log_u       ${\log u}$  (long_name='Log Unemployment')
     log_theta   ${\log \theta}$ (long_name='Log Tightness A')
     log_pi      ${\log \pi}$    (long_name='Log Tightness B');
-
 varexo epsilon_G    ${\varepsilon_G}$ (long_name='Government Spending Shock')
        epsilon_z    ${\varepsilon_Z}$ (long_name='Technology Shock');
-
 parameters epsilon     ${\varepsilon}$ (long_name='Substitution Elasticity')
            Psi         ${\psi}$        (long_name='Price Adjustment Costs')
            betta       ${\beta}$       (long_name='Discount Factor')
@@ -57,27 +105,24 @@ parameters epsilon     ${\varepsilon}$ (long_name='Substitution Elasticity')
                phi_u   ${\phi_u}$      (long_name='Unemployment Feedback')
            @#endif
         ;
-
-betta = 0.99;
-siggma = 2;
-epsilon = 6;
-Psi = 50;
-xi = 0.4;
-rho = 0.08;
-varsigma = 0.5;
-b_w_target = 0.5;
-lambda_par = 0.6;
-g_share = 0.25;
-rho_Z = 0.95;
-rho_G = 0.9;
-
+betta = @{betta};
+siggma = @{siggma};
+epsilon = @{epsilon};
+Psi = @{Psi};
+xi = @{xi};
+rho = @{rho};
+varsigma = @{varsigma};
+b_w_target = @{b_w_target};
+lambda_par = @{lambda_par};
+g_share = @{g_share};
+rho_Z = @{rho_Z};
+rho_G = @{rho_G};
 @#if Ramsey == 0
-    phi_R = 0.9;
-    phi_pi = 5;
-    phi_y = 0;
-    phi_u = 0;
+    phi_R = @{phi_R};
+    phi_pi = @{phi_pi};
+    phi_y = @{phi_y};
+    phi_u = @{phi_u};
 @#endif
-
 model;
     lambda = c^-siggma;
     1 / R = betta * (lambda(+1) / lambda) / pi(+1);
@@ -106,11 +151,9 @@ model;
     log_theta = log(theta);
     log_pi = log(pi);
 end;
-
 initval;
     R = 1 / betta;
 end;
-
 steady_state_model;
     @#if Ramsey == 0
         R = 1 / betta;
@@ -143,30 +186,24 @@ steady_state_model;
     log_theta = log(theta);
     log_pi = log(pi);
 end;
-
 @#if Ramsey
     ramsey_model(planner_discount = 0.99, instruments = (R));
 @#endif
-
 steady;
 check;
-
 shocks;
     var epsilon_z;
     stderr 0.008;
     var epsilon_G;
     stderr 0.008;
 end;
-
 @#if Ramsey
     planner_objective(log(c));
 @#endif
-
 shocks;
     var epsilon_z;
     stderr 1;
     var epsilon_G;
     stderr 1;
 end;
-
 stoch_simul(order=1, irf=60, periods=@{periods}, pruning, nomoments, nofunctions, nograph, nocorr, noprint);

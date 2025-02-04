@@ -2,6 +2,28 @@
     @#define periods = 100
 @#endif
 
+@#ifndef alppha
+    @#define alppha = 0.33
+@#endif
+@#ifndef betta
+    @#define betta = 0.99
+@#endif
+@#ifndef rho
+    @#define rho = 0.9
+@#endif
+@#ifndef siggma
+    @#define siggma = 1.0
+@#endif
+@#ifndef phi
+    @#define phi = 1.0
+@#endif
+@#ifndef phi_pi
+    @#define phi_pi = 1.5
+@#endif
+@#ifndef eta
+    @#define eta = 4.0
+@#endif
+
 var C ${C}$                  (long_name='Consumption')
     W_real ${\frac{W}{P}}$   (long_name='Real Wage')
     Pi ${\Pi}$               (long_name='Inflation')
@@ -15,6 +37,7 @@ var C ${C}$                  (long_name='Consumption')
 varexo eps_A ${\varepsilon_A}$ (long_name='Technology Shock')
        eps_m ${\varepsilon_m}$ (long_name='Monetary Policy Shock');
 
+
 parameters alppha ${\alpha}$ (long_name='Capital Share')
            betta ${\beta}$   (long_name='Discount Factor')
            rho ${\rho}$      (long_name='Autocorrelation Technology Shock')
@@ -23,13 +46,13 @@ parameters alppha ${\alpha}$ (long_name='Capital Share')
            phi_pi ${\phi_{\pi}}$ (long_name='Inflation Feedback Taylor Rule')
            eta ${\eta}$      (long_name='Semi-Elasticity Of Money Demand');
 
-alppha = 0.33;
-betta = 0.99;
-rho = 0.9;
-siggma = 1;
-phi = 1;
-phi_pi = 1.5;
-eta = 4;
+alppha = @{alppha};
+betta = @{betta};
+rho = @{rho};
+siggma = @{siggma};
+phi = @{phi};
+phi_pi = @{phi_pi};
+eta = @{eta};
 
 model;
     W_real = C^siggma * N^phi;

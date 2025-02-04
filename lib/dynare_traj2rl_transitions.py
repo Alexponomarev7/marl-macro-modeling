@@ -109,11 +109,13 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     rl_env_conf = model_params["rl_env_settings"]
 
     # Extract configuration number from the filename (if any)
-    config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
-    config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
+    # config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
 
+    # config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
+
+    config_suffix = raw_data_path.split("_")[-1][:-4]
     # Generate output path
-    output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
+    output_path = Path(output_dir) / f"{model_name}_{config_suffix}.parquet"
 
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
@@ -143,10 +145,11 @@ def extract_model_name(filename: str) -> str:
         str: The base model name, e.g., "Born_Pfeifer_2018_MP".
     """
     # Удаляем суффикс "_config_*_raw.csv"
-    if "_config_" in filename and "_raw" in filename:
-        return filename.split("_config_")[0]
+    # if "_config_" in filename and "_raw" in filename:
+    #     return filename.split("_config_")[0]
     # Если суффикса нет, возвращаем имя файла без расширения
-    return filename.replace("_raw", "")
+    # return filename.replace("_raw", "")
+    return "_".join(filename.split("_")[:-1])
 
 
 def main() -> None:
@@ -164,7 +167,7 @@ def main() -> None:
     os.makedirs(output_dir, exist_ok=True)
 
     # Find all raw data files
-    raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
+    raw_data_files = list(Path(raw_data_dir).glob("*.csv"))
 
     for raw_data_file in raw_data_files:
         # Extract base model name from the filename

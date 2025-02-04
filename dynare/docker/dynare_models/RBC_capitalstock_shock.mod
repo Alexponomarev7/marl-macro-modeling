@@ -2,6 +2,28 @@
     @#define periods = 100
 @#endif
 
+@#ifndef alpha
+    @#define alpha = 0.33
+@#endif
+@#ifndef i_y
+    @#define i_y = 0.25
+@#endif
+@#ifndef k_y
+    @#define k_y = 10.4
+@#endif
+@#ifndef rho
+    @#define rho = 0.97
+@#endif
+@#ifndef beta
+    @#define beta = 1 / (alpha / k_y + (1 - delta))
+@#endif
+@#ifndef delta
+    @#define delta = i_y / k_y
+@#endif
+@#ifndef l_ss
+    @#define l_ss = 0.33
+@#endif
+
 var y ${y}$ (long_name='Output')
     c ${c}$ (long_name='Consumption')
     k ${k}$ (long_name='Capital')
@@ -25,10 +47,13 @@ parameters beta ${\beta}$ (long_name='Discount Factor')
            y_ss ${y_{ss}}$ (long_name='Steady State Output')
            c_ss ${c_{ss}}$ (long_name='Steady State Consumption');
 
-alpha = 0.33;
-i_y = 0.25;
-k_y = 10.4;
-rho = 0.97;
+alpha = @{alpha};
+i_y = @{i_y};
+k_y = @{k_y};
+rho = @{rho};
+beta = @{beta};
+delta = @{delta};
+l_ss = @{l_ss};
 
 model;
     psi * exp(c) / (1 - exp(l)) = (1 - alpha) * exp(z) * (exp(k) / exp(l))^alpha;

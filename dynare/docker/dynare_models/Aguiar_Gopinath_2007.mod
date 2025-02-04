@@ -2,6 +2,43 @@
     @#define periods = 100
 @#endif
 
+@#ifndef growth_rate
+    @#define growth_rate = log(1.0066)
+@#endif
+@#ifndef risk_aversion
+    @#define risk_aversion = 2
+@#endif
+@#ifndef debt_share
+    @#define debt_share = 0.1
+@#endif
+@#ifndef capital_share
+    @#define capital_share = 0.68
+@#endif
+@#ifndef discount_rate
+    @#define discount_rate = 1/1.02
+@#endif
+@#ifndef depreciation
+    @#define depreciation = 0.05
+@#endif
+@#ifndef capital_adjustment_cost
+    @#define capital_adjustment_cost = 4
+@#endif
+@#ifndef labor_share
+    @#define labor_share = 0.36
+@#endif
+@#ifndef elasticity_substitution
+    @#define elasticity_substitution = 0.001
+@#endif
+@#ifndef steady_state_debt
+    @#define steady_state_debt = 0.1
+@#endif
+@#ifndef persistence_productivity
+    @#define persistence_productivity = 0.95
+@#endif
+@#ifndef persistence_gov_spending
+    @#define persistence_gov_spending = 0.01
+@#endif
+
 var consumption ${C}$                  (long_name='Consumption')
     capital ${K}$                      (long_name='Capital')
     output ${Y}$                       (long_name='Output')
@@ -41,19 +78,19 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
            persistence_productivity ${\rho_A}$ (long_name='Persistence of Productivity')
            persistence_gov_spending ${\rho_G}$ (long_name='Persistence of Government Spending');
 
-growth_rate = log(1.0066);
-risk_aversion = 2;
-debt_share = 0.1;
-capital_share = 0.68;
-discount_rate = 1/1.02;
-depreciation = 0.05;
-capital_adjustment_cost = 4;
-labor_share = 0.36;
-elasticity_substitution = 0.001;
-steady_state_debt = 0.1;
+growth_rate = @{growth_rate};
+risk_aversion = @{risk_aversion};
+debt_share = @{debt_share};
+capital_share = @{capital_share};
+discount_rate = @{discount_rate};
+depreciation = @{depreciation};
+capital_adjustment_cost = @{capital_adjustment_cost};
+labor_share = @{labor_share};
+elasticity_substitution = @{elasticity_substitution};
+steady_state_debt = @{steady_state_debt};
 interest_rate = 1/discount_rate - 1;
-persistence_productivity = 0.95;
-persistence_gov_spending = 0.01;
+persistence_productivity = @{persistence_productivity};
+persistence_gov_spending = @{persistence_gov_spending};
 
 model;
     output = exp(productivity) * capital^(1 - capital_share) * (exp(gov_spending) * labor)^capital_share;

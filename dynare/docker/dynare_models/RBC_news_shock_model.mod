@@ -2,6 +2,28 @@
     @#define periods = 100
 @#endif
 
+@#ifndef sigma
+    @#define sigma = 1
+@#endif
+@#ifndef alpha
+    @#define alpha = 0.33
+@#endif
+@#ifndef i_y
+    @#define i_y = 0.25
+@#endif
+@#ifndef k_y
+    @#define k_y = 10.4
+@#endif
+@#ifndef x
+    @#define x = 0.0055
+@#endif
+@#ifndef n
+    @#define n = 0.0027
+@#endif
+@#ifndef rhoz
+    @#define rhoz = 0.97
+@#endif
+
 var y ${y}$ (long_name='Output')
     c ${c}$ (long_name='Consumption')
     k ${k}$ (long_name='Capital')
@@ -26,13 +48,13 @@ parameters beta ${\beta}$ (long_name='Discount Factor')
            i_y ${\frac{I}{Y}}$ (long_name='Investment-Output Ratio')
            k_y ${\frac{K}{Y}}$ (long_name='Capital-Output Ratio');
 
-sigma = 1;
-alpha = 0.33;
-i_y = 0.25;
-k_y = 10.4;
-x = 0.0055;
-n = 0.0027;
-rhoz = 0.97;
+sigma = @{sigma};
+alpha = @{alpha};
+i_y = @{i_y};
+k_y = @{k_y};
+x = @{x};
+n = @{n};
+rhoz = @{rhoz};
 
 model;
     exp(c)^(-sigma) = beta / gammax * exp(c(+1))^(-sigma) * (alpha * exp(z(+1)) * (exp(k) / exp(l(+1)))^(alpha - 1) + (1 - delta));

@@ -18,6 +18,59 @@
     @#define taxes = 0
 @#endif
 
+
+@#ifndef capital_share
+    @#define capital_share = 1/4
+@#endif
+@#ifndef discount_factor
+    @#define discount_factor = 0.99
+@#endif
+@#ifndef persistence_technology
+    @#define persistence_technology = 0.9
+@#endif
+@#ifndef persistence_monetary
+    @#define persistence_monetary = 0.5
+@#endif
+@#ifndef persistence_preference
+    @#define persistence_preference = 0.5
+@#endif
+@#ifndef inverse_eis
+    @#define inverse_eis = 1
+@#endif
+@#ifndef inverse_frisch
+    @#define inverse_frisch = 5
+@#endif
+@#ifndef taylor_inflation
+    @#define taylor_inflation = 1.5
+@#endif
+@#ifndef taylor_output
+    @#define taylor_output = 0.125
+@#endif
+@#ifndef money_demand_elasticity
+    @#define money_demand_elasticity = 3.77
+@#endif
+@#ifndef goods_demand_elasticity
+    @#define goods_demand_elasticity = 9
+@#endif
+@#ifndef calvo_prices
+    @#define calvo_prices = 3/4
+@#endif
+@#ifndef labor_demand_elasticity
+    @#define labor_demand_elasticity = 4.5
+@#endif
+@#ifndef labor_subsidy
+    @#define labor_subsidy = 0
+@#endif
+@#ifndef wage_phillips_slope
+    @#define wage_phillips_slope = 0.03
+@#endif
+@#ifndef steady_state_tax
+    @#define steady_state_tax = 0
+@#endif
+@#ifndef calvo_wages
+    @#define calvo_wages = 3/4
+@#endif
+
 var price_inflation       ${\pi^p}$               (long_name='Price Inflation')
     output_gap            ${\tilde y}$            (long_name='Output Gap')
     natural_output        ${y^{nat}}$             (long_name='Natural Output')
@@ -77,29 +130,29 @@ parameters capital_share       ${\alpha}$         (long_name='Capital Share')
     ;
 
 % Parameter values
-inverse_eis = 1;
-inverse_frisch = 5;
-taylor_inflation = 1.5;
-taylor_output = 0.125;
-calvo_prices = 3/4;
-persistence_monetary = 0.5;
-persistence_preference = 0.5;
-persistence_technology = 0.9;
-discount_factor = 0.99;
-money_demand_elasticity = 3.77;
-capital_share = 1/4;
-goods_demand_elasticity = 9;
-labor_subsidy = 0;
+capital_share = @{capital_share};
+discount_factor = @{discount_factor};
+persistence_technology = @{persistence_technology};
+persistence_monetary = @{persistence_monetary};
+persistence_preference = @{persistence_preference};
+inverse_eis = @{inverse_eis};
+inverse_frisch = @{inverse_frisch};
+taylor_inflation = @{taylor_inflation};
+taylor_output = @{taylor_output};
+money_demand_elasticity = @{money_demand_elasticity};
+goods_demand_elasticity = @{goods_demand_elasticity};
+calvo_prices = @{calvo_prices};
+labor_demand_elasticity = @{labor_demand_elasticity};
+labor_subsidy = @{labor_subsidy};
 
-labor_demand_elasticity = 4.5;
 @#if fixed_WPC_slope
-    wage_phillips_slope = 0.03;
+    wage_phillips_slope = @{wage_phillips_slope};
 @#else
-    calvo_wages = 3/4;
+    calvo_wages = @{calvo_wages};
 @#endif
 
 @#if taxes
-    steady_state_tax = 0.99;
+    steady_state_tax = @{steady_state_tax};
 @#else
     steady_state_tax = 0;
 @#endif

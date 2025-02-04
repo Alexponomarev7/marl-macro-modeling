@@ -2,7 +2,36 @@
     @#define periods = 100
 @#endif
 
-@#define extreme_calibration = 1
+@#ifndef beta
+    @#define beta = 0.991
+@#endif
+@#ifndef nu
+    @#define nu = 0.362184314170512
+@#endif
+@#ifndef zeta
+    @#define zeta = 0.3
+@#endif
+@#ifndef delta
+    @#define delta = 0.0196
+@#endif
+@#ifndef lambda
+    @#define lambda = 0.95
+@#endif
+@#ifndef psi
+    @#define psi = 0.5
+@#endif
+@#ifndef sigma_bar
+    @#define sigma_bar = log(0.021)
+@#endif
+@#ifndef eta
+    @#define eta = 0.1
+@#endif
+@#ifndef rho
+    @#define rho = 0.9
+@#endif
+@#ifndef gammma
+    @#define gammma = 40.0
+@#endif
 
 var V $V$                              (long_name='Value Function')
     y $y$                              (long_name='Output')
@@ -31,25 +60,16 @@ parameters beta $\beta$                (long_name='Discount Factor')
            sigma_bar ${\bar \sigma}$   (long_name='Steady State Volatility')
            eta $\eta$                  (long_name='Volatility Shock Scale');
 
-beta = 0.991;
-nu = 0.362184314170512;  % typo in paper; fixed nu so that l=1/3 (according to their Fortran codes)
-zeta = 0.3;
-delta = 0.0196;
-lambda = 0.95;
-
-@#if extreme_calibration
-    psi = 0.5;
-    gamma = 40;
-    sigma_bar = log(0.021); % typo in paper; not log(sigma)=0.007
-    eta = 0.1;
-@#else
-    psi = 0.5;
-    gamma = 5;
-    sigma_bar = log(0.007); % typo in paper; not log(sigma)=exp0.007
-    eta = 0.06;
-@#endif
-
-rho = 0.9;
+beta = @{beta};
+nu = @{nu};
+zeta = @{zeta};
+delta = @{delta};
+lambda = @{lambda};
+psi = @{psi};
+gamma = @{gammma};
+sigma_bar = @{sigma_bar};
+eta = @{eta};
+rho = @{rho};
 
 model;
     #theta = (1 - gamma) / (1 - (1 / psi));
