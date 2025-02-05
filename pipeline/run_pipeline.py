@@ -110,7 +110,8 @@ class EconomicPolicyModel(L.LightningModule):
             criterion_cfg: dict[str, Any],
             test_envs: list[tuple[str, AbstractEconomicEnv]],
             state_max_dim: int,
-            val_episodes: int = 10
+            val_episodes: int = 10,
+            val_steps: int = 1000,
     ):
         """
         Initialize the policy model.
@@ -121,6 +122,7 @@ class EconomicPolicyModel(L.LightningModule):
             criterion_cfg: Loss function configuration
             test_envs: List of test environments for validation
             val_episodes: Number of episodes for environment validation
+            val_steps: Number of steps within validation episode
         """
         super().__init__()
         self.save_hyperparameters(ignore=['test_envs'])
@@ -130,6 +132,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.optimizer_cfg = optimizer_cfg
         self.test_envs = test_envs
         self.val_episodes = val_episodes
+        self.val_steps = val_steps
         self.state_max_dim = state_max_dim
 
     def forward(self, states, task_ids):
@@ -201,7 +204,7 @@ class EconomicPolicyModel(L.LightningModule):
             state_history = []
             action_history = []
 
-            while not (terminated or truncated):
+            for _ in range(self.val_steps):
                 current_state = torch.FloatTensor([
                     list([value[0] for value in state_dict.values()])
                 ])
@@ -229,7 +232,6 @@ class EconomicPolicyModel(L.LightningModule):
 
                 state_dict, reward, terminated, truncated, _ = env.step(action)
                 episode_reward += reward
-                break  # TODO(aponomarev): fix this becase while loop is infinite
 
             total_rewards.append(episode_reward)
 
