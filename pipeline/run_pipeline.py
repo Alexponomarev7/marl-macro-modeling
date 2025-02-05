@@ -16,18 +16,19 @@ from omegaconf import (
 )
 
 import lightning as L
-from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
-from lib.dataset import Dataset
-
 from torch.utils.data import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from lib.dataset import EconomicsDataset
 from lib.my_utils import (
     set_global_seed,
     get_run_id,
 )
+from lib.dataset import EconomicsDataset
 from lib.envs.environment_base import AbstractEconomicEnv
+from lib.generate_dataset import (
+    run_generation_batch,
+    run_generation_batch_dynare,
+)
 
 
 def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
@@ -130,6 +131,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.test_envs = test_envs
         self.val_episodes = val_episodes
         self.state_max_dim = state_max_dim
+
     def forward(self, states, task_ids):
         """Forward pass of the model."""
         return self.model(states, task_ids)
@@ -143,8 +145,13 @@ class EconomicPolicyModel(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Training step logic."""
-        states, actions, task_ids = batch
+        states = batch['states']
+        actions = batch['actions']
+        task_ids = batch['task_id']
+        # attention_mask = batch['attention_mask']
+
         predicted_actions = self(states, task_ids)
+
         loss = self.criterion(predicted_actions, actions)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True)
@@ -152,8 +159,13 @@ class EconomicPolicyModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Validation step logic."""
-        states, actions, task_ids = batch
+        states = batch['states']
+        actions = batch['actions']
+        task_ids = batch['task_id']
+        # attention_mask = batch['attention_mask']
+
         predicted_actions = self(states, task_ids)
+
         loss = self.criterion(predicted_actions, actions)
 
         self.log('val_loss', loss, on_epoch=True)
@@ -185,23 +197,44 @@ class EconomicPolicyModel(L.LightningModule):
             state_dict, _ = env.reset()
             terminated = truncated = False
 
+            # Keep track of state history
+            state_history = []
+            action_history = []
+
             while not (terminated or truncated):
-                # TODO(aponomarev): fix this, should pass the history of states
-                state = torch.FloatTensor([list([value[0] for value in state_dict.values()])]).unsqueeze(0).to(self.device)
-                state = torch.nn.functional.pad(state, (0, self.state_max_dim - state.shape[2], 0, 0, 0, 0), "constant", 0)
-                task_id = torch.tensor([[0]]).to(self.device)
+                current_state = torch.FloatTensor([
+                    list([value[0] for value in state_dict.values()])
+                ])
+                state_history.append(current_state)
+
+                # Prepare input for model
+                if len(state_history) > self.model.max_seq_len:
+                    state_history = state_history[-self.model.max_seq_len:]
+
+                states = torch.cat(state_history, dim=0).unsqueeze(0)  # [1, seq_len, state_dim]
+                states = torch.nn.functional.pad(
+                    states,
+                    (0, self.state_max_dim - states.shape[2]),
+                    "constant",
+                    0
+                )
+                task_id = torch.tensor([0]).to(self.device)
 
                 with torch.no_grad():
-                    action = self(state, task_id)
-                action = action.cpu().numpy().squeeze()
+                    action = self(states, task_id)
+                    # Take the last prediction
+                    action = action[0, -1].cpu().numpy()
+
+                action_history.append(action)
 
                 state_dict, reward, terminated, truncated, _ = env.step(action)
                 episode_reward += reward
-                break # TODO(aponomarev): fix this becase while loop is infinite
+                break  # TODO(aponomarev): fix this becase while loop is infinite
 
             total_rewards.append(episode_reward)
 
         return float(np.mean(total_rewards))
+
 
 class DatasetGenerator:
     """Handles the creation and organization of datasets."""
@@ -266,7 +299,6 @@ def main(cfg: DictConfig) -> None:
 
     # Create test environments
     test_envs = create_test_envs(cfg['dataset'])
-
 
     # Initialize model and data module
     model = EconomicPolicyModel(
