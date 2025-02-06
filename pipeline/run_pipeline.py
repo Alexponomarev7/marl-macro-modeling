@@ -315,7 +315,7 @@ def main(cfg: DictConfig) -> None:
     data_module = DataModule(
         data_root=Path(cfg['train']['data_root']),
         state_max_dim=cfg['train']['max_state_dim'],
-        batch_size=cfg['train'].get('batch_size', 32)
+        batch_size=cfg['train'].get('batch_size', 32),
     )
 
     # Set up training

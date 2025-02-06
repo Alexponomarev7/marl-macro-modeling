@@ -129,7 +129,7 @@ class EconomicsDataset(Dataset):
 
         states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
         actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
-        # rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
+        rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
         # Pad states to max_state_dim
@@ -141,6 +141,7 @@ class EconomicsDataset(Dataset):
         # Pad sequences to max_seq_len
         states = self.pad_sequence(states, self.max_seq_len)
         actions = self.pad_sequence(actions, self.max_seq_len)
+        rewards = self.pad_sequence(rewards, self.max_seq_len)
 
         # Create attention mask
         attention_mask = torch.zeros(self.max_seq_len, dtype=torch.bool)
@@ -149,6 +150,7 @@ class EconomicsDataset(Dataset):
         return {
             'states': states,  # [max_seq_len, max_state_dim]
             'actions': actions,  # [max_seq_len, action_dim]
+            'reward': rewards,  # [max_seq_len, 1]
             'task_id': task_id,  # scalar
             'attention_mask': attention_mask  # [max_seq_len]
         }
