@@ -17,7 +17,7 @@ class EconomicsDataset(Dataset):
     4. Task ID encoding for multi-task learning scenarios
     """
 
-    def __init__(self, data_path: Path, max_state_dim: int, max_seq_len: int = 512):
+    def __init__(self, data_path: Path, max_state_dim: int, max_action_dim: int, max_seq_len: int = 512):
         """
         Initialize the dataset with the given parameters.
 
@@ -27,6 +27,7 @@ class EconomicsDataset(Dataset):
             max_seq_len (int): Maximum sequence length for episodes (default: 512)
         """
         self.max_state_dim = max_state_dim
+        self.max_action_dim = max_action_dim
         self.max_seq_len = max_seq_len
 
         metadata_path = data_path / "metadata.json"
@@ -134,6 +135,9 @@ class EconomicsDataset(Dataset):
 
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
+
+        # Pad actions to max_actions_dim
+        actions = self.pad_dim(actions, self.max_action_dim)
 
         # Get original sequence length
         orig_seq_len = len(states)
