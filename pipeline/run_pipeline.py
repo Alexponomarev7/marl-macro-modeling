@@ -168,21 +168,20 @@ class EconomicPolicyModel(L.LightningModule):
 
         # Calculate loss only on non-padded positions
         loss = 0
-        valid_positions = attention_mask.sum()
-        if valid_positions > 0:
-            # predicted_actions shape should be [batch_size, num_states, action_dim]
-            # actions shape: [batch_size, seq_length, action_dim]
-            # attention_mask shape: [batch_size, seq_length]
 
-            # Create a mask for valid positions
-            # We need to match the sequence length of predicted_actions
-            mask = attention_mask[:, :predicted_actions.shape[1]]
-            mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
+        # predicted_actions shape should be [batch_size, num_states, action_dim]
+        # actions shape: [batch_size, seq_length, action_dim]
+        # attention_mask shape: [batch_size, seq_length]
 
-            # Apply mask and calculate loss
-            masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
-            masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
-            loss = self.criterion(masked_pred, masked_target)
+        # Create a mask for valid positions
+        # We need to match the sequence length of predicted_actions
+        mask = attention_mask[:, :predicted_actions.shape[1]]
+        mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
+
+        # Apply mask and calculate loss
+        masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
+        masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
+        loss = self.criterion(masked_pred, masked_target)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
@@ -218,14 +217,14 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
-    def on_fit_end(self):
-        """Perform environment-based validation at the end of training."""
-        if not self.test_envs:
-            return
+    # def on_fit_end(self):
+    #     """Perform environment-based validation at the end of training."""
+    #     if not self.test_envs:
+    #         return
 
-        for env_name, env in self.test_envs:
-            avg_reward = self._validate_with_env(env)
-            self.log(f'env_reward/{env_name}', avg_reward)
+    #     for env_name, env in self.test_envs:
+    #         avg_reward = self._validate_with_env(env)
+    #         self.log(f'env_reward/{env_name}', avg_reward)
 
     def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
         """Environment dynamic validation"""

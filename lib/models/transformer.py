@@ -123,6 +123,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             token_types_list = [torch.zeros(batch_size, 1, dtype=torch.long, device=states.device)]  # task token
 
             for i in range(seq_length - 1):
+                # todo: optimize
                 sequence_list.extend([
                     state_emb[:, i:i+1],
                     action_emb[:, i:i+1],

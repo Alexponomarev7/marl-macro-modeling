@@ -35,6 +35,7 @@ class EconomicsDataset(Dataset):
             self.metadata = json.load(f)
 
         # todo: encode with llm
+        # todo: get from dataset task id
         self.task_ids = [item.get('task_id', 0) for item in self.metadata]
 
         # todo: Encoders of environment state and action
