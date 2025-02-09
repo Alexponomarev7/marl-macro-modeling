@@ -118,48 +118,45 @@ class AlgorithmDistillationTransformer(nn.Module):
             action_emb = self.action_embedding(actions)
             reward_emb = self.reward_embedding(rewards)
 
-            # Interleave task, states, actions, and rewards
-            sequence = torch.zeros(batch_size, 1 + seq_length * 3, state_emb.size(-1), device=states.device)
-            sequence[:, 0] = task_emb.squeeze(1)
+            # Create sequence: [task, state_1, action_1, reward_1, state_2, ...]
+            sequence_list = [task_emb]
+            token_types_list = [torch.zeros(batch_size, 1, dtype=torch.long, device=states.device)]  # task token
+
             for i in range(seq_length - 1):
-                base_idx = 1 + i * 3
-                sequence[:, base_idx] = state_emb[:, i]
-                sequence[:, base_idx + 1] = action_emb[:, i]
-                sequence[:, base_idx + 2] = reward_emb[:, i]
+                sequence_list.extend([
+                    state_emb[:, i:i+1],
+                    action_emb[:, i:i+1],
+                    reward_emb[:, i:i+1]
+                ])
+                token_types_list.extend([
+                    torch.ones(batch_size, 1, dtype=torch.long, device=states.device),      # state
+                    2 * torch.ones(batch_size, 1, dtype=torch.long, device=states.device),  # action
+                    3 * torch.ones(batch_size, 1, dtype=torch.long, device=states.device)   # reward
+                ])
 
             # Add final state
-            sequence[:, 1 + (seq_length - 1) * 3] = state_emb[:, -1]
+            sequence_list.append(state_emb[:, -1:])
+            token_types_list.append(torch.ones(batch_size, 1, dtype=torch.long, device=states.device))
 
-            # Create token type IDs
-            token_types = torch.zeros(batch_size, 1 + seq_length * 3, dtype=torch.long, device=states.device)
-            token_types[:, 1::3] = 1  # states
-            token_types[:, 2::3] = 2  # actions
-            token_types[:, 3::3] = 3  # rewards
+            sequence = torch.cat(sequence_list, dim=1)
+            token_types = torch.cat(token_types_list, dim=1)
 
         # Add token type embeddings
         token_type_emb = self.token_type_embedding(token_types)
         sequence = sequence + token_type_emb
 
-        # Positional encoding
-        # sequence = self.positional_encoding(sequence.transpose(0, 1))
+        # Apply transformer
+        encoded = self.transformer(sequence.transpose(0, 1)).transpose(0, 1)  # [batch_size, seq_len, d_model]
 
-        # Transformer
-        encoded = self.transformer(sequence).transpose(0, 1)  # [batch_size, seq_len, d_model]
-
-        # Extract state positions for action prediction
-        state_positions = []
+        # Extract only state positions for action prediction
         if actions is None or rewards is None:
-            state_positions = encoded[:, -1:]  # Only predict for the last position
+            state_positions = encoded[:, 1:]  # Skip task token, only predict for the state
         else:
-            # Extract all state positions (every third position after task token)
+            # Extract positions after each state token (every 3rd position after task token)
             state_indices = torch.arange(1, encoded.size(1), 3, device=encoded.device)
             state_positions = encoded[:, state_indices]
 
         # Predict actions for all states
-        actions_pred = self.action_head(state_positions)  # [batch_size, seq_length, action_dim]
-
-        print("actions_pred.shape", actions_pred.shape)
-        print("batch_size", batch_size)
-        print("seq_length", seq_length)
+        actions_pred = self.action_head(state_positions)  # [batch_size, num_states, action_dim]
 
         return actions_pred

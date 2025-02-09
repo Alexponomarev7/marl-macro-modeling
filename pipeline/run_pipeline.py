@@ -170,23 +170,24 @@ class EconomicPolicyModel(L.LightningModule):
         loss = 0
         valid_positions = attention_mask.sum()
         if valid_positions > 0:
-            # Reshape tensors to match
-            # predicted_actions shape: [batch_size, seq_length, action_dim]
+            # predicted_actions shape should be [batch_size, num_states, action_dim]
             # actions shape: [batch_size, seq_length, action_dim]
             # attention_mask shape: [batch_size, seq_length]
 
-            # Expand attention mask to match action dimensions
-            mask = attention_mask.unsqueeze(-1).expand_as(predicted_actions)
+            # Create a mask for valid positions
+            # We need to match the sequence length of predicted_actions
+            mask = attention_mask[:, :predicted_actions.shape[1]]
+            mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
 
             # Apply mask and calculate loss
             masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
-            masked_target = actions[mask].view(-1, self.action_max_dim)
+            masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
             loss = self.criterion(masked_pred, masked_target)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
 
-        # def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):
         """Updated validation step to match training step"""
         states = batch['states']
         actions = batch['actions']
@@ -205,8 +206,13 @@ class EconomicPolicyModel(L.LightningModule):
         loss = 0
         valid_positions = attention_mask.sum()
         if valid_positions > 0:
-            masked_pred = predicted_actions[attention_mask]
-            masked_target = actions[attention_mask]
+            # Create a mask for valid positions
+            mask = attention_mask[:, :predicted_actions.shape[1]]
+            mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
+
+            # Apply mask and calculate loss
+            masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
+            masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
             loss = self.criterion(masked_pred, masked_target)
 
         self.log('val_loss', loss, on_epoch=True)
