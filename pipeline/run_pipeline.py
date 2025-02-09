@@ -218,14 +218,14 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
-    # def on_fit_end(self):
-    #     """Perform environment-based validation at the end of training."""
-    #     if not self.test_envs:
-    #         return
+    def on_fit_end(self):
+        """Perform environment-based validation at the end of training."""
+        if not self.test_envs:
+            return
 
-    #     for env_name, env in self.test_envs:
-    #         avg_reward = self._validate_with_env(env)
-    #         self.log(f'env_reward/{env_name}', avg_reward)
+        for env_name, env in self.test_envs:
+            avg_reward = self._validate_with_env(env)
+            self.log(f'env_reward/{env_name}', avg_reward)
 
     def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
         """Environment dynamic validation"""
