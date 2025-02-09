@@ -170,15 +170,23 @@ class EconomicPolicyModel(L.LightningModule):
         loss = 0
         valid_positions = attention_mask.sum()
         if valid_positions > 0:
-            # Mask out padded positions
-            masked_pred = predicted_actions[attention_mask]
-            masked_target = actions[attention_mask]
+            # Reshape tensors to match
+            # predicted_actions shape: [batch_size, seq_length, action_dim]
+            # actions shape: [batch_size, seq_length, action_dim]
+            # attention_mask shape: [batch_size, seq_length]
+
+            # Expand attention mask to match action dimensions
+            mask = attention_mask.unsqueeze(-1).expand_as(predicted_actions)
+
+            # Apply mask and calculate loss
+            masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
+            masked_target = actions[mask].view(-1, self.action_max_dim)
             loss = self.criterion(masked_pred, masked_target)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+        # def validation_step(self, batch, batch_idx):
         """Updated validation step to match training step"""
         states = batch['states']
         actions = batch['actions']
@@ -204,17 +212,17 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
-        # def on_fit_end(self):
-        """Perform environment-based validation at the end of training."""
-        if not self.test_envs:
-            return
+    # def on_fit_end(self):
+    #     """Perform environment-based validation at the end of training."""
+    #     if not self.test_envs:
+    #         return
 
-        for env_name, env in self.test_envs:
-            avg_reward = self._validate_with_env(env)
-            self.log(f'env_reward/{env_name}', avg_reward)
+    #     for env_name, env in self.test_envs:
+    #         avg_reward = self._validate_with_env(env)
+    #         self.log(f'env_reward/{env_name}', avg_reward)
 
     def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
-        """Updated environment validation to match the new model interface"""
+        """Environment dynamic validation"""
         total_rewards = []
 
         for _ in range(self.val_episodes):

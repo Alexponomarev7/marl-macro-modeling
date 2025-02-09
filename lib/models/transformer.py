@@ -41,7 +41,7 @@ class AlgorithmDistillationTransformer(nn.Module):
     """
     A transformer-based model for algorithm distillation.
 
-    This model processes sequences of states and task identifiers to predict actions.
+    This model processes sequences of states and task identifiers to predict the next action.
     It uses a transformer architecture with positional encoding.
 
     Args:
@@ -86,93 +86,80 @@ class AlgorithmDistillationTransformer(nn.Module):
     def forward(
             self,
             states: torch.Tensor,
-            actions: torch.Tensor,
-            rewards: torch.Tensor,
-            task_id: torch.Tensor,
+            actions: torch.Tensor = None,
+            rewards: torch.Tensor = None,
+            task_id: torch.Tensor = None,
             padding_mask: torch.Tensor = None
     ) -> torch.Tensor:
         """
-        Forward pass creating interleaved sequences of states, actions, and rewards.
+        Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
         Args:
             states: [batch_size, seq_length, state_dim]
-            actions: [batch_size, seq_length, action_dim]
-            rewards: [batch_size, seq_length, 1]
+            actions: [batch_size, seq_length-1, action_dim] or None (for first step)
+            rewards: [batch_size, seq_length-1, 1] or None (for first step)
             task_id: [batch_size]
             padding_mask: [batch_size, seq_length]
 
         Returns:
-            torch.Tensor: Predicted next actions [batch_size, seq_length, action_dim]
+            torch.Tensor: Predicted actions [batch_size, seq_length, action_dim]
         """
         batch_size, seq_length = states.shape[:2]
 
-        state_emb = self.state_embedding(states)  # [bs, seq_len, d_model]
-        action_emb = self.action_embedding(actions)  # [bs, seq_len, d_model]
-        reward_emb = self.reward_embedding(rewards)   # [bs, seq_len, d_model]
+        # Embed state and task
+        state_emb = self.state_embedding(states)
         task_emb = self.task_embedding(task_id).unsqueeze(1)  # [bs, 1, d_model]
 
-        print("state_emb.shapeb", state_emb.shape)
-        print("action_emb.shape", action_emb.shape)
-        print("reward_emb.shape", reward_emb.shape)
-        print("task_emb.shape", task_emb.shape)
+        # Sequence will only include task + states and actions until the current state
+        if actions is None or rewards is None:
+            sequence = torch.cat([task_emb, state_emb[:, 0:1]], dim=1)  # [bs, 2, d_model]
+            token_types = torch.tensor([0, 1], dtype=torch.long, device=states.device).unsqueeze(0).repeat(batch_size, 1)
+        else:
+            action_emb = self.action_embedding(actions)
+            reward_emb = self.reward_embedding(rewards)
 
-        # Create token type IDs for each position in the sequence
-        # Repeat pattern: [task(0), state(1), action(2), reward(3), state(1), action(2), reward(3), ...]
-        token_types = torch.zeros(batch_size, 1 + seq_length * 3, dtype=torch.long, device=states.device)
-        token_types[:, 1::3] = 1  # states
-        token_types[:, 2::3] = 2  # actions
-        token_types[:, 3::3] = 3  # rewards
-        token_type_emb = self.token_type_embedding(token_types)
+            # Interleave task, states, actions, and rewards
+            sequence = torch.zeros(batch_size, 1 + seq_length * 3, state_emb.size(-1), device=states.device)
+            sequence[:, 0] = task_emb.squeeze(1)
+            for i in range(seq_length - 1):
+                base_idx = 1 + i * 3
+                sequence[:, base_idx] = state_emb[:, i]
+                sequence[:, base_idx + 1] = action_emb[:, i]
+                sequence[:, base_idx + 2] = reward_emb[:, i]
 
-        # Interleave the sequence: [task_emb, state_1, action_1, reward_1, state_2, ...]
-        # Initialize sequence
-        sequence = torch.zeros(
-            batch_size,
-            1 + seq_length * 3,
-            state_emb.size(-1),
-            device=states.device
-        )
+            # Add final state
+            sequence[:, 1 + (seq_length - 1) * 3] = state_emb[:, -1]
 
-        # Add task embedding at the start
-        sequence[:, 0] = task_emb.squeeze(1)
-
-        # Add the rest of the sequence
-        for idx, i in enumerate(range(seq_length)):
-            # print("idx", idx)
-            # print("sequence.shape", sequence.shape)
-            # print("action_emb.shape", action_emb.shape)
-            base_idx = 1 + i * 3  # Calculate base index for each triplet
-            sequence[:, base_idx] = state_emb[:, i, :]
-            sequence[:, base_idx + 1] = action_emb[:, i, :]
-            sequence[:, base_idx + 2] = reward_emb[:, i, :]
+            # Create token type IDs
+            token_types = torch.zeros(batch_size, 1 + seq_length * 3, dtype=torch.long, device=states.device)
+            token_types[:, 1::3] = 1  # states
+            token_types[:, 2::3] = 2  # actions
+            token_types[:, 3::3] = 3  # rewards
 
         # Add token type embeddings
+        token_type_emb = self.token_type_embedding(token_types)
         sequence = sequence + token_type_emb
 
-        # Update padding mask if provided
-        if padding_mask is not None:
-            # Expand padding mask to account for interleaved sequence
-            expanded_mask = torch.zeros(
-                batch_size,
-                1 + seq_length * 3,
-                dtype=torch.bool,
-                device=padding_mask.device
-            )
-            expanded_mask[:, 0] = False  # Always attend to task token
-            for i in range(seq_length):
-                idx = 1 + i * 3
-                expanded_mask[:, idx:idx + 3] = padding_mask[:, i:i + 1].repeat(1, 3)
-            padding_mask = expanded_mask
+        # Positional encoding
+        # sequence = self.positional_encoding(sequence.transpose(0, 1))
 
-        # Process through transformer
-        sequence = sequence.transpose(0, 1)  # [1 + seq_len*3, bs, d_model]
-        encoded = self.transformer(sequence, src_key_padding_mask=padding_mask)  # [1 + seq_len*3, bs, d_model]
+        # Transformer
+        encoded = self.transformer(sequence).transpose(0, 1)  # [batch_size, seq_len, d_model]
 
-        # Extract state positions for action predictions
-        encoded = encoded.transpose(0, 1)  # [bs, 1 + seq_len*3, d_model]
-        state_positions = encoded[:, 1::3]  # Take embeddings after state tokens
+        # Extract state positions for action prediction
+        state_positions = []
+        if actions is None or rewards is None:
+            state_positions = encoded[:, -1:]  # Only predict for the last position
+        else:
+            # Extract all state positions (every third position after task token)
+            state_indices = torch.arange(1, encoded.size(1), 3, device=encoded.device)
+            state_positions = encoded[:, state_indices]
 
-        # Predict actions
-        actions_pred = self.action_head(state_positions)  # [bs, seq_len, action_dim]
+        # Predict actions for all states
+        actions_pred = self.action_head(state_positions)  # [batch_size, seq_length, action_dim]
+
+        print("actions_pred.shape", actions_pred.shape)
+        print("batch_size", batch_size)
+        print("seq_length", seq_length)
 
         return actions_pred
