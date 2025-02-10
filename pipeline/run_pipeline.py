@@ -16,18 +16,19 @@ from omegaconf import (
 )
 
 import lightning as L
-from lib.generate_dataset import run_generation_batch, run_generation_batch_dynare
-from lib.dataset import Dataset
-
 from torch.utils.data import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from lib.dataset import EconomicsDataset
 from lib.my_utils import (
     set_global_seed,
     get_run_id,
 )
+from lib.dataset import EconomicsDataset
 from lib.envs.environment_base import AbstractEconomicEnv
+from lib.generate_dataset import (
+    run_generation_batch,
+    run_generation_batch_dynare,
+)
 
 
 def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
@@ -55,7 +56,7 @@ def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEco
 class DataModule(L.LightningDataModule):
     """PyTorch Lightning data module for handling datasets."""
 
-    def __init__(self, data_root: Path, state_max_dim: int, batch_size: int = 32):
+    def __init__(self, data_root: Path, state_max_dim: int, action_max_dim: int, batch_size: int = 32):
         """
         Initialize DataModule.
 
@@ -67,14 +68,15 @@ class DataModule(L.LightningDataModule):
         self.data_root = data_root
         self.batch_size = batch_size
         self.state_max_dim = state_max_dim
+        self.action_max_dim = action_max_dim
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = EconomicsDataset(self.data_root / "train", self.state_max_dim)
-            self.val_dataset = EconomicsDataset(self.data_root / "val", self.state_max_dim)
+            self.train_dataset = EconomicsDataset(self.data_root / "train", self.state_max_dim, self.action_max_dim)
+            self.val_dataset = EconomicsDataset(self.data_root / "val", self.state_max_dim, self.action_max_dim)
         if stage == "test":
-            self.test_dataset = EconomicsDataset(self.data_root / "test", self.state_max_dim)
+            self.test_dataset = EconomicsDataset(self.data_root / "test", self.state_max_dim, self.action_max_dim)
 
     def train_dataloader(self):
         """Create training dataloader."""
@@ -109,7 +111,9 @@ class EconomicPolicyModel(L.LightningModule):
             criterion_cfg: dict[str, Any],
             test_envs: list[tuple[str, AbstractEconomicEnv]],
             state_max_dim: int,
-            val_episodes: int = 10
+            action_max_dim: int,
+            val_episodes: int = 10,
+            val_steps: int = 1000,
     ):
         """
         Initialize the policy model.
@@ -120,6 +124,7 @@ class EconomicPolicyModel(L.LightningModule):
             criterion_cfg: Loss function configuration
             test_envs: List of test environments for validation
             val_episodes: Number of episodes for environment validation
+            val_steps: Number of steps within validation episode
         """
         super().__init__()
         self.save_hyperparameters(ignore=['test_envs'])
@@ -129,10 +134,13 @@ class EconomicPolicyModel(L.LightningModule):
         self.optimizer_cfg = optimizer_cfg
         self.test_envs = test_envs
         self.val_episodes = val_episodes
+        self.val_steps = val_steps
         self.state_max_dim = state_max_dim
-    def forward(self, states, task_ids):
-        """Forward pass of the model."""
-        return self.model(states, task_ids)
+        self.action_max_dim = action_max_dim
+
+    def forward(self, states, actions, rewards, task_ids, padding_mask=None):
+        """Forward pass matching the transformer's interface"""
+        return self.model(states, actions, rewards, task_ids, padding_mask)
 
     def configure_optimizers(self):
         """Configure optimizer for training."""
@@ -142,42 +150,84 @@ class EconomicPolicyModel(L.LightningModule):
         )
 
     def training_step(self, batch, batch_idx):
-        """Training step logic."""
-        states, actions, task_ids = batch
-        predicted_actions = self(states, task_ids)
-        loss = self.criterion(predicted_actions, actions)
+        """Updated training step to handle the new batch format"""
+        states = batch['states']
+        actions = batch['actions']
+        rewards = batch['reward']
+        task_ids = batch['task_id']
+        attention_mask = batch['attention_mask']
+
+        # Get model predictions
+        predicted_actions = self(
+            states=states,
+            actions=actions,
+            rewards=rewards,
+            task_ids=task_ids,
+            padding_mask=~attention_mask  # Transformer uses inverse of attention mask
+        )
+
+        # Calculate loss only on non-padded positions
+        loss = 0
+
+        # predicted_actions shape should be [batch_size, num_states, action_dim]
+        # actions shape: [batch_size, seq_length, action_dim]
+        # attention_mask shape: [batch_size, seq_length]
+
+        # Create a mask for valid positions
+        # We need to match the sequence length of predicted_actions
+        mask = attention_mask[:, :predicted_actions.shape[1]]
+        mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
+
+        # Apply mask and calculate loss
+        masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
+        masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
+        loss = self.criterion(masked_pred, masked_target)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        """Validation step logic."""
-        states, actions, task_ids = batch
-        predicted_actions = self(states, task_ids)
-        loss = self.criterion(predicted_actions, actions)
+        """Updated validation step to match training step"""
+        states = batch['states']
+        actions = batch['actions']
+        rewards = batch['reward']
+        task_ids = batch['task_id']
+        attention_mask = batch['attention_mask']
+
+        predicted_actions = self(
+            states=states,
+            actions=actions,
+            rewards=rewards,
+            task_ids=task_ids,
+            padding_mask=~attention_mask
+        )
+
+        loss = 0
+        valid_positions = attention_mask.sum()
+        if valid_positions > 0:
+            # Create a mask for valid positions
+            mask = attention_mask[:, :predicted_actions.shape[1]]
+            mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
+
+            # Apply mask and calculate loss
+            masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
+            masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
+            loss = self.criterion(masked_pred, masked_target)
 
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
-    def on_fit_end(self):
-        """Perform environment-based validation at the end of training."""
-        if not self.test_envs:
-            return
+    # def on_fit_end(self):
+    #     """Perform environment-based validation at the end of training."""
+    #     if not self.test_envs:
+    #         return
 
-        for env_name, env in self.test_envs:
-            avg_reward = self._validate_with_env(env)
-            self.log(f'env_reward/{env_name}', avg_reward)
+    #     for env_name, env in self.test_envs:
+    #         avg_reward = self._validate_with_env(env)
+    #         self.log(f'env_reward/{env_name}', avg_reward)
 
     def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
-        """
-        Validate model performance in an environment.
-
-        Args:
-            env: Economic environment instance
-
-        Returns:
-            float: Average reward across episodes
-        """
+        """Environment dynamic validation"""
         total_rewards = []
 
         for _ in range(self.val_episodes):
@@ -185,19 +235,87 @@ class EconomicPolicyModel(L.LightningModule):
             state_dict, _ = env.reset()
             terminated = truncated = False
 
-            while not (terminated or truncated):
-                # TODO(aponomarev): fix this, should pass the history of states
-                state = torch.FloatTensor([list([value[0] for value in state_dict.values()])]).unsqueeze(0).to(self.device)
-                state = torch.nn.functional.pad(state, (0, self.state_max_dim - state.shape[2], 0, 0, 0, 0), "constant", 0)
-                task_id = torch.tensor([[0]]).to(self.device)
+            # Keep track of sequence history
+            states_history = []
+            actions_history = []
+            rewards_history = []
+
+            # Get initial state
+            current_state = torch.FloatTensor([
+                list([value[0] for value in state_dict.values()])
+            ]).to(self.device)
+
+            for _ in range(self.val_steps):
+                # Prepare input for model
+                if len(states_history) > self.model.max_seq_len:
+                    states_history = states_history[-self.model.max_seq_len:]
+                    actions_history = actions_history[-self.model.max_seq_len:]
+                    rewards_history = rewards_history[-self.model.max_seq_len:]
+
+                # Create states tensor
+                if states_history:  # If we have previous states
+                    states = torch.cat(states_history, dim=0).unsqueeze(0)
+                    states = torch.cat([states, current_state.unsqueeze(0)], dim=1)
+                else:  # First step
+                    states = current_state.unsqueeze(0)  # [1, 1, state_dim]
+
+                # Pad states if necessary
+                states = torch.nn.functional.pad(
+                    states,
+                    (0, self.state_max_dim - states.shape[2]),
+                    "constant",
+                    0
+                )
+
+                # Create actions and rewards sequences
+                if actions_history:
+                    actions = torch.stack(actions_history, dim=0).unsqueeze(0)
+                    actions = torch.nn.functional.pad(
+                        actions,
+                        (0, self.action_max_dim - actions.shape[-1]),
+                        "constant",
+                        0
+                    )
+                    rewards = torch.tensor(rewards_history).unsqueeze(0).unsqueeze(-1)
+                else:
+                    actions = torch.zeros(1, 0, self.action_max_dim).to(self.device)
+                    rewards = torch.zeros(1, 0, 1).to(self.device)
+
+                task_id = torch.tensor([0]).to(self.device)
+                attention_mask = torch.ones(1, states.shape[1], dtype=torch.bool).to(self.device)
+
+                # Ensure all tensors are float32
+                states = states.to(torch.float32)
+                actions = actions.to(torch.float32)
+                rewards = rewards.to(torch.float32)
 
                 with torch.no_grad():
-                    action = self(state, task_id)
-                action = action.cpu().numpy().squeeze()
+                    predicted_actions = self(
+                        states=states,
+                        actions=actions,
+                        rewards=rewards,
+                        task_ids=task_id,
+                        padding_mask=~attention_mask
+                    )
+                    action = predicted_actions[0, -1].cpu().numpy()
 
+                # Update histories
+                states_history.append(current_state)
+
+                # Take action in environment
                 state_dict, reward, terminated, truncated, _ = env.step(action)
+
+                # Prepare for next step
+                current_state = torch.FloatTensor([
+                    list([value[0] for value in state_dict.values()])
+                ]).to(self.device)
+
+                actions_history.append(torch.from_numpy(action).to(self.device))
+                rewards_history.append(reward)
                 episode_reward += reward
-                break # TODO(aponomarev): fix this becase while loop is infinite
+
+                if terminated or truncated:
+                    break
 
             total_rewards.append(episode_reward)
 
@@ -267,7 +385,6 @@ def main(cfg: DictConfig) -> None:
     # Create test environments
     test_envs = create_test_envs(cfg['dataset'])
 
-
     # Initialize model and data module
     model = EconomicPolicyModel(
         model_cfg=cfg['train']['model'],
@@ -276,12 +393,14 @@ def main(cfg: DictConfig) -> None:
         test_envs=test_envs,
         val_episodes=cfg['train'].get('val_episodes', 10),
         state_max_dim=cfg['train']['max_state_dim'],
+        action_max_dim=cfg['train']['max_action_dim'],
     )
 
     data_module = DataModule(
         data_root=Path(cfg['train']['data_root']),
         state_max_dim=cfg['train']['max_state_dim'],
-        batch_size=cfg['train'].get('batch_size', 32)
+        action_max_dim=cfg['train']['max_action_dim'],
+        batch_size=cfg['train'].get('batch_size', 32),
     )
 
     # Set up training

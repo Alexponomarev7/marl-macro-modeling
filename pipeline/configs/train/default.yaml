@@ -7,10 +7,11 @@ epochs: 1
 val_freq: 1
 device: cpu
 max_state_dim: 10
+max_action_dim: 3
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
   state_dim: ${train.max_state_dim}
-  action_dim: 10
+  action_dim: ${train.max_action_dim}
   num_tasks: 1
 optimizer:
   _target_: torch.optim.Adam
