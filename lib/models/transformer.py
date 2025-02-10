@@ -41,7 +41,7 @@ class AlgorithmDistillationTransformer(nn.Module):
     """
     A transformer-based model for algorithm distillation.
 
-    This model processes sequences of states and task identifiers to predict actions.
+    This model processes sequences of states and task identifiers to predict the next action.
     It uses a transformer architecture with positional encoding.
 
     Args:
@@ -60,39 +60,104 @@ class AlgorithmDistillationTransformer(nn.Module):
             num_tasks: int,
             d_model: int = 128,
             nhead: int = 4,
-            num_layers: int = 4
+            num_layers: int = 4,
+            max_seq_len: int = 512,
     ):
         super().__init__()
-        self.state_embedding = nn.Linear(state_dim, d_model)
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.max_seq_len = max_seq_len
+
+        self.state_embedding = nn.Linear(state_dim, d_model, dtype=torch.float32)
+        self.action_embedding = nn.Linear(action_dim, d_model, dtype=torch.float32)
+        self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model)
+
+        # Add token type embedding
+        # 4 types: task(0), state(1), action(2), reward(3)
+        self.token_type_embedding = nn.Embedding(4, d_model)
+
         self.positional_encoding = PositionalEncoding(d_model)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dtype=torch.float32)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.action_head = nn.Linear(d_model, action_dim)
+        self.action_head = nn.Linear(d_model, action_dim, dtype=torch.float32)
 
-    def forward(self, states: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
+    def forward(
+            self,
+            states: torch.Tensor,
+            actions: torch.Tensor = None,
+            rewards: torch.Tensor = None,
+            task_id: torch.Tensor = None,
+            padding_mask: torch.Tensor = None
+    ) -> torch.Tensor:
         """
-        Forward pass of the model.
+        Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
         Args:
-            states (torch.Tensor): Batch of state sequences [batch_size, seq_length, state_dim]
-            task_id (torch.Tensor): Batch of task identifiers [batch_size]
+            states: [batch_size, seq_length, state_dim]
+            actions: [batch_size, seq_length-1, action_dim] or None (for first step)
+            rewards: [batch_size, seq_length-1, 1] or None (for first step)
+            task_id: [batch_size]
+            padding_mask: [batch_size, seq_length]
 
         Returns:
-            torch.Tensor: Predicted actions for each state [batch_size, seq_length, action_dim]
+            torch.Tensor: Predicted actions [batch_size, seq_length, action_dim]
         """
-        state_emb = self.state_embedding(states)  # [bs, seq_len, d_model]
-        task_emb = self.task_embedding(task_id)  # [bs, d_model]
+        batch_size, seq_length = states.shape[:2]
 
-        inp = torch.cat([task_emb, state_emb], dim=1)  # [bs, seq_len+1, d_model]
-        inp = inp.transpose(0, 1)
-        # inp = self.positional_encoding(inp)
+        # Embed state and task
+        state_emb = self.state_embedding(states)
+        task_emb = self.task_embedding(task_id).unsqueeze(1)  # [bs, 1, d_model]
 
-        encoded = self.transformer(inp)  # [seq_len+1, bs, d_model]
-        encoded = encoded[1:]  # [seq_len, bs, d_model]
-        encoded = encoded.transpose(0, 1)  # [bs, seq_len, d_model]
+        # Sequence will only include task + states and actions until the current state
+        if actions is None or rewards is None:
+            sequence = torch.cat([task_emb, state_emb[:, 0:1]], dim=1)  # [bs, 2, d_model]
+            token_types = torch.tensor([0, 1], dtype=torch.long, device=states.device).unsqueeze(0).repeat(batch_size, 1)
+        else:
+            action_emb = self.action_embedding(actions)
+            reward_emb = self.reward_embedding(rewards)
 
-        actions_pred = self.action_head(encoded)  # [bs, seq_len, action_dim]
+            # Create sequence: [task, state_1, action_1, reward_1, state_2, ...]
+            sequence_list = [task_emb]
+            token_types_list = [torch.zeros(batch_size, 1, dtype=torch.long, device=states.device)]  # task token
+
+            for i in range(seq_length - 1):
+                # todo: optimize
+                sequence_list.extend([
+                    state_emb[:, i:i+1],
+                    action_emb[:, i:i+1],
+                    reward_emb[:, i:i+1]
+                ])
+                token_types_list.extend([
+                    torch.ones(batch_size, 1, dtype=torch.long, device=states.device),      # state
+                    2 * torch.ones(batch_size, 1, dtype=torch.long, device=states.device),  # action
+                    3 * torch.ones(batch_size, 1, dtype=torch.long, device=states.device)   # reward
+                ])
+
+            # Add final state
+            sequence_list.append(state_emb[:, -1:])
+            token_types_list.append(torch.ones(batch_size, 1, dtype=torch.long, device=states.device))
+
+            sequence = torch.cat(sequence_list, dim=1)
+            token_types = torch.cat(token_types_list, dim=1)
+
+        # Add token type embeddings
+        token_type_emb = self.token_type_embedding(token_types)
+        sequence = sequence + token_type_emb
+
+        # Apply transformer
+        encoded = self.transformer(sequence.transpose(0, 1)).transpose(0, 1)  # [batch_size, seq_len, d_model]
+
+        # Extract only state positions for action prediction
+        if actions is None or rewards is None:
+            state_positions = encoded[:, 1:]  # Skip task token, only predict for the state
+        else:
+            # Extract positions after each state token (every 3rd position after task token)
+            state_indices = torch.arange(1, encoded.size(1), 3, device=encoded.device)
+            state_positions = encoded[:, state_indices]
+
+        # Predict actions for all states
+        actions_pred = self.action_head(state_positions)  # [batch_size, num_states, action_dim]
 
         return actions_pred

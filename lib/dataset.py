@@ -9,28 +9,34 @@ class EconomicsDataset(Dataset):
     """
     A PyTorch Dataset for loading and processing economic episodes data.
 
-    This dataset handles variable-length economic episodes by padding or truncating
-    them to a fixed length. Each episode consists of states, actions, and rewards
-    that are combined into a single embedding tensor. The padding is applied at two levels:
-    1. State-level padding: Each state vector is padded/truncated to max_state_dim
-    2. Sequence-level padding: The entire sequence is padded/truncated to max_total_dim
+    This dataset handles variable-length economic episodes by loading state-action pairs
+    from parquet files and preparing them for model training. The dataset performs:
+    1. State-level padding/truncation to max_state_dim for uniform feature dimensions
+    2. Sequence-level padding/truncation to max_seq_len for batch processing
+    3. Generation of attention masks to handle variable-length sequences
+    4. Task ID encoding for multi-task learning scenarios
     """
 
-    def __init__(self, data_path: Path, max_state_dim: int, max_total_dim: int = 512):
+    def __init__(self, data_path: Path, max_state_dim: int, max_action_dim: int, max_seq_len: int = 512):
         """
-        Initialize the dataset with the given path and maximum lengths.
+        Initialize the dataset with the given parameters.
 
         Args:
-            data_path (Path): Path to the directory containing the dataset files.
-            max_state_dim (int, optional): Maximum dimension for state vectors. Defaults to 50.
-            max_total_dim (int, optional): Maximum total dimension (state+action+reward). Defaults to 512.
+            data_path (Path): Path to the directory containing episode data files and metadata
+            max_state_dim (int): Maximum dimension for state vectors after padding/truncation
+            max_seq_len (int): Maximum sequence length for episodes (default: 512)
         """
         self.max_state_dim = max_state_dim
-        self.max_total_dim = max_total_dim
+        self.max_action_dim = max_action_dim
+        self.max_seq_len = max_seq_len
 
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
             self.metadata = json.load(f)
+
+        # todo: encode with llm
+        # todo: get from dataset task id
+        self.task_ids = [item.get('task_id', 0) for item in self.metadata]
 
         # todo: Encoders of environment state and action
         self.state_encoder = lambda x: x
@@ -51,16 +57,46 @@ class EconomicsDataset(Dataset):
         return len(self.metadata)
 
     @staticmethod
-    def pad_sequence(sequence: torch.Tensor, max_dim: int) -> torch.Tensor:
+    def pad_sequence(sequence: torch.Tensor, max_len: int) -> torch.Tensor:
         """
-        Pad or truncate a sequence to the specified maximum dimension.
+        Pad or truncate a sequence to the specified length.
+
+        Padding is added at the beginning of the sequence, which is useful for
+        maintaining recent context in time-series data.
 
         Args:
-            sequence (torch.Tensor): Input sequence tensor of shape (seq_len, feature_dim).
-            max_dim (int): Maximum dimension to pad/truncate to.
+            sequence (torch.Tensor): Input sequence of shape (seq_len, feature_dim)
+            max_len (int): Target length for the sequence
 
         Returns:
-            torch.Tensor: Padded or truncated sequence
+            torch.Tensor: Padded or truncated sequence of shape (max_len, feature_dim)
+        """
+        seq_len = sequence.shape[0]
+        if seq_len >= max_len:
+            # If sequence is longer, take the last max_len elements
+            return sequence[-max_len:]
+        else:
+            # If sequence is shorter, pad at the beginning
+            padding = torch.zeros(
+                max_len - seq_len,
+                *sequence.shape[1:],
+                dtype=sequence.dtype,
+                )
+            return torch.cat([padding, sequence], dim=0)  # Padding first, then sequence
+
+    @staticmethod
+    def pad_dim(sequence: torch.Tensor, max_dim: int) -> torch.Tensor:
+        """
+        Pad or truncate a sequence along the feature dimension.
+
+        Used to ensure all state vectors have the same dimensionality.
+
+        Args:
+            sequence (torch.Tensor): Input sequence of shape (seq_len, feature_dim)
+            max_dim (int): Maximum feature dimension to pad/truncate to
+
+        Returns:
+            torch.Tensor: Padded or truncated sequence of shape (seq_len, max_dim)
         """
         current_dim = sequence.shape[1]
         if current_dim >= max_dim:
@@ -72,67 +108,54 @@ class EconomicsDataset(Dataset):
 
     def __getitem__(self, idx: int):
         """
-        Get a single episode from the dataset.
+        Get a single processed episode from the dataset.
 
-        The episode is processed by:
-        1. Loading the parquet file
-        2. Converting states, actions, and rewards to tensors
-        3. Padding states to max_state_len (along feature dimension)
-        4. Concatenating them into a single embedding
-        5. Padding the entire sequence to max_sequence_len (along time dimension)
-        6. Creating an attention mask for the sequence padding
+        Processing steps:
+        1. Load episode data from parquet file
+        2. Convert states and actions to tensors
+        3. Pad states to uniform feature dimension (max_state_dim)
+        4. Pad sequences to uniform length (max_seq_len)
+        5. Generate attention mask for valid positions
 
         Args:
-            idx (int): Index of the episode to retrieve.
+            idx (int): Index of the episode to retrieve
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: A tuple containing:
-                - padded_embeds: Tensor of shape (max_sequence_len, feature_dim) containing
-                  the padded sequence of state-action-reward embeddings
-                - mask: Boolean tensor of shape (max_sequence_len,) indicating valid (True)
-                  and padded (False) positions
+            dict: A dictionary containing:
+                - states (torch.Tensor): Padded state sequences [max_seq_len, max_state_dim]
+                - actions (torch.Tensor): Padded action sequences [max_seq_len, action_dim]
+                - task_id (torch.Tensor): Task identifier [scalar]
+                - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
         data = pd.read_parquet(self.metadata[idx]["output_dir"])
 
-        # state_embed = self.state_encoder(data['state_desc']) # llm encoded
-        # action_embed = self.action_encoder(data['action_desc']) # llm encoded
-        # environment_embed = torch.concat([state_embed, action_embed], dim=1)
-
-        # todo: change states order
         states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
         actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
+        task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
-        # Get dimensions
-        original_state_dim = states.shape[1]
-        action_dim = actions.shape[1]
+        # Pad states to max_state_dim
+        states = self.pad_dim(states, self.max_state_dim)
 
-        # First pad the states to max_state_len (feature dimension padding)
-        padded_states = self.pad_sequence(states, self.max_state_dim)
+        # Pad actions to max_actions_dim
+        actions = self.pad_dim(actions, self.max_action_dim)
 
-        # TODO(aponomarev): fix
-        return padded_states, actions, torch.tensor([0])
-        # embeds = torch.cat([
-        #     # environment_embed,
-        #     # self.sw_state_embed,
-        #     padded_states,
-        #     # self.sw_action_embed,
-        #     actions,
-        #     # self.sw_reward_embed,
-        #     rewards
+        # Get original sequence length
+        orig_seq_len = len(states)
 
-        # ], dim=1)
+        # Pad sequences to max_seq_len
+        states = self.pad_sequence(states, self.max_seq_len)
+        actions = self.pad_sequence(actions, self.max_seq_len)
+        rewards = self.pad_sequence(rewards, self.max_seq_len)
 
-        # padded_embeds = self.pad_sequence(embeds, self.max_total_dim)
+        # Create attention mask
+        attention_mask = torch.zeros(self.max_seq_len, dtype=torch.bool)
+        attention_mask[:min(orig_seq_len, self.max_seq_len)] = True
 
-        # # Create mask for valid dimensions
-        # mask = torch.zeros(padded_embeds.shape[0], padded_embeds.shape[1], dtype=torch.bool)
-
-        # # Mark valid state dimensions
-        # mask[:, :original_state_dim] = True
-        # # Mark valid action dimensions
-        # mask[:, self.max_state_dim:self.max_state_dim + action_dim] = True
-        # # Mark valid reward dimension
-        # mask[:, self.max_state_dim + action_dim] = True
-
-        # return padded_embeds, mask
+        return {
+            'states': states,  # [max_seq_len, max_state_dim]
+            'actions': actions,  # [max_seq_len, action_dim]
+            'reward': rewards,  # [max_seq_len, 1]
+            'task_id': task_id,  # scalar
+            'attention_mask': attention_mask  # [max_seq_len]
+        }
