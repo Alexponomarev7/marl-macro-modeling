@@ -4,6 +4,28 @@
 
 @#define indivisible_labor = 1
 
+@#ifndef beta
+    @#define beta = 0.99
+@#endif
+@#ifndef delta
+    @#define delta = 0.025
+@#endif
+@#ifndef theta
+    @#define theta = 0.36
+@#endif
+@#ifndef gammma
+    @#define gammma = 0.95
+@#endif
+@#ifndef A
+    @#define A = 2
+@#endif
+@#ifndef sigma_eps
+    @#define sigma_eps = 0.00712
+@#endif
+@#ifndef h_0
+    @#define h_0 = 0.53
+@#endif
+
 var c $c$                  (long_name='Consumption')
     w $w$                  (long_name='Real Wage')
     r $r$                  (long_name='Real Interest Rate')
@@ -25,13 +47,13 @@ parameters beta $\beta$    (long_name='Discount Factor')
            sigma_eps $\sigma_e$ (long_name='TFP Shock Volatility')
            B $B$           (long_name='Composite Labor Disutility Parameter');
 
-beta = 0.99;
-delta = 0.025;
-theta = 0.36;
-gamma = 0.95;
-A = 2;
-sigma_eps = 0.00712;
-h_0 = 0.53;
+beta = @{beta};
+delta = @{delta};
+theta = @{theta};
+gammma = @{gammma};
+A = @{A};
+sigma_eps = @{sigma_eps};
+h_0 = @{h_0};
 
 model;
     1 / c = beta * ((1 / c(+1)) * (r(+1) + (1 - delta)));

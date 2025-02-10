@@ -3,6 +3,10 @@ using Dynare
 using CSV
 using DataFrames
 using YAML
+using Distributions
+using Random
+using SHA
+
 
 function run_model(input_file::String, output_file::String, parameters::Vector{String}, max_retries=3)
     retries = 0
@@ -55,41 +59,122 @@ function parse_commandline()
 end
 
 function generate_parameter_combinations(model_settings)
-    # Создаем список всех возможных комбинаций параметров
-    parameter_combinations = Vector{Vector{String}}()  # Явно указываем тип
-    keys_list = collect(keys(model_settings))
-    values_list = collect(values(model_settings))
+    # Разделяем параметры и флаги
+    params = get(model_settings, "parameters", Dict())
+    flags = get(model_settings, "flags", Dict())
 
-    # Рекурсивная функция для генерации комбинаций
-    function generate_combinations(current_combination::Vector{String}, index, keys_list, values_list)
-        if index > length(keys_list)
-            push!(parameter_combinations, current_combination)
-            return
+    periods = model_settings["periods"]
+
+    # Генерация случайных параметров
+    param_combos = _generate_param_combinations(params)
+
+    # Генерация всех возможных комбинаций флагов
+    flag_combos = _generate_flag_combinations(flags)
+
+    # Комбинируем параметры и флаги
+    full_combinations = Vector{Dict{String,Any}}()
+    for p in param_combos, f in flag_combos
+        combined = merge(p, f)
+        combined["periods"] = periods
+        push!(full_combinations, combined)
+    end
+
+    # Преобразуем в аргументы командной строки
+    return [["-D$(k)=$(v)" for (k, v) in combo] for combo in full_combinations]
+end
+
+function _generate_param_combinations(params::Dict)
+    combinations = [Dict{String,Any}()]
+
+    for (param, config) in params
+        new_combinations = []
+        dist_type = config["distribution"]
+
+        # Для каждого существующего сочетания добавляем новые значения
+        for combo in combinations
+            if dist_type == "discrete"
+                for val in config["values"]
+                    push!(new_combinations, merge(combo, Dict(param => val)))
+                end
+            else
+                val = _sample_parameter(config)
+                push!(new_combinations, merge(combo, Dict(param => val)))
+            end
         end
 
-        key = keys_list[index]
-        value = values_list[index]
+        combinations = new_combinations
+    end
 
-        if isa(value, Vector)
-            # Если значение — это список, перебираем все его элементы
-            for v in value
-                new_combination = copy(current_combination)
-                push!(new_combination, "-D$(key)=$(string(v))")
-                generate_combinations(new_combination, index + 1, keys_list, values_list)
+    return combinations
+end
+
+function _generate_flag_combinations(flags::Dict)
+    flag_names = collect(keys(flags))
+    flag_values = collect(values(flags))
+
+    # Генерируем все возможные комбинации флагов
+    combinations = []
+    for combo in Base.product(flag_values...)
+        push!(combinations, Dict(zip(flag_names, combo)))
+    end
+
+    return unique(combinations)
+end
+
+function _sample_parameter(config::Dict)
+    dist_type = config["distribution"]
+
+    if dist_type == "uniform"
+        rand(Uniform(config["min"], config["max"])) |> x->round(x, digits=3)
+    elseif dist_type == "normal"
+        rand(Normal(config["mean"], config["std"])) |> x->round(x, digits=3)
+    elseif dist_type == "beta"
+        rand(Beta(config["a"], config["b"])) |> x->round(x, digits=3)
+    else
+        error("Unsupported distribution: $dist_type")
+    end
+end
+
+function generate_filename(output_dir::String, model_name::SubString{String}, combo::Vector{String})
+    params = []
+    flags = []
+
+    for param in combo
+        # Разделяем строку на ключ и значение
+        key_value = split(param, '=')
+        if length(key_value) == 2
+            key = key_value[1]
+            value = key_value[2]
+
+            # Проверяем, является ли значение числом
+            try
+                num_value = parse(Float64, value)
+                push!(params, "$key=$(round(num_value, digits=2))")
+            catch
+                # Если не число, считаем это флагом
+                push!(flags, "$key=$value")
             end
-        else
-            # Если значение — это скаляр, добавляем его в комбинацию
-            new_combination = copy(current_combination)
-            push!(new_combination, "-D$(key)=$(string(value))")
-            generate_combinations(new_combination, index + 1, keys_list, values_list)
         end
     end
 
-    generate_combinations(String[], 1, keys_list, values_list)
-    return parameter_combinations
+    # Формируем имя файла
+    hash_input = ""
+    if !isempty(params)
+        hash_input *= "_" * join(params, "_")
+    end
+    if !isempty(flags)
+        hash_input *= "_" * join(flags, "-")
+    end
+
+    hash_value = bytes2hex(sha256(hash_input))
+    filename = "$(model_name)_$(hash_value).csv"
+
+    return join([output_dir, filename], "/")
 end
 
 function main()
+
+    Random.seed!(4242)
     # Парсинг аргументов командной строки
     parsed_args = parse_commandline()
 
@@ -106,18 +191,31 @@ function main()
     # Запуск моделей
     for file_name in input_files
         model_name = split(file_name, ".")[1]  # Имя модели без расширения
+
         if haskey(config, model_name)
             # Извлечение параметров для модели
             model_settings = config[model_name]["dynare_model_settings"]
-            parameter_combinations = generate_parameter_combinations(model_settings)
 
-            # Запуск модели для каждой комбинации параметров
-            for (i, parameters) in enumerate(parameter_combinations)
-                println("Running model $model_name with parameters: ", parameters)
-                input_file = joinpath(input_dir, file_name)
-                output_file = joinpath(output_dir, join([model_name, "config_$(i)", "raw.csv"], "_"))
-                run_model(input_file, output_file, parameters)
-                println("Output saved to $output_file")
+            num_simulations = model_settings["num_simulations"]
+            i = 0
+
+            while i < num_simulations
+
+                parameter_combinations = generate_parameter_combinations(model_settings)
+
+                # Запуск модели для каждой комбинации параметров
+                for (i, parameters) in enumerate(parameter_combinations)
+                    println("Running model $model_name with parameters: ", parameters)
+                    input_file = joinpath(input_dir, file_name)
+
+                    # output_file = joinpath(output_dir, join([model_name, "config_$(i)", "raw.csv"], "_"))
+                    output_file = generate_filename(output_dir, model_name, parameters)
+
+                    run_model(input_file, output_file, parameters)
+                    println("Output saved to $output_file")
+                end
+
+                i += 1
             end
         else
             # Если параметры для модели не указаны, используем пустой массив

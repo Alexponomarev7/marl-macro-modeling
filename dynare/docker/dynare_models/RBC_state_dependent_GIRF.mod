@@ -2,6 +2,34 @@
     @#define periods = 100
 @#endif
 
+@#ifndef sigma
+    @#define sigma = 5
+@#endif
+@#ifndef alpha
+    @#define alpha = 0.33
+@#endif
+@#ifndef i_y
+    @#define i_y = 0.25
+@#endif
+@#ifndef k_y
+    @#define k_y = 10.4
+@#endif
+@#ifndef x
+    @#define x = 0.0055
+@#endif
+@#ifndef n
+    @#define n = 0.0027
+@#endif
+@#ifndef rho
+    @#define rho = 0.97
+@#endif
+@#ifndef rhog
+    @#define rhog = 0.98
+@#endif
+@#ifndef gshare
+    @#define gshare = 0.2038
+@#endif
+
 var y ${y}$ (long_name='Output')
     c ${c}$ (long_name='Consumption')
     k ${k}$ (long_name='Capital')
@@ -35,15 +63,15 @@ parameters beta ${\beta}$ (long_name='Discount Factor')
            k_y ${\frac{K}{Y}}$ (long_name='Capital-Output Ratio')
            i_y ${\frac{I}{Y}}$ (long_name='Investment-Output Ratio');
 
-sigma = 5;
-alpha = 0.33;
-i_y = 0.25;
-k_y = 10.4;
-x = 0.0055;
-n = 0.0027;
-rho = 0.97;
-rhog = 0.98;
-gshare = 0.2038;
+sigma = @{sigma};
+alpha = @{alpha};
+i_y = @{i_y};
+k_y = @{k_y};
+x = @{x};
+n = @{n};
+rho = @{rho};
+rhog = @{rhog};
+gshare = @{gshare};
 
 model;
     psi * exp(c)^sigma * 1 / (1 - exp(l)) = (1 - alpha) * exp(z) * (exp(k(-1)) / exp(l))^alpha;

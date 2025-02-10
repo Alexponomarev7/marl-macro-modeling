@@ -26,6 +26,43 @@
     @#define model5 = 0
 @#endif
 
+@#ifndef gammma
+    @#define gammma = 2
+@#endif
+@#ifndef omega
+    @#define omega = 1.455
+@#endif
+@#ifndef rho
+    @#define rho = 0.42
+@#endif
+@#ifndef sigma_tfp
+    @#define sigma_tfp = 0.0129
+@#endif
+@#ifndef delta
+    @#define delta = 0.1
+@#endif
+@#ifndef alpha
+    @#define alpha = 0.32
+@#endif
+@#ifndef phi
+    @#define phi = 0.028
+@#endif
+@#ifndef r_bar
+    @#define r_bar = 0.04
+@#endif
+@#ifndef d_bar
+    @#define d_bar = 0.7442
+@#endif
+@#ifndef psi_2
+    @#define psi_2 = 0.000742
+@#endif
+@#ifndef psi_3
+    @#define psi_3 = 0.00074
+@#endif
+@#ifndef psi_4
+    @#define psi_4 = 0
+@#endif
+
 
 var c ${c}$ (long_name='Consumption')
     h ${h}$ (long_name='Hours Worked')
@@ -72,18 +109,18 @@ parameters gamma ${\gamma}$ (long_name='Risk Aversion')
            d_bar ${\bar d}$ (long_name='Steady State Debt')
            beta ${\beta}$ (long_name='Discount Factor');
 
-gamma = 2;
-omega = 1.455;
-rho = 0.42;
-sigma_tfp = 0.0129;
-delta = 0.1;
-alpha = 0.32;
-phi = 0.028;
-r_bar = 0.04;
-d_bar = 0.7442;
-psi_2 = 0.000742;
-psi_3 = 0.00074;
-psi_4 = 0;
+gamma = @{gammma};
+omega = @{omega};
+rho = @{rho};
+sigma_tfp = @{sigma_tfp};
+delta = @{delta};
+alpha = @{alpha};
+phi = @{phi};
+r_bar = @{r_bar};
+d_bar = @{d_bar};
+psi_2 = @{psi_2};
+psi_3 = @{psi_3};
+psi_4 = @{psi_4};
 
 @#if model1 == 1 || model1a == 1
     psi_1 = 0;
