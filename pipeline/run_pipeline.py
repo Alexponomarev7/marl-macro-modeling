@@ -108,6 +108,7 @@ class EconomicPolicyModel(L.LightningModule):
             self,
             model_cfg: dict[str, Any],
             optimizer_cfg: dict[str, Any],
+            scheduler_cfg: dict[str, Any],
             criterion_cfg: dict[str, Any],
             test_envs: list[tuple[str, AbstractEconomicEnv]],
             state_max_dim: int,
@@ -132,22 +133,33 @@ class EconomicPolicyModel(L.LightningModule):
         self.model = hydra.utils.instantiate(model_cfg)
         self.criterion = hydra.utils.instantiate(criterion_cfg)
         self.optimizer_cfg = optimizer_cfg
+        self.scheduler_cfg = scheduler_cfg
         self.test_envs = test_envs
         self.val_episodes = val_episodes
         self.val_steps = val_steps
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
 
-    def forward(self, states, actions, rewards, task_ids, padding_mask=None):
+    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, padding_mask=None):
         """Forward pass matching the transformer's interface"""
-        return self.model(states, actions, rewards, task_ids, padding_mask)
+        return self.model(
+            states=states,
+            states_info=states_info,
+            actions=actions,
+            actions_info=actions_info,
+            rewards=rewards,
+            task_ids=task_ids, 
+            # padding_mask=padding_mask
+        )
 
     def configure_optimizers(self):
         """Configure optimizer for training."""
-        return hydra.utils.instantiate(
+        optimizer = hydra.utils.instantiate(
             self.optimizer_cfg,
             params=self.parameters()
         )
+        scheduler = hydra.utils.instantiate(self.scheduler_cfg, optimizer=optimizer)
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         """Updated training step to handle the new batch format"""
@@ -155,34 +167,27 @@ class EconomicPolicyModel(L.LightningModule):
         actions = batch['actions']
         rewards = batch['reward']
         task_ids = batch['task_id']
-        attention_mask = batch['attention_mask']
+        states_info = batch['states_info']
+        actions_info = batch['actions_info']
 
-        # Get model predictions
+        # weird bug with nan values
+        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+
         predicted_actions = self(
             states=states,
+            states_info=states_info,
             actions=actions,
+            actions_info=actions_info,
             rewards=rewards,
             task_ids=task_ids,
-            padding_mask=~attention_mask  # Transformer uses inverse of attention mask
         )
 
-        # Calculate loss only on non-padded positions
-        loss = 0
-
-        # predicted_actions shape should be [batch_size, num_states, action_dim]
+        # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
         # actions shape: [batch_size, seq_length, action_dim]
-        # attention_mask shape: [batch_size, seq_length]
-
-        # Create a mask for valid positions
-        # We need to match the sequence length of predicted_actions
-        mask = attention_mask[:, :predicted_actions.shape[1]]
-        mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
-
-        # Apply mask and calculate loss
-        masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
-        masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
-        loss = self.criterion(masked_pred, masked_target)
-
+        loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        assert not torch.isnan(loss)
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
 
@@ -192,28 +197,24 @@ class EconomicPolicyModel(L.LightningModule):
         actions = batch['actions']
         rewards = batch['reward']
         task_ids = batch['task_id']
-        attention_mask = batch['attention_mask']
+        states_info = batch['states_info']
+        actions_info = batch['actions_info']
+
+        # weird bug with nan values
+        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
 
         predicted_actions = self(
             states=states,
             actions=actions,
             rewards=rewards,
             task_ids=task_ids,
-            padding_mask=~attention_mask
+            states_info=states_info,
+            actions_info=actions_info,
         )
 
-        loss = 0
-        valid_positions = attention_mask.sum()
-        if valid_positions > 0:
-            # Create a mask for valid positions
-            mask = attention_mask[:, :predicted_actions.shape[1]]
-            mask = mask.unsqueeze(-1).expand(-1, -1, self.action_max_dim)
-
-            # Apply mask and calculate loss
-            masked_pred = predicted_actions[mask].view(-1, self.action_max_dim)
-            masked_target = actions[:, :predicted_actions.shape[1]][mask].view(-1, self.action_max_dim)
-            loss = self.criterion(masked_pred, masked_target)
-
+        loss = self.criterion(predicted_actions, actions[:, 1:, :])
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
@@ -281,7 +282,7 @@ class EconomicPolicyModel(L.LightningModule):
                     actions = torch.zeros(1, 0, self.action_max_dim).to(self.device)
                     rewards = torch.zeros(1, 0, 1).to(self.device)
 
-                task_id = torch.tensor([0]).to(self.device)
+                task_ids = torch.tensor([0]).to(self.device)
                 attention_mask = torch.ones(1, states.shape[1], dtype=torch.bool).to(self.device)
 
                 # Ensure all tensors are float32
@@ -294,8 +295,8 @@ class EconomicPolicyModel(L.LightningModule):
                         states=states,
                         actions=actions,
                         rewards=rewards,
-                        task_ids=task_id,
-                        padding_mask=~attention_mask
+                        task_ids=task_ids,
+                        # padding_mask=~attention_mask
                     )
                     action = predicted_actions[0, -1].cpu().numpy()
 
@@ -389,6 +390,7 @@ def main(cfg: DictConfig) -> None:
     model = EconomicPolicyModel(
         model_cfg=cfg['train']['model'],
         optimizer_cfg=cfg['train']['optimizer'],
+        scheduler_cfg=cfg['train']['scheduler'],
         criterion_cfg=cfg['train']['loss'],
         test_envs=test_envs,
         val_episodes=cfg['train'].get('val_episodes', 10),
