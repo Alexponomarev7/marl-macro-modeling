@@ -63,12 +63,18 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
 def generate_env_data_dynare(dynare_file_path: Path):
     df = pd.read_parquet(dynare_file_path)
     df["done"] = False
+
+    info = {
+        "action_description": list(df.iloc[0]["action_description"]),
+        "state_description": list(df.iloc[0]["state_description"]),
+    }
+    df["info"] = df["info"].apply(lambda x: x | info)
     return {
         "env_name": dynare_file_path.name,
         "env_params": dynare_file_path.name,
         "action_description": df.iloc[0]["action_description"],
         "state_description": df.iloc[0]["state_description"],
-        "tracks": df[["state", "reward", "done", "truncated", "info"]],
+        "tracks": df[["state", "action", "reward", "done", "truncated", "info"]],
     }
 
 class DatasetWriter:
@@ -137,7 +143,7 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
                     continue
 
 def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
-    processed_path = dynare_output_path / "processed"
+    processed_path = dynare_output_path
     assert processed_path.exists()
     with DatasetWriter(workdir) as writer:
         for file in processed_path.glob("*.parquet"):
