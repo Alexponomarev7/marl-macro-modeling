@@ -71,16 +71,41 @@ function generate_parameter_combinations(model_settings)
     # Генерация всех возможных комбинаций флагов
     flag_combos = _generate_flag_combinations(flags)
 
+    # Генерация шума
+    n = 10  # Количество точек
+    start_value = 0.1  # Начальное значение
+    min_step = 0.0  # Минимальный шаг уменьшения
+    max_step = 0.3 # Максимальный шаг уменьшения
+    shock_values = _generate_monotonic_decreasing_noise(n, start_value, min_step, max_step)
+
     # Комбинируем параметры и флаги
     full_combinations = Vector{Dict{String,Any}}()
     for p in param_combos, f in flag_combos
         combined = merge(p, f)
         combined["periods"] = periods
+        # combined["shock_values"] = shock_values
         push!(full_combinations, combined)
     end
 
     # Преобразуем в аргументы командной строки
     return [["-D$(k)=$(v)" for (k, v) in combo] for combo in full_combinations]
+end
+
+function _generate_monotonic_decreasing_noise(n::Int, start_value::Float64, min_step::Float64, max_step::Float64)
+    noise = Float64[start_value]
+    current_value = start_value
+
+    for _ in 2:n
+        step = rand(min_step:max_step)  # Случайный шаг уменьшения
+        current_value -= step
+        if current_value <= 0  # Ограничение, чтобы значения не становились отрицательными
+            push!(noise, 0.0)
+            break
+        end
+        push!(noise, current_value)
+    end
+
+    return noise
 end
 
 function _generate_param_combinations(params::Dict)

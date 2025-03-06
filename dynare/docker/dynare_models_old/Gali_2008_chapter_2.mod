@@ -32,12 +32,11 @@ var C ${C}$                  (long_name='Consumption')
     R ${R^n}$                (long_name='Nominal Interest Rate')
     realinterest ${R^{r}}$   (long_name='Real Interest Rate')
     Y ${Y}$                  (long_name='Output')
-    m_growth_ann ${\Delta M}$ (long_name='Money Growth')
-;
+    m_growth_ann ${\Delta M}$ (long_name='Money Growth');
 
 varexo eps_A ${\varepsilon_A}$ (long_name='Technology Shock')
-       eps_m ${\varepsilon_m}$ (long_name='Monetary Policy Shock')
-;
+       eps_m ${\varepsilon_m}$ (long_name='Monetary Policy Shock');
+
 
 parameters alppha ${\alpha}$ (long_name='Capital Share')
            betta ${\beta}$   (long_name='Discount Factor')
@@ -45,8 +44,7 @@ parameters alppha ${\alpha}$ (long_name='Capital Share')
            siggma ${\sigma}$ (long_name='Log Utility')
            phi ${\phi}$      (long_name='Unitary Frisch Elasticity')
            phi_pi ${\phi_{\pi}}$ (long_name='Inflation Feedback Taylor Rule')
-           eta ${\eta}$      (long_name='Semi-Elasticity Of Money Demand')
-;
+           eta ${\eta}$      (long_name='Semi-Elasticity Of Money Demand');
 
 alppha = @{alppha};
 betta = @{betta};
@@ -69,8 +67,8 @@ model;
 end;
 
 shocks;
-    var eps_A; periods 1 5 10; values 0.2 -0.1 0.5;
-    var eps_m; periods 15 30; values 0.2 -0.4;
+    var eps_A; stderr 1;
+    var eps_m; stderr 1;
 end;
 
 steady_state_model;
@@ -88,5 +86,4 @@ end;
 steady;
 check;
 
-perfect_foresight_setup(periods=@{periods});
-perfect_foresight_solver;
+stoch_simul(irf=20, order=1, periods=@{periods}, nomoments, nofunctions, nograph, nocorr, noprint);

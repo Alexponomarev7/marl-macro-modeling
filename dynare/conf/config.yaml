@@ -67,9 +67,9 @@ Aguiar_Gopinath_2007:
         - Investment to GDP Ratio    # Инвестиции к ВВП
         - Net Exports                # Чистый экспорт
         - Investment                 # Инвестиции
-        - Log Output                 # Логарифм выпуска
-        - Log Consumption            # Логарифм потребления
-        - Log Investment             # Логарифм инвестиций
+        # - Log Output                 # Логарифм выпуска
+        # - Log Consumption            # Логарифм потребления
+        # - Log Investment             # Логарифм инвестиций
         - Output Growth              # Рост выпуска
       action_columns:
         - Government Spending  # Управляемая переменная (государственные расходы)
@@ -174,13 +174,13 @@ Born_Pfeifer_2018_MP:
         - Real Money Stock              # Реальный запас денег
         - Money Growth Annualized       # Годовой рост денежной массы
         - Nominal Money Stock           # Номинальный запас денег
-        - AR(1) Monetary Policy Shock Process  # Шок монетарной политики
-        - AR(1) Technology Shock Process  # Технологический шок
+        # - AR(1) Monetary Policy Shock Process  # Шок монетарной политики
+        # - AR(1) Technology Shock Process  # Технологический шок
         - Annualized Real Interest Rate  # Годовая реальная процентная ставка
         - Annualized Nominal Interest Rate  # Годовая номинальная процентная ставка
         - Annualized Natural Interest Rate  # Годовая естественная процентная ставка
         - Annualized Inflation Rate     # Годовая инфляция
-        - AR(1) Preference Shock Process  # Шок предпочтений
+        # - AR(1) Preference Shock Process  # Шок предпочтений
         - Price Level                   # Уровень цен
         - Nominal Wage                  # Номинальная заработная плата
         - Consumption                   # Потребление
@@ -190,6 +190,9 @@ Born_Pfeifer_2018_MP:
         - Natural Real Wage             # Естественная реальная заработная плата
         - Markup                        # Наценка
         - Annualized Wage Inflation Rate  # Годовая инфляция заработной платы
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Utility of Labor     # Предельная полезность труда
+        - Marginal Utility of Real Wage # Предельная полезность реальной заработной платы
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
@@ -259,12 +262,14 @@ Caldara_et_al_2012:
         - Capital                            # Капитал
         - Investment                         # Инвестиции
         - Labor                              # Труд
-        - Technology Shock                   # Технологический шок
-        - Auxiliary Variable For Value Function  # Вспомогательная переменная для функции полезности
+        # - Technology Shock                   # Технологический шок
+        # - Auxiliary Variable For Value Function  # Вспомогательная переменная для функции полезности
         - Expected Stochastic Discount Factor  # Ожидаемый стохастический дисконтный фактор
         - Volatility                         # Волатильность
         - Expected Return On Capital          # Ожидаемая доходность капитала
         - Risk-Free Rate                     # Безрисковая ставка
+        - Marginal Utility of Consumption    # Предельная полезность потребления
+        - Marginal Utility of Labor          # Предельная полезность труда
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
@@ -319,9 +324,11 @@ Collard_2001_example1:
         - Output                             # Выпуск
         - Consumption                        # Потребление
         - Capital                            # Капитал
-        - Technology Shock                   # Технологический шок
+        # - Technology Shock                   # Технологический шок
         - Labor                              # Труд
-        - Preference Shock                   # Шок предпочтений
+        # - Preference Shock                   # Шок предпочтений
+        - Marginal Utility of Consumption
+        - Marginal Utility of Labor
       action_columns:
         - Consumption  # Управляемая переменная (потребление)
     output:
@@ -432,6 +439,10 @@ Faia_2008:
         - Log Unemployment                    # Лог безработицы
         - Log Tightness A                     # Лог напряженности A
         - Log Tightness B                     # Лог напряженности B
+        - Marginal Utility of Consumption     # Предельная полезность потребления
+        - Marginal Utility of Labor           # Предельная полезность труда
+        - Marginal Productivity of Labor      # Предельная производительность труда
+        - Marginal Cost of Vacancies          # Предельные издержки вакансий
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
@@ -464,6 +475,8 @@ FV_et_al_2007_ABCD:
         - Output                  # Выпуск
         - Consumption             # Потребление
         - Output Minus Consumption  # Разница между выпуском и потреблением
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Productivity of Labor   # Предельная производительность труда
       action_columns:
         - Consumption  # Управляемая переменная (потребление)
     output:
@@ -472,8 +485,8 @@ FV_et_al_2007_ABCD:
 
 Gali_2008_chapter_2:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 50
+    num_simulations: 20
 
     parameters:
       alppha:
@@ -516,12 +529,16 @@ Gali_2008_chapter_2:
         - Consumption                        # Потребление
         - Real Wage                          # Реальная заработная плата
         - Inflation                          # Инфляция
-        - AR(1) Technology Process           # Технологический процесс AR(1)
+        # - AR(1) Technology Process           # Технологический процесс AR(1)
         - Hours Worked                       # Отработанные часы
         - Nominal Interest Rate              # Номинальная процентная ставка
         - Real Interest Rate                 # Реальная процентная ставка
         - Output                             # Выпуск
         - Money Growth                       # Рост денежной массы
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Productivity of Labor   # Предельная производительность труда
+        - Marginal Utility of Labor        # Предельная полезность труда
+        - Marginal Cost of Production      # Предельные издержки производства
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
@@ -622,8 +639,11 @@ GarciaCicco_et_al_2010:
         - Investment Growth Rate             # Рост инвестиций (g_invest)
         - Technology Growth Rate             # Темп роста технологий (g)
         - Interest Rate                      # Процентная ставка (r)
-        - Preference Shock                   # Шок предпочтений (nu)
-        - Country Premium Shock              # Шок премии за риск (mu)
+        # - Preference Shock                   # Шок предпочтений (nu)
+        # - Country Premium Shock              # Шок премии за риск (mu)
+        - Marginal Utility of Labor     # Предельная полезность труда
+        - Marginal Productivity of Labor  # Предельная производительность труда
+        - Marginal Cost of Investment   # Предельные издержки инвестиций
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
@@ -679,10 +699,14 @@ Hansen_1985:
         - Real Interest Rate                 # Реальная процентная ставка
         - Output                             # Выпуск
         - Hours Worked                       # Отработанные часы
-        - Capital Stock                      # Капитал
+        # - Capital Stock                      # Капитал
         - Investment                         # Инвестиции
         - Total Factor Productivity          # Совокупная факторная производительность
         - Productivity                       # Производительность (выпуск на единицу труда)
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Productivity of Labor   # Предельная производительность труда
+        - Marginal Utility of Labor        # Предельная полезность труда
+        - Marginal Cost of Investment      # Предельные издержки инвестиций
       action_columns:
         - Investment  # Управляемая переменная (инвестиции)
     output:
@@ -714,7 +738,7 @@ McCandless_2008_Chapter_9:
         distribution: normal
         mean: 0.583  # Дефолтное значение
         std: 0.05
-      gamma:
+      gammma:
         distribution: normal
         mean: 0.95  # Дефолтное значение
         std: 0.05
@@ -741,7 +765,7 @@ McCandless_2008_Chapter_9:
         - Real Wage                          # Реальная заработная плата
         - Real Return On Capital             # Реальная доходность капитала
         - Real Consumption                   # Реальное потребление
-        - Capital Stock                      # Капитал
+        # - Capital Stock                      # Капитал
         - Hours Worked                       # Отработанные часы
         - Money Stock                        # Денежная масса
         - Price Level                        # Уровень цен
@@ -898,12 +922,16 @@ RBC_baseline:
         - Annualized Interest Rate  # r
         - Real Wage               # w
         - Investment              # invest
-        - Log Output              # log_y
+        # - Log Output              # log_y
         - Log Capital Stock       # log_k
-        - Log Consumption         # log_c
+        # - Log Consumption         # log_c
         - Log Labor               # log_l
-        - Log Real Wage           # log_w
-        - Log Investment          # log_invest
+        # - Log Real Wage           # log_w
+        # - Log Investment          # log_invest
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Productivity of Labor   # Предельная производительность труда
+        - Marginal Utility of Labor        # Предельная полезность труда
+        - Marginal Cost of Capital         # Предельные издержки капитала
       action_columns:
         - 'Government Spending'   # ghat (управляемая переменная)
     output:
@@ -912,8 +940,8 @@ RBC_baseline:
 
 RBC_capitalstock_shock:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 300
+    num_simulations: 1
     parameters:
       alpha:
         distribution: normal
@@ -939,10 +967,10 @@ RBC_capitalstock_shock:
         distribution: normal
         mean: 0.024  # Дефолтное значение (вычислено как i_y / k_y)
         std: 0.05
-      l_ss:
-        distribution: normal
-        mean: 0.33  # Дефолтное значение
-        std: 0.05
+      # l_ss:
+      #   distribution: normal
+      #   mean: 0.33  # Дефолтное значение
+      #   std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
@@ -959,6 +987,10 @@ RBC_capitalstock_shock:
         - Hours Worked            # l
         - Total Factor Productivity  # z
         - Investment              # invest
+        - Marginal Utility of Consumption  # Предельная полезность потребления
+        - Marginal Productivity of Labor   # Предельная производительность труда
+        - Marginal Utility of Labor        # Предельная полезность труда
+        - Marginal Cost of Capital         # Предельные издержки капитала
       action_columns:
         - 'Investment'            # invest (управляемая переменная)
     output:
@@ -1207,7 +1239,7 @@ SGU_2004:
       state_columns:
         - Consumption             # c
         - Capital                 # k
-        - Technology Shock        # a
+        # - Technology Shock        # a
         # Если экзогенные шоки включены в данные:
         # - Technology Shock Innovation  # epsilon
       action_columns:
