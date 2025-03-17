@@ -8,14 +8,20 @@ __pycache__
 
 # Игнорировать все логи и рез-таты компилирования модели dynare
 dynare/docker/dynare_models/*
-# Исключить файлы с определением самих моделей т.е. с расширением .mod
-!dynare/docker/dynare_models/*.mod
+# # Исключить файлы с определением самих моделей т.е. с расширением .mod
+# !dynare/docker/dynare_models/*.mod
 
 # Игнорировать все логи и рез-таты компилирования модели dynare
 dynare/docker/dynare_models_old/*
 
 # Исключить файлы с определением самих моделей т.е. с расширением .mod
 !dynare/docker/dynare_models_old/*.mod
+
+# Игнорировать все логи и рез-таты компилирования модели dynare
+dynare/docker/dynare_models_templates/*
+
+# Исключить файлы с определением самих моделей т.е. с расширением .mod
+!dynare/docker/dynare_models_templates/*.mod
 
 
 .snakemake

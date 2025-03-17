@@ -488,6 +488,12 @@ Gali_2008_chapter_2:
     periods: 50
     num_simulations: 20
 
+    shocks:
+      n_shocks: 25  # Количество шоков
+      start_value: 0.5  # Начальное значение шока
+      min_step: 0.01  # Минимальный шаг уменьшения
+      max_step: 0.05  # Максимальный шаг уменьшения
+
     parameters:
       alppha:
         distribution: normal
@@ -526,19 +532,15 @@ Gali_2008_chapter_2:
     input:
       data_path: ./data/raw/Gali_2008_chapter_2_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Consumption                        # Потребление
-        - Real Wage                          # Реальная заработная плата
-        - Inflation                          # Инфляция
-        # - AR(1) Technology Process           # Технологический процесс AR(1)
-        - Hours Worked                       # Отработанные часы
-        - Nominal Interest Rate              # Номинальная процентная ставка
-        - Real Interest Rate                 # Реальная процентная ставка
-        - Output                             # Выпуск
-        - Money Growth                       # Рост денежной массы
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Productivity of Labor   # Предельная производительность труда
-        - Marginal Utility of Labor        # Предельная полезность труда
-        - Marginal Cost of Production      # Предельные издержки производства
+        C: Consumption
+        W_real: Real Wage
+        Pi: Inflation
+        A: AR(1) Technology Process
+        N: Hours Worked
+        R: Nominal Interest Rate
+        realinterest: Real Interest Rate
+        Y: Output
+        m_growth_ann: Money Growth
       action_columns:
         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
     output:

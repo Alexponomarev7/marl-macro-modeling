@@ -119,7 +119,7 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
 
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
-        state_columns=rl_env_conf["input"]["state_columns"],
+        state_columns=list(rl_env_conf["input"]["state_columns"].values()),
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_func=get_reward_object(rl_env_conf["reward"]),
         reward_kwargs=rl_env_conf.get("reward_kwargs", None),
