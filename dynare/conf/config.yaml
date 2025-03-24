@@ -485,11 +485,11 @@ FV_et_al_2007_ABCD:
 
 Gali_2008_chapter_2:
   dynare_model_settings:
-    periods: 50
-    num_simulations: 20
+    periods: 100
+    num_simulations: 50
 
     shocks:
-      n_shocks: 25  # Количество шоков
+      n_shocks: 10  # Количество шоков
       start_value: 0.5  # Начальное значение шока
       min_step: 0.01  # Минимальный шаг уменьшения
       max_step: 0.05  # Максимальный шаг уменьшения

@@ -12,6 +12,8 @@ import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from lib.utility_funcs import calculate_utility
+
 
 def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     """Imports and returns a reward object from a specified path.
@@ -59,6 +61,7 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
+    state_columns = [s for s in state_columns if s != "Nominal Interest Rate"]
     if reward_kwargs is None:
         reward_kwargs = {}
 
@@ -67,6 +70,7 @@ def dynare_trajectories2rl_transitions(
     state = np.zeros(len(state_columns))
     action_columns_values = np.zeros(len(action_columns))
 
+    n_schocks = 0
     transitions = []
     for idx, row in data.iterrows():
         next_state = np.array([row.get(col, np.nan) for col in state_columns])
@@ -78,10 +82,13 @@ def dynare_trajectories2rl_transitions(
             continue
 
         action = next_action_columns_values - action_columns_values
-        reward = reward_func(state, action, next_state, **reward_kwargs)
+        # reward = reward_func(state, action, next_state, **reward_kwargs)
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
+
+        if row["eps_A"] > 0:
+            n_schocks += 1
 
         # parquet problems with empty dict
         if len(info) == 0:
@@ -90,7 +97,7 @@ def dynare_trajectories2rl_transitions(
         transition = {
             "state": state,
             "action": action,
-            "reward": reward,
+            # "reward": reward,
             "truncated": False,
             "info": info,
         }
@@ -100,7 +107,11 @@ def dynare_trajectories2rl_transitions(
 
         transitions.append(transition)
 
-    return pd.DataFrame(transitions)
+    result = pd.DataFrame(transitions)
+    result["n_schocks"] = n_schocks
+    result["reward"] = calculate_utility(data)
+
+    return result
 
 
 def process_model_data(model_name: str, model_params: dict, raw_data_path: str, output_dir: str) -> None:
@@ -129,7 +140,7 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     logger.info("Saving data...")
 
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
-    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"])] * len(transitions))
+    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"].values())] * len(transitions))
 
     transitions.to_parquet(output_path)
 

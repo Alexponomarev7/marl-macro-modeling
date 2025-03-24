@@ -9,9 +9,7 @@ var C                  (long_name='Consumption')
     m_growth_ann       (long_name='Money Growth')
 ;
 
-varexo eps_A           (long_name='Technology Shock')
-       eps_m           (long_name='Monetary Policy Shock')
-;
+varexo eps_A           (long_name='Technology Shock');
 
 parameters alppha      (long_name='Capital Share')
            betta       (long_name='Discount Factor')
@@ -36,7 +34,7 @@ model;
     A * N^(1 - alppha) = C;
     W_real = (1 - alppha) * A * N^(-alppha);
     realinterest = R / Pi(+1);
-    R = 1 / betta * Pi^phi_pi + eps_m;
+    R = 1 / betta * Pi^phi_pi;
     C = Y;
     log(A) = rho * log(A(-1)) + eps_A;
     m_growth_ann = 4 * (log(Y) - log(Y(-1)) - eta * (log(R) - log(R(-1))) + log(Pi));
@@ -44,7 +42,6 @@ end;
 
 shocks;
     var eps_A; periods {shock_periods}; values {shock_values};
-    var eps_m; periods {shock_periods}; values {shock_values};
 end;
 
 steady_state_model;
