@@ -65,6 +65,10 @@ def calculate_utility(df: pd.DataFrame, beta: float = 0.9, sigma: float = 1.0, p
     :return: Series с ожидаемой полезностью для каждого шага.
     """
     # Извлекаем данные
+
+    if "Utility" in df.columns:
+        return df["Utility"]
+
     C = df['Consumption'].values  # Потребление
     N = df['Hours Worked'].values  # Отработанные часы
     T = len(C)  # Количество периодов

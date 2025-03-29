@@ -20,8 +20,7 @@ var consumption                    (long_name='Consumption')
 
 predetermined_variables capital debt;
 
-varexo shock_productivity   (long_name='Productivity Shock')
-       shock_gov_spending   (long_name='Government Spending Shock');
+varexo  shock_gov_spending   (long_name='Government Spending Shock');
 
 parameters growth_rate               (long_name='Growth Rate')
            risk_aversion             (long_name='Risk Aversion')
@@ -53,7 +52,7 @@ persistence_gov_spending = {persistence_gov_spending};
 
 model;
     output = exp(productivity) * capital^(1 - capital_share) * (exp(gov_spending) * labor)^capital_share;
-    productivity = persistence_productivity * productivity(-1) + shock_productivity;
+    productivity = persistence_productivity * productivity(-1);
     gov_spending = (1 - persistence_gov_spending) * growth_rate + persistence_gov_spending * gov_spending(-1) + shock_gov_spending;
     utility = (consumption^labor_share * (1 - labor)^(1 - labor_share))^(1 - risk_aversion) / (1 - risk_aversion);
     marginal_utility_consumption = labor_share * utility / consumption * (1 - risk_aversion);
@@ -99,10 +98,11 @@ steady_state_model;
 end;
 
 shocks;
-    var shock_gov_spending; stderr 0.0281;
-    var shock_productivity; stderr 0.0048;
+    var shock_gov_spending; periods {shock_periods}; values {shock_values};
 end;
 
 steady;
 check;
-stoch_simul(irf=0, order=1, periods={periods}, nomoments, nofunctions, nograph, nocorr, noprint);
+
+perfect_foresight_setup(periods={periods});
+perfect_foresight_solver;

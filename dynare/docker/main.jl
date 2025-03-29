@@ -108,7 +108,7 @@ function main()
         if haskey(config, model_name)
             # Извлечение маппинга переменных
             rl_env_settings = config[model_name]["rl_env_settings"]
-            variable_mapping = rl_env_settings["input"]["state_columns"]
+            variable_mapping = rl_env_settings["input"]["all_columns"]
 
             # Путь к входному файлу модели
             input_file = joinpath(input_dir, file_name)

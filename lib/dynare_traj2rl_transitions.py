@@ -61,7 +61,6 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
-    state_columns = [s for s in state_columns if s != "Nominal Interest Rate"]
     if reward_kwargs is None:
         reward_kwargs = {}
 
@@ -70,7 +69,6 @@ def dynare_trajectories2rl_transitions(
     state = np.zeros(len(state_columns))
     action_columns_values = np.zeros(len(action_columns))
 
-    n_schocks = 0
     transitions = []
     for idx, row in data.iterrows():
         next_state = np.array([row.get(col, np.nan) for col in state_columns])
@@ -86,9 +84,6 @@ def dynare_trajectories2rl_transitions(
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
-
-        if row["eps_A"] > 0:
-            n_schocks += 1
 
         # parquet problems with empty dict
         if len(info) == 0:
@@ -108,7 +103,6 @@ def dynare_trajectories2rl_transitions(
         transitions.append(transition)
 
     result = pd.DataFrame(transitions)
-    result["n_schocks"] = n_schocks
     result["reward"] = calculate_utility(data)
 
     return result
@@ -128,10 +122,14 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     # Generate output path
     output_path = Path(output_dir) / f"{model_name}_{config_suffix}.parquet"
 
+    all_columns = set(rl_env_conf["input"]["all_columns"].values())
+    action_columns = set(rl_env_conf["input"]["action_columns"].values())
+    state_columns = all_columns - action_columns
+
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
-        state_columns=list(rl_env_conf["input"]["state_columns"].values()),
-        action_columns=rl_env_conf["input"]["action_columns"],
+        state_columns=list(state_columns),
+        action_columns=list(action_columns),
         reward_func=get_reward_object(rl_env_conf["reward"]),
         reward_kwargs=rl_env_conf.get("reward_kwargs", None),
     )
@@ -139,8 +137,8 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
 
     logger.info("Saving data...")
 
-    transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
-    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"].values())] * len(transitions))
+    transitions["action_description"] = pd.Series([list(action_columns)] * len(transitions))
+    transitions["state_description"] = pd.Series([list(state_columns)] * len(transitions))
 
     transitions.to_parquet(output_path)
 

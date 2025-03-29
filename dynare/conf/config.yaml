@@ -1,15 +1,30 @@
 Aguiar_Gopinath_2007:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 10
+      start_value: 0.5
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       growth_rate:
         distribution: normal
         mean: 0.00655  # log(1.0066)
         std: 0.05
+      risk_aversion:
+        distribution: normal
+        mean: 2.0
+        std: 0.05
       debt_share:
         distribution: normal
         mean: 0.1
+        std: 0.05
+      capital_share:
+        distribution: normal
+        mean: 0.36
         std: 0.05
       discount_rate:
         distribution: normal
@@ -25,7 +40,7 @@ Aguiar_Gopinath_2007:
         std: 0.05
       labor_share:
         distribution: normal
-        mean: 0.36
+        mean: 0.64  # 1 - capital_share
         std: 0.05
       elasticity_substitution:
         distribution: normal
@@ -47,32 +62,32 @@ Aguiar_Gopinath_2007:
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [3]  # Индекс колонки 'Debt'
-      weights: [1.0]       # Вес для стабильности долга
+      target_indices: [3]  # Индекс колонки 'Output' (можно выбрать другой целевой показатель)
+      weights: [1.0]       # Вес для стабильности выбранного показателя
     input:
       data_path: ./data/raw/Aguiar_Gopinath_2007_raw.csv
-      state_columns:
-        - Consumption                # Потребление
-        - Capital                    # Капитал
-        - Output                     # Выпуск
-        - Debt                       # Долг
-        - Bond Price                 # Цена облигаций
-        - Government Spending        # Государственные расходы
-        - Labor                      # Труд
-        - Utility                    # Полезность
-        - Productivity               # Производительность
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Utility of Labor  # Предельная полезность труда
-        - Consumption to GDP Ratio   # Потребление к ВВП
-        - Investment to GDP Ratio    # Инвестиции к ВВП
-        - Net Exports                # Чистый экспорт
-        - Investment                 # Инвестиции
-        # - Log Output                 # Логарифм выпуска
-        # - Log Consumption            # Логарифм потребления
-        # - Log Investment             # Логарифм инвестиций
-        - Output Growth              # Рост выпуска
+      all_columns:
+        consumption: Consumption
+        capital: Capital
+        output: Output
+        debt: Debt
+        bond_price: Bond Price
+        gov_spending: Government Spending
+        labor: Labor
+        utility: Utility
+        productivity: Productivity
+        marginal_utility_consumption: Marginal Utility of Consumption
+        marginal_utility_labor: Marginal Utility of Labor
+        consumption_to_gdp: Consumption to GDP Ratio
+        investment_to_gdp: Investment to GDP Ratio
+        net_exports: Net Exports
+        investment: Investment
+        log_output: Log Output
+        log_consumption: Log Consumption
+        log_investment: Log Investment
+        output_growth: Output Growth
       action_columns:
-        - Government Spending  # Управляемая переменная (государственные расходы)
+        bond_price: Bond Price
     output:
       data_path: ./data/processed/Aguiar_Gopinath_2007
 
@@ -531,7 +546,7 @@ Gali_2008_chapter_2:
       weights: [1.0]       # Вес для стабильности инфляции
     input:
       data_path: ./data/raw/Gali_2008_chapter_2_raw.csv  # Путь к CSV-файлу с данными
-      state_columns:
+      all_columns:
         C: Consumption
         W_real: Real Wage
         Pi: Inflation
@@ -542,7 +557,7 @@ Gali_2008_chapter_2:
         Y: Output
         m_growth_ann: Money Growth
       action_columns:
-        - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
+        R: Nominal Interest Rate
     output:
       data_path: ./data/processed/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
 
