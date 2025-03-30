@@ -94,8 +94,8 @@ Aguiar_Gopinath_2007:
 
 Born_Pfeifer_2018_MP:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
 
     parameters:
       capital_share:
@@ -216,8 +216,15 @@ Born_Pfeifer_2018_MP:
 
 Caldara_et_al_2012:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 10  # Количество шоков
+      start_value: 0.5  # Начальное значение шока
+      min_step: 0.01  # Минимальный шаг уменьшения
+      max_step: 0.05  # Максимальный шаг уменьшения
+
     parameters:
       beta:
         distribution: normal
@@ -259,10 +266,7 @@ Caldara_et_al_2012:
         distribution: normal
         mean: 0.9  # Дефолтное значение
         std: 0.05
-
-    flags:
-      extreme_calibration: [0, 1]
-
+  
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -271,30 +275,35 @@ Caldara_et_al_2012:
     input:
       data_path: ./data/raw/Caldara_et_al_2012_raw.csv
       state_columns:
-        - Value Function                     # Функция полезности
-        - Output                             # Выпуск
-        - Consumption                        # Потребление
-        - Capital                            # Капитал
-        - Investment                         # Инвестиции
-        - Labor                              # Труд
-        # - Technology Shock                   # Технологический шок
-        # - Auxiliary Variable For Value Function  # Вспомогательная переменная для функции полезности
-        - Expected Stochastic Discount Factor  # Ожидаемый стохастический дисконтный фактор
-        - Volatility                         # Волатильность
-        - Expected Return On Capital          # Ожидаемая доходность капитала
-        - Risk-Free Rate                     # Безрисковая ставка
-        - Marginal Utility of Consumption    # Предельная полезность потребления
-        - Marginal Utility of Labor          # Предельная полезность труда
+        V: Value Function
+        y: Output
+        c: Consumption
+        k: Capital
+        invest: Investment
+        l: Labor
+        z: Technology Shock
+        s: Auxiliary Variable For Value Function
+        E_t_SDF_plus_1: Expected Stochastic Discount Factor
+        sigma: Volatility
+        E_t_R_k: Expected Return On Capital
+        R_f: Risk-Free Rate
       action_columns:
-        - Investment  # Управляемая переменная (инвестиции)
+        Investment  # Управляемая переменная (инвестиции)
     output:
       data_path: ./data/processed/Caldara_et_al_2012
 
 
 Collard_2001_example1:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 10  # Количество шоков
+      start_value: 0.5  # Начальное значение шока
+      min_step: 0.01  # Минимальный шаг уменьшения
+      max_step: 0.05  # Максимальный шаг уменьшения
+
     parameters:
       alpha:
         distribution: normal
@@ -331,29 +340,34 @@ Collard_2001_example1:
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [1]  # Индекс колонки 'Consumption'
+      target_indices: [0]  # Индекс колонки 'Output'
       weights: [1.0]       # Вес для стабильности потребления
     input:
       data_path: ./data/raw/Collard_2001_example1_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Output                             # Выпуск
-        - Consumption                        # Потребление
-        - Capital                            # Капитал
-        # - Technology Shock                   # Технологический шок
-        - Labor                              # Труд
-        # - Preference Shock                   # Шок предпочтений
-        - Marginal Utility of Consumption
-        - Marginal Utility of Labor
+        y: Output
+        c: Consumption
+        k: Capital
+        a: Technology Shock
+        h: Labor
+        b: Preference Shock
       action_columns:
-        - Consumption  # Управляемая переменная (потребление)
+        Consumption  # Управляемая переменная (потребление)
     output:
       data_path: ./data/processed/Collard_2001_example1  # Путь для сохранения обработанных данных
 
 
 Faia_2008:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 10  # Количество шоков
+      start_value: 0.5  # Начальное значение шока
+      min_step: 0.01  # Минимальный шаг уменьшения
+      max_step: 0.05  # Максимальный шаг уменьшения
+
     parameters:
       betta:
         distribution: normal
@@ -415,64 +429,71 @@ Faia_2008:
         distribution: normal
         mean: 0  # Дефолтное значение для Ramsey=0
         std: 0.05
-      phi_u:
+      m_param:
         distribution: normal
-        mean: 0  # Дефолтное значение для Ramsey=0
+        mean: 0.66  # Дефолтное значение для Ramsey=0
         std: 0.05
-    flags:
-      Ramsey: [0, 1]
+      b:
+        distribution: normal
+        mean: 0.39  # Дефолтное значение для Ramsey=0
+        std: 0.05
+      kappa:
+        distribution: normal
+        mean: 0.38   # Дефолтное значение для Ramsey=0
+        std: 0.05
+      G_SS:
+        distribution: normal
+        mean: 0.21  # Дефолтное значение для Ramsey=0
+        std: 0.05
+
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [3]  # Индекс колонки 'Inflation Rate'
+      target_indices: [1]  # Индекс колонки 'Inflation Rate'
       weights: [1.0]       # Вес для стабильности инфляции
     input:
       data_path: ./data/raw/Faia_2008_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Lagrange Multiplier A               # Лагранжиан A
-        - Consumption                         # Потребление
-        - Nominal Interest Rate               # Номинальная процентная ставка
-        - Inflation Rate                      # Инфляция
-        - Market Tightness                    # Напряженность на рынке труда
-        - Vacancies                           # Вакансии
-        - Unemployment Rate                   # Уровень безработицы
-        - Matches                             # Совпадения на рынке труда
-        - Meeting Rate Between Firms And Workers  # Вероятность встречи фирм и работников
-        - Employment                          # Занятость
-        - Gross Output A                      # Валовой выпуск A
-        - Gross Output B                      # Валовой выпуск B
-        - Lagrange Multiplier B               # Лагранжиан B
-        - Log TFP                             # Лог TFP
-        - Marginal Costs                      # Предельные издержки
-        - Real Wage                           # Реальная заработная плата
-        - Government Spending                 # Государственные расходы
-        - Government Spending Shock           # Шок государственных расходов
-        - Log Output                          # Лог выпуска
-        - Log Vacancies                       # Лог вакансий
-        - Log Wages                           # Лог заработной платы
-        - Log Unemployment                    # Лог безработицы
-        - Log Tightness A                     # Лог напряженности A
-        - Log Tightness B                     # Лог напряженности B
-        - Marginal Utility of Consumption     # Предельная полезность потребления
-        - Marginal Utility of Labor           # Предельная полезность труда
-        - Marginal Productivity of Labor      # Предельная производительность труда
-        - Marginal Cost of Vacancies          # Предельные издержки вакансий
+        lambda: Lagrange Multiplier A
+        c: Consumption
+        R: Nominal Interest Rate
+        pi: Inflation Rate
+        theta: Market Tightness
+        v: Vacancies
+        u: Unemployment Rate
+        m: Matches
+        q: Meeting Rate Between Firms And Workers
+        n: Employment
+        y_gross: Gross Output A
+        y_net: Gross Output B
+        mu: Lagrange Multiplier B
+        z: Log TFP
+        mc: Marginal Costs
+        w: Real Wage
+        g: Government Spending
+        z_G: Government Spending Shock
+        log_y_net: Log Output
+        log_v: Log Vacancies
+        log_w: Log Wages
+        log_u: Log Unemployment
+        log_theta: Log Tightness A
+        log_pi: Log Tightness B
       action_columns:
-        - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
+        Inflation Rate  # Управляемая переменная (номинальная процентная ставка)
     output:
       data_path: ./data/processed/Faia_2008  # Путь для сохранения обработанных данных
 
 
 FV_et_al_2007_ABCD:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
 
     parameters:
       R:
         distribution: normal
-        mean: 1.2  # Дефолтное значение
+        mean: 1.2
         std: 0.05
       sigma_w:
         distribution: normal
@@ -482,18 +503,16 @@ FV_et_al_2007_ABCD:
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [2]  # Индекс колонки 'Output Minus Consumption'
+      target_indices: [0]  # Индекс колонки 'output'
       weights: [1.0]       # Вес для стабильности разницы между выпуском и потреблением
     input:
       data_path: ./data/raw/FV_et_al_2007_ABCD_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Output                  # Выпуск
-        - Consumption             # Потребление
-        - Output Minus Consumption  # Разница между выпуском и потреблением
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Productivity of Labor   # Предельная производительность труда
+        y: Output
+        c: Consumption
+        y_m_c: Output Minus Consumption
       action_columns:
-        - Consumption  # Управляемая переменная (потребление)
+        Consumption  # Управляемая переменная (потребление)
     output:
       data_path: ./data/processed/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
 
@@ -564,10 +583,15 @@ Gali_2008_chapter_2:
 
 GarciaCicco_et_al_2010:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
-    flags:
-      RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 0.1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       beta:
         distribution: normal
@@ -603,15 +627,15 @@ GarciaCicco_et_al_2010:
         std: 0.05
       gbar:
         distribution: normal
-        mean: 1.009890776104921  # Дефолтное значение для RBC=0
+        mean: 1.009890776104921  
         std: 0.05
       rho_a:
         distribution: normal
-        mean: 0.864571930755821  # Дефолтное значение для RBC=0
+        mean: 0.864571930755821  
         std: 0.05
       rho_g:
         distribution: normal
-        mean: 0.323027844166870  # Дефолтное значение для RBC=0
+        mean: 0.323027844166870  
         std: 0.05
       rho_nu:
         distribution: normal
@@ -627,52 +651,54 @@ GarciaCicco_et_al_2010:
         std: 0.05
       psi:
         distribution: normal
-        mean: 2.867166241970346  # Дефолтное значение для RBC=0
+        mean: 2.867166241970346
         std: 0.05
       s_share:
         distribution: normal
-        mean: 0.10  # Дефолтное значение
+        mean: 0.10  
         std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [7]  # Индекс колонки 'Trade Balance'
-      weights: [1.0]       # Вес для стабильности торгового баланса
+      target_indices: [5]  # Индекс колонки 'Output'
+      weights: [1.0]       # Вес для стабильности
     input:
       data_path: ./data/raw/GarciaCicco_et_al_2010_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Consumption                        # Потребление (c)
-        - Capital                            # Капитал (k)
-        - Total Factor Productivity          # Совокупная факторная производительность (a)
-        - Hours Worked                       # Отработанные часы (h)
-        - Debt                               # Долг (d)
-        - Output                             # Выпуск (y)
-        - Investment                         # Инвестиции (invest)
-        - Trade Balance                      # Торговый баланс (tb)
-        - Marginal Utility of Consumption    # Предельная полезность потребления (mu_c)
-        - Trade Balance to Output Ratio      # Отношение торгового баланса к выпуску (tb_y)
-        - Output Growth Rate                 # Рост выпуска (g_y)
-        - Consumption Growth Rate            # Рост потребления (g_c)
-        - Investment Growth Rate             # Рост инвестиций (g_invest)
-        - Technology Growth Rate             # Темп роста технологий (g)
-        - Interest Rate                      # Процентная ставка (r)
-        # - Preference Shock                   # Шок предпочтений (nu)
-        # - Country Premium Shock              # Шок премии за риск (mu)
-        - Marginal Utility of Labor     # Предельная полезность труда
-        - Marginal Productivity of Labor  # Предельная производительность труда
-        - Marginal Cost of Investment   # Предельные издержки инвестиций
+        c:  Consumption
+        k:  Capital
+        a:  Total Factor Productivity
+        h:  Hours Worked
+        d:  Debt
+        y:  Output
+        invest:  Investment
+        tb:  Trade Balance
+        mu_c:  Marginal Utility of Consumption
+        tb_y: Trade Balance to Output Ratio
+        g_y:  Output Growth Rate
+        g_c:  Consumption Growth Rate
+        g_invest:  Investment Growth Rate
+        g:  Technology Growth Rate
+        r:  Interest Rate
+        mu:  Country Premium Shock
+        nu:  Preference Shock
       action_columns:
-        - Investment  # Управляемая переменная (инвестиции)
+        Investment  # Управляемая переменная (инвестиции)
     output:
       data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
 
 
 Hansen_1985:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
-    flags:
-      indivisible_labor: [0, 1]
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 0.1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       beta:
         distribution: normal
@@ -702,38 +728,45 @@ Hansen_1985:
         distribution: normal
         mean: 0.53  # Дефолтное значение
         std: 0.05
+      B:
+        distribution: normal
+        mean: 2.85  # Дефолтное значение
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [4]  # Индекс колонки 'Hours Worked'
+      target_indices: [3]  # Индекс колонки 'Output'
       weights: [1.0]       # Вес для стабильности отработанных часов
     input:
       data_path: ./data/raw/Hansen_1985_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Consumption                        # Потребление
-        - Real Wage                          # Реальная заработная плата
-        - Real Interest Rate                 # Реальная процентная ставка
-        - Output                             # Выпуск
-        - Hours Worked                       # Отработанные часы
-        # - Capital Stock                      # Капитал
-        - Investment                         # Инвестиции
-        - Total Factor Productivity          # Совокупная факторная производительность
-        - Productivity                       # Производительность (выпуск на единицу труда)
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Productivity of Labor   # Предельная производительность труда
-        - Marginal Utility of Labor        # Предельная полезность труда
-        - Marginal Cost of Investment      # Предельные издержки инвестиций
+        c: Consumption
+        w: Real Wage
+        r: Real Interest Rate
+        y: Output
+        h: Hours Worked
+        k: Capital Stock
+        invest: Investment
+        lambda: Total Factor Productivity
+        productivity: Productivity
       action_columns:
-        - Investment  # Управляемая переменная (инвестиции)
+        Investment  # Управляемая переменная (инвестиции)
     output:
       data_path: ./data/processed/Hansen_1985  # Путь для сохранения обработанных данных
 
 
 McCandless_2008_Chapter_9:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 0.01
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       beta:
         distribution: normal
@@ -779,26 +812,33 @@ McCandless_2008_Chapter_9:
     input:
       data_path: ./data/raw/McCandless_2008_Chapter_9_raw.csv  # Путь к CSV-файлу с данными
       state_columns:
-        - Real Wage                          # Реальная заработная плата
-        - Real Return On Capital             # Реальная доходность капитала
-        - Real Consumption                   # Реальное потребление
-        # - Capital Stock                      # Капитал
-        - Hours Worked                       # Отработанные часы
-        - Money Stock                        # Денежная масса
-        - Price Level                        # Уровень цен
-        - Growth Rate Of Money Stock         # Темп роста денежной массы
-        - Total Factor Productivity          # Совокупная факторная производительность
-        - Real Output                        # Реальный выпуск
+        w: Real Wage                          # Реальная заработная плата
+        r: Real Return On Capital             # Реальная доходность капитала
+        c: Consumption                   # Реальное потребление
+        k: Capital                      # Капитал
+        h: Hours Worked                       # Отработанные часы
+        m: Money Stock                        # Денежная масса
+        p: Price Level                        # Уровень цен
+        g: Growth Rate Of Money Stock         # Темп роста денежной массы
+        lambda: Total Factor Productivity          # Совокупная факторная производительность
+        y: Output                        # Реальный выпуск
       action_columns:
-        - Real Consumption  # Управляемая переменная (реальное потребление)
+        Consumption  # Управляемая переменная (реальное потребление)
     output:
       data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
 
 
 McCandless_2008_Chapter_13:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       kappa:
         distribution: normal
@@ -852,38 +892,51 @@ McCandless_2008_Chapter_13:
         distribution: normal
         mean: 0.01  # Дефолтное значение
         std: 0.05
+      pistar:
+        distribution: normal
+        mean: 1  # Дефолтное значение
+        std: 0.05
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [13]  # Индекс колонки 'Net Exports'
+      target_indices: [1]  # Индекс колонки 'Real Capital'
       weights: [1.0]        # Вес для стабильности чистого экспорта
     input:
       data_path: ./data/raw/McCandless_2008_Chapter_13_raw.csv
       state_columns:
-        - Real Wage
-        - Real Return On Capital
-        - Real Consumption
-        - Capital Stock
-        - Hours Worked
-        - Money Stock
-        - Price Level
-        - Foreign Price Level
-        - Growth Rate Of Money Stock
-        - Total Factor Productivity
-        - Foreign Bonds
-        - Foreign Interest Rate
-        - Exchange Rate
-        - Net Exports
+        w: Real Wage
+        r: Real Return On Capital
+        c: Real Consumption"
+        k: Capital Stock"
+        h: Hours Worked"
+        m: Money Stock"
+        p: Price Level
+        pstar: Foreign Price Level
+        g: Growth Rate Of Money Stock
+        lambda: Total Factor Productivity
+        b: Foreign Bonds
+        rf: Foreign Interest Rate
+        e: Exchange Rate
+        x: Net Exports
+        AUX_ENDO_LEAD_23: AUX_ENDO_LEAD_23
+        AUX_ENDO_LEAD_45: AUX_ENDO_LEAD_45
       action_columns:
-        - 'Growth Rate Of Money Stock'
+        Real Consumption
     output:
       data_path: ./data/processed/McCandless_2008_Chapter_13
 
 
 RBC_baseline:
   dynare_model_settings:
-    periods: 1000
+    periods: 100
     num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       sigma:
         distribution: normal
@@ -921,44 +974,71 @@ RBC_baseline:
         distribution: normal
         mean: 0.2038  # Дефолтное значение
         std: 0.05
+      beta:
+        distribution: normal
+        mean: 0.9923  
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 1.81  
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.01583  
+        std: 0.001
+      gammax:
+        distribution: normal
+        mean: 1.00822  
+        std: 0.05
+      g_ss:
+        distribution: normal
+        mean: 0.2123  
+        std: 0.05
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [1]  # Индекс колонки 'Consumption'
+      target_indices: [0]  # Индекс колонки 'Output'
       weights: [1.0]       # Вес для стабильности потребления
     input:
       data_path: ./data/raw/RBC_baseline_raw.csv  # Путь к исходным данным
       state_columns:
-        - Output                  # y
-        - Consumption             # c
-        - Capital                 # k
-        - Hours Worked            # l
-        - Total Factor Productivity  # z
-        - Government Spending     # ghat
-        - Annualized Interest Rate  # r
-        - Real Wage               # w
-        - Investment              # invest
-        # - Log Output              # log_y
-        - Log Capital Stock       # log_k
-        # - Log Consumption         # log_c
-        - Log Labor               # log_l
-        # - Log Real Wage           # log_w
-        # - Log Investment          # log_invest
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Productivity of Labor   # Предельная производительность труда
-        - Marginal Utility of Labor        # Предельная полезность труда
-        - Marginal Cost of Capital         # Предельные издержки капитала
+        y: Output                  # y
+        c: Consumption             # c
+        k: Capital                 # k
+        l: Hours Worked            # l
+        z: Total Factor Productivity  # z
+        ghat: Government Spending     # ghat
+        r: Annualized Interest Rate  # r
+        w: Real Wage               # w
+        invest: Investment              # invest
+        log_y: Log Output
+        log_k: Log Capital Stock       # log_k
+        log_c: Log Consumption         # log_c
+        log_l: Log Labor               # log_l
+        log_w: Log Real Wage           # log_w
+        log_invest: Log Investment          # log_invest
+        # - Marginal Utility of Consumption  # Предельная полезность потребления
+        # - Marginal Productivity of Labor   # Предельная производительность труда
+        # - Marginal Utility of Labor        # Предельная полезность труда
+        # - Marginal Cost of Capital         # Предельные издержки капитала
       action_columns:
-        - 'Government Spending'   # ghat (управляемая переменная)
+        Government Spending   # ghat (управляемая переменная)
     output:
       data_path: ./data/processed/RBC_baseline  # Путь для сохранения обработанных данных
 
 
 RBC_capitalstock_shock:
   dynare_model_settings:
-    periods: 300
-    num_simulations: 1
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       alpha:
         distribution: normal
@@ -982,42 +1062,69 @@ RBC_capitalstock_shock:
         std: 0.05
       delta:
         distribution: normal
-        mean: 0.024  # Дефолтное значение (вычислено как i_y / k_y)
+        mean: 0.025  # Дефолтное значение (вычислено как i_y / k_y)
         std: 0.05
-      # l_ss:
-      #   distribution: normal
-      #   mean: 0.33  # Дефолтное значение
-      #   std: 0.05
+      psi:
+        distribution: normal
+        mean: 0.573  #По формуле
+        std: 0.05
+      l_ss:
+        distribution: normal
+        mean: 0.33  # Def
+        std: 0.05
+      k_ss:
+        distribution: normal
+        mean: 10.80  # Дефолтное значение (вычислено как i_y / k_y)
+        std: 0.05
+      i_ss:
+        distribution: normal
+        mean: 0.261 #По формуле
+        std: 0.05
+      y_ss:
+        distribution: normal
+        mean: 1.047  #По формуле
+        std: 0.05
+      c_ss:
+        distribution: normal
+        mean: 0.5728  # По формуле
+        std: 0.01
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [2]  # Индекс колонки 'Capital'
+      target_indices: [0]  # Индекс колонки 'Output'
       weights: [1.0]       # Вес для стабильности капитала
 
     input:
       data_path: ./data/raw/RBC_capitalstock_shock_raw.csv  # Путь к исходным данным
       state_columns:
-        - Output                  # y
-        - Consumption             # c
-        - Capital                 # k
-        - Hours Worked            # l
-        - Total Factor Productivity  # z
-        - Investment              # invest
-        - Marginal Utility of Consumption  # Предельная полезность потребления
-        - Marginal Productivity of Labor   # Предельная производительность труда
-        - Marginal Utility of Labor        # Предельная полезность труда
-        - Marginal Cost of Capital         # Предельные издержки капитала
+        y: Output                  # y
+        c: Consumption             # c
+        k: Capital                 # k
+        l: Hours Worked            # l
+        z: Total Factor Productivity  # z
+        invest: Investment              # invest
+        # - Marginal Utility of Consumption  # Предельная полезность потребления
+        # - Marginal Productivity of Labor   # Предельная производительность труда
+        # - Marginal Utility of Labor        # Предельная полезность труда
+        # - Marginal Cost of Capital         # Предельные издержки капитала
       action_columns:
-        - 'Investment'            # invest (управляемая переменная)
+        Investment           # invest (управляемая переменная)
     output:
       data_path: ./data/processed/RBC_capitalstock_shock  # Путь для сохранения обработанных данных
 
 
 RBC_news_shock_model:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 1
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       sigma:
         distribution: normal
@@ -1047,6 +1154,22 @@ RBC_news_shock_model:
         distribution: normal
         mean: 0.97  # Дефолтное значение
         std: 0.05
+      beta:
+        distribution: normal
+        mean:  0.9923  # Дефолтное значение
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 1.81  # Дефолтное значение
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.01583  # Дефолтное значение
+        std: 0.001
+      gammax:
+        distribution: normal
+        mean: 1.00822  # (1 + n) * (1 + x)
+        std: 0.01
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
@@ -1055,24 +1178,39 @@ RBC_news_shock_model:
     input:
       data_path: ./data/raw/RBC_news_shock_model_raw.csv  # Путь к исходным данным
       state_columns:
-        - Output                  # y
-        - Consumption             # c
-        - Capital                 # k
-        - Hours Worked            # l
-        - Total Factor Productivity  # z
-        - Annualized Interest Rate  # r
-        - Real Wage               # w
-        - Investment              # invest
+        y: Output                  # y
+        c: Consumption             # c
+        k: Capital                 # k
+        l: Hours Worked            # l
+        z: Total Factor Productivity  # z
+        r: Annualized Interest Rate  # r
+        w: Real Wage               # w
+        invest: Investment         # invest
+        AUX_EXO_LAG_8_0: AUX_EXO_LAG_8_0
+        AUX_EXO_LAG_8_1: AUX_EXO_LAG_8_1
+        AUX_EXO_LAG_8_2: AUX_EXO_LAG_8_2
+        AUX_EXO_LAG_8_3: AUX_EXO_LAG_8_3
+        AUX_EXO_LAG_8_4: AUX_EXO_LAG_8_4
+        AUX_EXO_LAG_8_5: AUX_EXO_LAG_8_5
+        AUX_EXO_LAG_8_6: AUX_EXO_LAG_8_6
+        AUX_EXO_LAG_8_7: AUX_EXO_LAG_8_7
       action_columns:
-        - 'Investment'            # invest (управляемая переменная)
+        Investment           # invest (управляемая переменная)
     output:
       data_path: ./data/processed/RBC_news_shock_model  # Путь для сохранения обработанных данных
 
 
 RBC_state_dependent_GIRF:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 0.01
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       sigma:
         distribution: normal
@@ -1110,26 +1248,67 @@ RBC_state_dependent_GIRF:
         distribution: normal
         mean: 0.2038  # Дефолтное значение
         std: 0.05
+      beta:
+        distribution: normal
+        mean: 0.9923  #По формуле
+        std: 0.05
+      psi:
+        distribution: normal
+        mean: 0.573  #По формуле
+        std: 0.05
+      delta:
+        distribution: normal
+        mean: 0.01583  #По формуле
+        std: 0.05
+      gammax:
+        distribution: normal
+        mean: 1.00821 #По формуле
+        std: 0.05
+      l_ss:
+        distribution: normal
+        mean: 0.33  #По формуле
+        std: 0.05
+      k_ss:
+        distribution: normal
+        mean: 10.88  #По формуле
+        std: 0.05
+      i_ss:
+        distribution: normal
+        mean: 0.261 #По формуле
+        std: 0.05
+      y_ss:
+        distribution: normal
+        mean: 1.047  #По формуле
+        std: 0.05
+      g_ss:
+        distribution: normal
+        mean: 0.2134  #По формуле
+        std: 0.05
+      c_ss:
+        distribution: normal
+        mean: 0.5728  # По формуле
+        std: 0.01
+      
 
   rl_env_settings:
     reward: lib.rewards.stability_reward
     reward_kwargs:
-      target_indices: [1]  # Индекс колонки 'Consumption'
+      target_indices: [0]  # Индекс колонки 'Output'
       weights: [1.0]       # Вес для стабильности потребления
     input:
       data_path: ./data/raw/RBC_state_dependent_GIRF_raw.csv  # Путь к исходным данным
       state_columns:
-        - Output                  # y
-        - Consumption             # c
-        - Capital                 # k
-        - Hours Worked            # l
-        - Total Factor Productivity  # z
-        - Government Spending     # ghat
-        - Annualized Interest Rate  # r
-        - Real Wage               # w
-        - Investment              # invest
+        y: Output
+        c: Consumption
+        k: Capital
+        l: Hours Worked
+        z: Total Factor Productivity
+        ghat: Government Spending
+        r: Annualized Interest Rate
+        w: Real Wage
+        invest: Investment
       action_columns:
-        - 'Government Spending'   # ghat (управляемая переменная)
+        Government Spending   # Траты государства - управляемая переменная
     output:
       data_path: ./data/processed/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 
@@ -1222,8 +1401,15 @@ SGU_2003:
 
 SGU_2004:
   dynare_model_settings:
-    periods: 1000
-    num_simulations: 100
+    periods: 100
+    num_simulations: 50
+
+    shocks:
+      n_shocks: 5
+      start_value: 0.01
+      min_step: 0.01
+      max_step: 0.05
+
     parameters:
       BETTA:
         distribution: normal
@@ -1254,13 +1440,11 @@ SGU_2004:
     input:
       data_path: ./data/raw/SGU_2004_raw.csv  # Путь к исходным данным
       state_columns:
-        - Consumption             # c
-        - Capital                 # k
-        # - Technology Shock        # a
-        # Если экзогенные шоки включены в данные:
-        # - Technology Shock Innovation  # epsilon
+        c: Consumption
+        k: Capital
+        a: Technology Shock
       action_columns:
-        - 'Capital'               # k (управляемая переменная)
+        Capital              # k (управляемая переменная)
     output:
       data_path: ./data/processed/SGU_2004  # Путь для сохранения обработанных данных
 

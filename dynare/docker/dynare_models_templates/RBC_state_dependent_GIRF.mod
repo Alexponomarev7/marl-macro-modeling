@@ -8,8 +8,7 @@ var y  (long_name='Output')
     w  (long_name='Real Wage')
     invest  (long_name='Investment');
 
-varexo eps_z  (long_name='TFP Shock')
-       eps_g  (long_name='Government Spending Shock');
+varexo eps_g  (long_name='Government Spending Shock');
 
 parameters beta  (long_name='Discount Factor')
            psi  (long_name='Labor Disutility Parameter')
@@ -46,7 +45,7 @@ model;
     exp(c)^(-sigma) = beta / gammax * exp(c(+1))^(-sigma) * (alpha * exp(z(+1)) * (exp(k) / exp(l(+1)))^(alpha - 1) + (1 - delta));
     gammax * exp(k) = exp(y) - exp(c) + (1 - delta) * exp(k(-1)) - g_ss * exp(ghat);
     exp(y) = exp(z) * exp(k(-1))^alpha * exp(l)^(1 - alpha);
-    z = rho * z(-1) + eps_z;
+    z = rho * z(-1);
     ghat = rhog * ghat(-1) + eps_g;
     exp(w) = (1 - alpha) * exp(y) / exp(l);
     r = 4 * alpha * exp(y) / exp(k(-1));
@@ -76,11 +75,11 @@ steady_state_model;
 end;
 
 shocks;
-    var eps_z = 0.0068^2;
-    var eps_g = 0.0105^2;
+    var eps_g; periods {shock_periods}; values {shock_values};
 end;
 
 steady;
 check;
 
-stoch_simul(order=2, irf=0, periods={periods});
+perfect_foresight_setup(periods={periods});
+perfect_foresight_solver;
