@@ -1,7 +1,7 @@
 var y              (long_name='Output')
     c              (long_name='Consumption')
     k              (long_name='Capital')
-    l              (long_name='Hours Worked')
+    l              (long_name='Labor')
     z              (long_name='Total Factor Productivity')
     ghat           (long_name='Government Spending')
     r              (long_name='Annualized Interest Rate')

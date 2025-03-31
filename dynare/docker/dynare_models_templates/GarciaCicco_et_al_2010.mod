@@ -1,7 +1,7 @@
 var c                (long_name='Consumption')
     k                (long_name='Capital')
     a                (long_name='Total Factor Productivity')
-    h                (long_name='Hours Worked')
+    h                (long_name='Labor')
     d                (long_name='Debt')
     y                (long_name='Output')
     invest           (long_name='Investment')

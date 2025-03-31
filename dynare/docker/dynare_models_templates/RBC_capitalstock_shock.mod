@@ -1,7 +1,7 @@
 var y  (long_name='Output')
     c  (long_name='Consumption')
     k  (long_name='Capital')
-    l  (long_name='Hours Worked')
+    l  (long_name='Labor')
     z  (long_name='Total Factor Productivity')
     invest (long_name='Investment');
 
@@ -14,7 +14,7 @@ parameters beta  (long_name='Discount Factor')
            rho   (long_name='Persistence TFP Shock')
            i_y   (long_name='Investment-Output Ratio')
            k_y   (long_name='Capital-Output Ratio')
-           l_ss  (long_name='Steady State Hours Worked')
+           l_ss  (long_name='Steady State Labor')
            k_ss  (long_name='Steady State Capital')
            i_ss  (long_name='Steady State Investment')
            y_ss  (long_name='Steady State Output')

@@ -12,7 +12,7 @@ import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from lib.utility_funcs import calculate_utility
+from lib.utility_funcs import calculate_macro_reward
 
 
 def get_reward_object(reward_object_path: str) -> Optional[Callable]:
@@ -103,7 +103,7 @@ def dynare_trajectories2rl_transitions(
         transitions.append(transition)
 
     result = pd.DataFrame(transitions)
-    result["reward"] = calculate_utility(data)
+    result["reward"] = calculate_macro_reward(data)
 
     return result
 
