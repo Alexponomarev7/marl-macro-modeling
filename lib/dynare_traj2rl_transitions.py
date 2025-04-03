@@ -12,6 +12,8 @@ import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from lib.utility_funcs import calculate_macro_reward
+
 
 def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     """Imports and returns a reward object from a specified path.
@@ -78,7 +80,7 @@ def dynare_trajectories2rl_transitions(
             continue
 
         action = next_action_columns_values - action_columns_values
-        reward = reward_func(state, action, next_state, **reward_kwargs)
+        # reward = reward_func(state, action, next_state, **reward_kwargs)
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
@@ -90,7 +92,7 @@ def dynare_trajectories2rl_transitions(
         transition = {
             "state": state,
             "action": action,
-            "reward": reward,
+            # "reward": reward,
             "truncated": False,
             "info": info,
         }
@@ -100,7 +102,10 @@ def dynare_trajectories2rl_transitions(
 
         transitions.append(transition)
 
-    return pd.DataFrame(transitions)
+    result = pd.DataFrame(transitions)
+    result["reward"] = calculate_macro_reward(data)
+
+    return result
 
 
 def process_model_data(model_name: str, model_params: dict, raw_data_path: str, output_dir: str) -> None:
@@ -109,16 +114,22 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
     rl_env_conf = model_params["rl_env_settings"]
 
     # Extract configuration number from the filename (if any)
-    config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
-    config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
+    # config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
 
+    # config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
+
+    config_suffix = raw_data_path.split("_")[-1][:-4]
     # Generate output path
-    output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
+    output_path = Path(output_dir) / f"{model_name}_{config_suffix}.parquet"
+
+    all_columns = set(rl_env_conf["input"]["all_columns"].values())
+    action_columns = set(rl_env_conf["input"]["action_columns"].values())
+    state_columns = all_columns - action_columns
 
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
-        state_columns=rl_env_conf["input"]["state_columns"],
-        action_columns=rl_env_conf["input"]["action_columns"],
+        state_columns=list(state_columns),
+        action_columns=list(action_columns),
         reward_func=get_reward_object(rl_env_conf["reward"]),
         reward_kwargs=rl_env_conf.get("reward_kwargs", None),
     )
@@ -126,8 +137,8 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
 
     logger.info("Saving data...")
 
-    transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
-    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"])] * len(transitions))
+    transitions["action_description"] = pd.Series([list(action_columns)] * len(transitions))
+    transitions["state_description"] = pd.Series([list(state_columns)] * len(transitions))
 
     transitions.to_parquet(output_path)
 
@@ -143,10 +154,11 @@ def extract_model_name(filename: str) -> str:
         str: The base model name, e.g., "Born_Pfeifer_2018_MP".
     """
     # Удаляем суффикс "_config_*_raw.csv"
-    if "_config_" in filename and "_raw" in filename:
-        return filename.split("_config_")[0]
+    # if "_config_" in filename and "_raw" in filename:
+    #     return filename.split("_config_")[0]
     # Если суффикса нет, возвращаем имя файла без расширения
-    return filename.replace("_raw", "")
+    # return filename.replace("_raw", "")
+    return "_".join(filename.split("_")[:-1])
 
 
 def main() -> None:
@@ -164,7 +176,7 @@ def main() -> None:
     os.makedirs(output_dir, exist_ok=True)
 
     # Find all raw data files
-    raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
+    raw_data_files = list(Path(raw_data_dir).glob("*.csv"))
 
     for raw_data_file in raw_data_files:
         # Extract base model name from the filename

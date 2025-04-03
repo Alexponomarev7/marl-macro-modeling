@@ -35,9 +35,19 @@ build_julia_dynare_image:
 dynare2rl:
 	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
 
+.PHONY: generate_dynare_models
+generate_dynare_models:
+	rm -r dynare/docker/dynare_models
+	mkdir dynare/docker/dynare_models
+	@$(PYTHON_INTERPRETER) dynare/docker/main.py
+
 ## Run Dynare models simulations
 .PHONY: dynare
 dynare:
+	rm -r data/raw
+	mkdir data/raw
+	rm -r data/processed
+	mkdir data/processed
 	docker run -it \
 	-v ./dynare/docker/dynare_models:/app/input \
 	-v ./data/raw/:/app/output \

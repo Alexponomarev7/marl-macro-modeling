@@ -4,13 +4,13 @@ using CSV
 using DataFrames
 using YAML
 
-function run_model(input_file::String, output_file::String, parameters::Vector{String}, max_retries=3)
+function run_model(input_file::String, output_file::String, variable_mapping::Dict{Any, Any}, max_retries=3)
     retries = 0
     while retries < max_retries
         println("Running model: $input_file (attempt $(retries + 1))")
         try
-            # Запуск модели с параметрами
-            context = dynare(input_file, parameters...)
+            # Запуск модели
+            context = dynare(input_file)
             simul_length = length(context.results.model_results[1].simulations)
             if simul_length > 0
                 println("Successful simulation!")
@@ -21,6 +21,14 @@ function run_model(input_file::String, output_file::String, parameters::Vector{S
             # Сохранение результатов
             data = context.results.model_results[1].simulations[1].data
             dataframe = DataFrame(data)
+
+            # Переименование колонок на основе маппинга
+            for (original_name, new_name) in variable_mapping
+                if hasproperty(dataframe, Symbol(original_name))
+                    rename!(dataframe, Symbol(original_name) => Symbol(new_name))
+                end
+            end
+
             CSV.write(output_file, dataframe)
             println("Model $input_file completed successfully.")
             return
@@ -54,39 +62,28 @@ function parse_commandline()
     return parse_args(s)
 end
 
-function generate_parameter_combinations(model_settings)
-    # Создаем список всех возможных комбинаций параметров
-    parameter_combinations = Vector{Vector{String}}()  # Явно указываем тип
-    keys_list = collect(keys(model_settings))
-    values_list = collect(values(model_settings))
+function extract_model_name(file_name::String)
+    """
+    Извлекает базовое имя модели из имени файла, удаляя хэш и расширение.
+    Например, для "Gali_2008_chapter_2_2b8f6481.mod" вернет "Gali_2008_chapter_2".
+    """
+    # Удаляем расширение .mod
+    base_name = replace(file_name, ".mod" => "")
+    # Удаляем хэш (последний сегмент после последнего '_')
+    model_name = join(split(base_name, '_')[1:end-1], '_')
+    return model_name
+end
 
-    # Рекурсивная функция для генерации комбинаций
-    function generate_combinations(current_combination::Vector{String}, index, keys_list, values_list)
-        if index > length(keys_list)
-            push!(parameter_combinations, current_combination)
-            return
-        end
-
-        key = keys_list[index]
-        value = values_list[index]
-
-        if isa(value, Vector)
-            # Если значение — это список, перебираем все его элементы
-            for v in value
-                new_combination = copy(current_combination)
-                push!(new_combination, "-D$(key)=$(string(v))")
-                generate_combinations(new_combination, index + 1, keys_list, values_list)
-            end
-        else
-            # Если значение — это скаляр, добавляем его в комбинацию
-            new_combination = copy(current_combination)
-            push!(new_combination, "-D$(key)=$(string(value))")
-            generate_combinations(new_combination, index + 1, keys_list, values_list)
-        end
-    end
-
-    generate_combinations(String[], 1, keys_list, values_list)
-    return parameter_combinations
+function extract_hash(file_name::String)
+    """
+    Извлекает хэш из имени файла.
+    Например, для "Gali_2008_chapter_2_2b8f6481.mod" вернет "2b8f6481".
+    """
+    # Удаляем расширение .mod
+    base_name = replace(file_name, ".mod" => "")
+    # Извлекаем хэш (последний сегмент после последнего '_')
+    hash = split(base_name, '_')[end]
+    return hash
 end
 
 function main()
@@ -105,28 +102,28 @@ function main()
 
     # Запуск моделей
     for file_name in input_files
-        model_name = split(file_name, ".")[1]  # Имя модели без расширения
-        if haskey(config, model_name)
-            # Извлечение параметров для модели
-            model_settings = config[model_name]["dynare_model_settings"]
-            parameter_combinations = generate_parameter_combinations(model_settings)
+        # Извлекаем базовое имя модели (без хэша)
+        model_name = extract_model_name(file_name)
 
-            # Запуск модели для каждой комбинации параметров
-            for (i, parameters) in enumerate(parameter_combinations)
-                println("Running model $model_name with parameters: ", parameters)
-                input_file = joinpath(input_dir, file_name)
-                output_file = joinpath(output_dir, join([model_name, "config_$(i)", "raw.csv"], "_"))
-                run_model(input_file, output_file, parameters)
-                println("Output saved to $output_file")
-            end
-        else
-            # Если параметры для модели не указаны, используем пустой массив
-            parameters = String[]
-            println("No parameters found for $model_name. Running with default settings.")
+        if haskey(config, model_name)
+            # Извлечение маппинга переменных
+            rl_env_settings = config[model_name]["rl_env_settings"]
+            variable_mapping = rl_env_settings["input"]["all_columns"]
+
+            # Путь к входному файлу модели
             input_file = joinpath(input_dir, file_name)
-            output_file = joinpath(output_dir, join([model_name, "raw.csv"], "_"))
-            run_model(input_file, output_file, parameters)
+
+            # Извлекаем хэш из имени файла
+            hash = extract_hash(file_name)
+
+            # Путь к выходному файлу (с хэшем)
+            output_file = joinpath(output_dir, "$(model_name)_$(hash).csv")
+
+            # Запуск модели и переименование колонок
+            run_model(input_file, output_file, variable_mapping)
             println("Output saved to $output_file")
+        else
+            println("No configuration found for $model_name. Skipping.")
         end
     end
 end
