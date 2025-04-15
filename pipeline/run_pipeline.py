@@ -148,7 +148,7 @@ class EconomicPolicyModel(L.LightningModule):
             actions=actions,
             actions_info=actions_info,
             rewards=rewards,
-            task_ids=task_ids, 
+            task_ids=task_ids,
             # padding_mask=padding_mask
         )
 
@@ -218,16 +218,16 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
-    # def on_fit_end(self):
-    #     """Perform environment-based validation at the end of training."""
-    #     if not self.test_envs:
-    #         return
+        # def on_fit_end(self):
+        #     """Perform environment-based validation at the end of training."""
+        #     if not self.test_envs:
+        #         return
 
-    #     for env_name, env in self.test_envs:
-    #         avg_reward = self._validate_with_env(env)
-    #         self.log(f'env_reward/{env_name}', avg_reward)
+        #     for env_name, env in self.test_envs:
+        #         avg_reward = self._validate_with_env(env)
+        #         self.log(f'env_reward/{env_name}', avg_reward)
 
-    def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
+        # def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
         """Environment dynamic validation"""
         total_rewards = []
 
@@ -296,6 +296,8 @@ class EconomicPolicyModel(L.LightningModule):
                         actions=actions,
                         rewards=rewards,
                         task_ids=task_ids,
+                        states_info=None,
+                        actions_info=None,
                         # padding_mask=~attention_mask
                     )
                     action = predicted_actions[0, -1].cpu().numpy()
@@ -364,7 +366,8 @@ class DatasetGenerator:
 def main(cfg: DictConfig) -> None:
     """Main entry point of the training pipeline."""
     # Initialize configuration
-    cfg.metadata.run_id = get_run_id()
+    if 'run_id' not in cfg.metadata or not cfg.metadata.run_id:
+        cfg.metadata.run_id = get_run_id()
     cfg = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     metadata = cfg['metadata']
 
@@ -409,6 +412,8 @@ def main(cfg: DictConfig) -> None:
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
         accelerator='gpu' if torch.cuda.is_available() else 'cpu',
+        devices=1,
+        strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True),
         callbacks=[
             ModelCheckpoint(
                 dirpath='checkpoints',
@@ -417,7 +422,8 @@ def main(cfg: DictConfig) -> None:
                 monitor='val_loss'
             )
         ],
-        val_check_interval=cfg['train']['val_freq']
+        val_check_interval=cfg['train']['val_freq'],
+        # logger=L.pytorch.loggers.ClearMLLogger(task=task) if task else True
     )
 
     # Train model
