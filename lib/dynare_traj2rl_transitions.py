@@ -7,6 +7,8 @@ import os
 import re
 from pathlib import Path
 
+import yaml
+
 from loguru import logger
 import hydra
 import pyarrow as pa
@@ -44,8 +46,8 @@ def dynare_trajectories2rl_transitions(
     input_data_path: str,
     state_columns: list[str],
     action_columns: list[str],
-    reward_func: Callable,
-    reward_kwargs: Optional[dict] = None,
+    reward_column: str,
+    discount_factor: float,
 ) -> pd.DataFrame:
     """Converts Dynare trajectories into reinforcement learning transitions.
 
@@ -59,54 +61,47 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
-    if reward_kwargs is None:
-        reward_kwargs = {}
-
     data = pd.read_csv(input_data_path)
-
-    state = np.zeros(len(state_columns))
-    action_columns_values = np.zeros(len(action_columns))
-
     transitions = []
+
+    current_discount_factor = 1.0
+    accumulated_reward = 0.0
+
     for idx, row in data.iterrows():
-        next_state = np.array([row.get(col, np.nan) for col in state_columns])
-        next_action_columns_values = row[action_columns].to_numpy()
+        state = row[state_columns].to_numpy()
+        action = row[action_columns].to_numpy()
+        reward = float(row[reward_column])
 
-        if idx == 0:
-            state = next_state
-            action_columns_values = next_action_columns_values
-            continue
-
-        action = next_action_columns_values - action_columns_values
-        reward = reward_func(state, action, next_state, **reward_kwargs)
+        accumulated_reward += reward * current_discount_factor
+        current_discount_factor *= discount_factor
 
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
-
-        # parquet problems with empty dict
-        if len(info) == 0:
-            info = {"dummy": "dummy"}
-
+        info["row_id"] = idx
         transition = {
             "state": state,
             "action": action,
             "reward": reward,
+            "accumulated_reward": accumulated_reward,
             "truncated": False,
             "info": info,
         }
-
-        state = next_state
-        action_columns_values = next_action_columns_values
 
         transitions.append(transition)
 
     return pd.DataFrame(transitions)
 
 
-def process_model_data(model_name: str, model_params: dict, raw_data_path: str, output_dir: str) -> None:
+def process_model_data(
+    model_name: str,
+    model_config: dict,
+    model_params: dict,
+    raw_data_path: str,
+    output_dir: str,
+) -> None:
     """Processes raw Dynare data for a specific model and configuration."""
     logger.info(f"Processing {model_name} with data from {raw_data_path}...")
-    rl_env_conf = model_params["rl_env_settings"]
+    rl_env_conf = model_config["rl_env_settings"]
 
     # Extract configuration number from the filename (if any)
     config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
@@ -119,8 +114,9 @@ def process_model_data(model_name: str, model_params: dict, raw_data_path: str, 
         input_data_path=raw_data_path,
         state_columns=rl_env_conf["input"]["state_columns"],
         action_columns=rl_env_conf["input"]["action_columns"],
-        reward_func=get_reward_object(rl_env_conf["reward"]),
-        reward_kwargs=rl_env_conf.get("reward_kwargs", None),
+        reward_column=rl_env_conf["input"]["utility_column"],
+        discount_factor=model_params["discount_rate"],
+
     )
     logger.info("Transitions successfully generated.")
 
@@ -167,18 +163,19 @@ def main() -> None:
     raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
 
     for raw_data_file in raw_data_files:
-        # Extract base model name from the filename
+        config_data_file = Path(str(raw_data_file).replace("_raw.csv", "_config.yml"))
+        with open(config_data_file, 'r') as f:
+            model_params = yaml.load(f, Loader=yaml.FullLoader)
+        
         model_name = extract_model_name(raw_data_file.stem)
 
-        if model_name in config:
-            process_model_data(
-                model_name=model_name,
-                model_params=config[model_name],
-                raw_data_path=str(raw_data_file),
-                output_dir=output_dir,
-            )
-        else:
-            logger.warning(f"No configuration found for model: {model_name}")
+        process_model_data(
+            model_name=model_name,
+            model_config=config[model_name],
+            model_params=model_params,
+            raw_data_path=str(raw_data_file),
+            output_dir=output_dir,
+        )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from typing import Optional
 
 
@@ -16,32 +17,8 @@ def l2_norm(state: np.ndarray, action: np.ndarray, next_state: np.ndarray) -> fl
     return -np.sqrt(np.sum((next_state - state) ** 2))
 
 
-def stability_reward(
-    state: np.ndarray,
-    action: np.ndarray,
-    next_state: np.ndarray,
-    target_indices: list[int],
-    weights: Optional[list[float]] = None,
-) -> float:
-    """
-    Универсальная функция для расчета награды за стабильность целевых показателей.
-
-    Args:
-        state: Текущее состояние.
-        action: Действие.
-        next_state: Следующее состояние.
-        target_indices: Индексы целевых показателей в массиве состояния.
-        weights: Веса для каждого целевого показателя (по умолчанию равны 1).
-
-    Returns:
-        Награда, рассчитанная как взвешенная сумма изменений целевых показателей.
-    """
-    if weights is None:
-        weights = [1.0] * len(target_indices)
-    reward = 0.0
-    for idx, weight in zip(target_indices, weights):
-        reward -= weight * np.abs(next_state[idx] - state[idx])
-    return reward
+def column_reward(state: pd.Series, target_column: str) -> float:
+    return state[target_column]
 
 
 def utility_reward(
