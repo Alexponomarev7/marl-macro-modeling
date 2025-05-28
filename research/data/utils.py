@@ -35,3 +35,4 @@ def plot_data_file(model_name: str, sample_id: int):
     return combined_df
 
 def generate_model_with_custom_params(model_name: str, params: dict):
+    pass

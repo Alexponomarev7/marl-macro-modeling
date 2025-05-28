@@ -9,12 +9,38 @@ function sample_from_range(range::Vector{<:Real})
     return rand() * (range[2] - range[1]) + range[1]
 end
 
+function dump_context_work(context, output_path::String = "config_dump.yml")
+    config = Dict{String, Any}()
+
+    for name in fieldnames(typeof(context.work))
+        field_value = getfield(context.work, name)
+
+        try
+            # Преобразуем к сериализуемому виду
+            if isa(field_value, AbstractDict)
+                config[string(name)] = Dict(string(k) => string(v) for (k, v) in field_value)
+            elseif isa(field_value, AbstractArray)
+                config[string(name)] = [string(x) for x in field_value]
+            elseif isa(field_value, Number) || isa(field_value, String) || isa(field_value, Bool)
+                config[string(name)] = field_value
+            else
+                # fallback для любых прочих типов
+                config[string(name)] = string(field_value)
+            end
+        catch e
+            @warn "Skipping field $name due to error: $e"
+        end
+    end
+
+    YAML.write_file(output_path, config)
+    println("✅ Dumped context.work to $output_path")
+end
+
 function run_model(input_file::String, output_file::String, parameters::Vector{String}, max_retries=3)
     retries = 0
     while retries < max_retries
         println("Running model: $input_file (attempt $(retries + 1))")
         try
-            # Run model with parameters
             context = dynare(input_file, parameters...)
             simul_length = length(context.results.model_results[1].simulations)
             if simul_length > 0
@@ -23,14 +49,23 @@ function run_model(input_file::String, output_file::String, parameters::Vector{S
                 println("Simulation failed!")
             end
 
-            # Save results
+            # Save simulation results
             data = context.results.model_results[1].simulations[1].data
             dataframe = DataFrame(data)
             CSV.write(output_file, dataframe)
+
+            params_output = replace(output_file, ".csv" => "_params.yml")
+            dump_context_work(context, params_output)            
             println("Model $input_file completed successfully.")
             return
         catch e
-            println("Error running model $input_file: $e")
+            println("Error running model $input_file:")
+            println("Error message: $e")
+            println("Stack trace:")
+            for (exc, bt) in Base.catch_stack()
+                showerror(stdout, exc, bt)
+                println()
+            end
             retries += 1
             if retries < max_retries
                 println("Retrying model $input_file...")

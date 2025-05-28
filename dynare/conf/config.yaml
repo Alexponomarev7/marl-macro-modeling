@@ -3,7 +3,7 @@ Aguiar_Gopinath_2007:
     periods: 1000
     parameter_ranges:
       discount_rate: [0.95, 0.99]                # Discount rate (beta)
-      risk_aversion: [1.5, 3.0]                  # Risk aversion (sigma)
+      risk_aversion: [1.5, 2.0]                  # Risk aversion (sigma)
       persistence_gov_spending: [0.7, 0.95]      # Persistence of gov spending (rho_G)
       persistence_productivity: [0.7, 0.95]      # Persistence of productivity (rho_A)
       capital_share: [0.3, 0.4]                  # Capital share (alpha_K)
@@ -23,6 +23,8 @@ Aguiar_Gopinath_2007:
       state_columns:
         - Capital
         - Debt
+        - Productivity
+        - Government Spending
       action_columns:
         - Consumption
         - Labor
