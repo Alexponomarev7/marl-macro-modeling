@@ -8,11 +8,63 @@ import re
 from pathlib import Path
 
 import yaml
+import subprocess
 
 from loguru import logger
 import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
+import traceback
+
+def sample_from_range(range_values: list[float]) -> float:
+    return np.random.random() * (range_values[1] - range_values[0]) + range_values[0]
+
+def dump_context_work(context: dict, output_path: str = "config_dump.yml") -> None:
+    config = {}
+
+    for name, field_value in context.items():
+        try:
+            if isinstance(field_value, dict):
+                config[str(name)] = {str(k): str(v) for k, v in field_value.items()}
+            elif isinstance(field_value, (list, tuple)):
+                config[str(name)] = [str(x) for x in field_value]
+            elif isinstance(field_value, (int, float, str, bool)):
+                config[str(name)] = field_value
+            else:
+                # Fallback for other types
+                config[str(name)] = str(field_value)
+        except Exception as e:
+            logger.warning(f"Skipping field {name} due to error: {e}")
+
+    with open(output_path, 'w') as f:
+        yaml.dump(config, f)
+
+    logger.info(f"✅ Dumped context.work to {output_path}")
+
+def generate_parameter_combinations(model_settings: dict, num_samples: int) -> tuple[list[list[str]], list[dict]]:
+    parameter_combinations = []
+    parameter_values = []
+    
+    for _ in range(num_samples):
+        current_combination = []
+        current_values = {}
+        
+        # Handle periods separately since it's not a range
+        if "periods" in model_settings:
+            current_combination.append(f"-Dperiods={model_settings['periods']}")
+            current_values["periods"] = model_settings["periods"]
+        
+        # Sample from parameter ranges
+        if "parameter_ranges" in model_settings:
+            for param, range_values in model_settings["parameter_ranges"].items():
+                value = sample_from_range(range_values)
+                current_combination.append(f"-D{param}={value}")
+                current_values[param] = value
+        
+        parameter_combinations.append(current_combination)
+        parameter_values.append(current_values)
+    
+    return parameter_combinations, parameter_values
 
 
 def get_reward_object(reward_object_path: str) -> Optional[Callable]:
@@ -41,12 +93,95 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     assert reward_object is not None, f"reward object is not imported {reward_object_path=}"
     return reward_object
 
+def run_model(input_file: Path, output_file: Path, parameters: list[str], max_retries: int = 3) -> None:
+    """Run a Dynare model with specified parameters and save results.
+    
+    Args:
+        input_file: Path to the Dynare .mod file
+        output_file: Path to save the output CSV
+        periods: Number of simulation periods
+        parameters: List of parameter strings to pass to Dynare
+        max_retries: Maximum number of retry attempts
+    """
+    retries = 0
+    while retries < max_retries:
+        print(f"Running model: {input_file} (attempt {retries + 1})")
+        try:
+            # Run Dynare model
+            cmd = [
+                "octave",
+                "--eval",
+                f"""addpath /opt/homebrew/opt/dynare/lib/dynare/matlab; 
+                cd {input_file.parent}; dynare {input_file.name} {' '.join(parameters)}; 
+                oo_simul = oo_.endo_simul';
+                csvwrite('{output_file}', oo_simul);"""
+            ]
+            logger.info(f"Running command: {cmd}")
+            process = subprocess.run(cmd, capture_output=True, text=True)
+            if process.returncode != 0:
+                raise RuntimeError(f"Dynare failed with error: {process.stderr}")
+            
+            # Save parameters
+            params_output = str(output_file).replace(".csv", "_params.yml")
+            dump_context_work({}, params_output)
+            print(f"Model {input_file} completed successfully.")
+            return
+
+        except Exception as e:
+            print(f"Error running model {input_file}:")
+            print(f"Error message: {str(e)}")
+            print("Stack trace:")
+            traceback.print_exc()
+            
+            retries += 1
+            if retries < max_retries:
+                print(f"Retrying model {input_file}...")
+            else:
+                print(f"Failed to run model {input_file} after {max_retries} attempts.")
+
+
+def process_model_combination(args):
+    model_name, input_file, base_name, combination, values = args
+    output_file = os.path.join(os.getcwd(), "data/raw", base_name + "_raw.csv")
+    config_file = os.path.join(os.getcwd(), "data/raw", base_name + "_config.yml")
+    
+    # Save parameter config
+    with open(config_file, 'w') as f:
+        yaml.dump(values, f)
+    
+    run_model(Path(input_file), Path(output_file), combination)
+    print(f"Output saved to {output_file}")
+    print(f"Config saved to {config_file}")
+
+def run_models(config: dict) -> None:
+    from multiprocessing import Pool, cpu_count
+    
+    tasks = []
+    for model_name, model_config in config.items():
+        model_settings = model_config["dynare_model_settings"]
+        num_samples = model_settings["num_samples"]
+        parameter_combinations, parameter_values = generate_parameter_combinations(model_settings, num_samples)
+        
+        for i, (combination, values) in enumerate(zip(parameter_combinations, parameter_values)):
+            input_file = os.path.join(os.getcwd(), "dynare/docker/dynare_models", model_name + ".mod")
+            base_name = "_".join([model_name, f"config_{i}"])
+            
+            task = (model_name, input_file, base_name, combination, values)
+            tasks.append(task)
+    
+    num_processes = min(cpu_count(), len(tasks))
+    print(f"Running {len(tasks)} tasks using {num_processes} processes")
+    
+    with Pool(processes=num_processes) as pool:
+        pool.map(process_model_combination, tasks)
 
 def dynare_trajectories2rl_transitions(
     input_data_path: str,
+    column_names: list[str],
     state_columns: list[str],
     action_columns: list[str],
-    reward_column: str,
+    reward_fn: Callable,
+    reward_kwargs: dict,
     discount_factor: float,
 ) -> pd.DataFrame:
     """Converts Dynare trajectories into reinforcement learning transitions.
@@ -61,16 +196,23 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
-    data = pd.read_csv(input_data_path)
+    data = pd.read_csv(input_data_path, header=None)
+    data.columns = column_names
     transitions = []
 
     current_discount_factor = 1.0
     accumulated_reward = 0.0
 
+    data["REWARD_COMPUTED"] = reward_fn(data, **reward_kwargs)
+
     for idx, row in data.iterrows():
+        if idx == 0:
+            # first row is the initial state
+            continue
+
         state = row[state_columns].to_numpy()
         action = row[action_columns].to_numpy()
-        reward = float(row[reward_column])
+        reward = float(row["REWARD_COMPUTED"])
 
         accumulated_reward += reward * current_discount_factor
         current_discount_factor *= discount_factor
@@ -110,12 +252,16 @@ def process_model_data(
     # Generate output path
     output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
 
+
+    reward_fn = get_reward_object(rl_env_conf["reward"])
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
+        column_names=model_config["dynare_model_settings"]["column_names"],
         state_columns=rl_env_conf["input"]["state_columns"],
         action_columns=rl_env_conf["input"]["action_columns"],
-        reward_column=rl_env_conf["input"]["utility_column"],
-        discount_factor=model_params["discount_rate"],
+        reward_fn=reward_fn,
+        reward_kwargs=rl_env_conf["reward_kwargs"],
+        discount_factor=model_params["beta"],
 
     )
     logger.info("Transitions successfully generated.")
@@ -127,6 +273,7 @@ def process_model_data(
 
     transitions.to_parquet(output_path)
 
+    transitions["info"] = model_params
     logger.info(f"Data saved to {output_path}")
 
 def extract_model_name(filename: str) -> str:
@@ -144,13 +291,17 @@ def extract_model_name(filename: str) -> str:
     # Если суффикса нет, возвращаем имя файла без расширения
     return filename.replace("_raw", "")
 
-
 def main() -> None:
     config_path = "../dynare/conf/"
     config_name = "config"
 
     with hydra.initialize(version_base=None, config_path=config_path):
         config = hydra.compose(config_name=config_name)
+
+
+    logger.info("Running models...")
+    # run_models(config)
+    logger.info("Models run successfully.")
 
     # Directory containing raw data files
     raw_data_dir = "./data/raw"
@@ -169,13 +320,21 @@ def main() -> None:
         
         model_name = extract_model_name(raw_data_file.stem)
 
-        process_model_data(
-            model_name=model_name,
-            model_config=config[model_name],
-            model_params=model_params,
-            raw_data_path=str(raw_data_file),
-            output_dir=output_dir,
-        )
+        if model_name not in config:
+            logger.warning(f"Model {model_name} not found in config")
+            continue
+
+        try:
+            process_model_data(
+                model_name=model_name,
+                model_config=config[model_name],
+                model_params=model_params,
+                raw_data_path=str(raw_data_file),
+                output_dir=output_dir,
+            )
+        except Exception as e:
+            logger.error(f"Error processing {model_name}: {e}")
+            continue
 
 
 if __name__ == "__main__":

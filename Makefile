@@ -38,12 +38,6 @@ dynare2rl:
 ## Run Dynare models simulations
 .PHONY: dynare
 dynare:
-	docker run -it \
-	-v ./dynare/docker/dynare_models:/app/input \
-	-v ./data/raw/:/app/output \
-	-v ./dynare/docker/main.jl:/app/main.jl \
-	-v ./dynare/conf/config.yaml:/app/config.yaml \
-	julia-dynare julia main.jl --input_dir input --output_dir output --config_path config.yaml
 	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
 
 

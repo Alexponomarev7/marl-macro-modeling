@@ -36,11 +36,13 @@ function dump_context_work(context, output_path::String = "config_dump.yml")
     println("✅ Dumped context.work to $output_path")
 end
 
-function run_model(input_file::String, output_file::String, parameters::Vector{String}, max_retries=3)
+function run_model(input_file::String, output_file::String, periods::Int, parameters::Vector{String}, max_retries=3)
     retries = 0
     while retries < max_retries
         println("Running model: $input_file (attempt $(retries + 1))")
         try
+            shock_vals_A = "-Dshock_vals_A=[" * join([string((1+0.02)^t) for t in 0:periods-1], ";") * "]"
+            shock_vals_L = "-Dshock_vals_L=[" * join([string((1+0.01)^t) for t in 0:periods-1], ";") * "]"
             context = dynare(input_file, parameters...)
             simul_length = length(context.results.model_results[1].simulations)
             if simul_length > 0
@@ -51,6 +53,7 @@ function run_model(input_file::String, output_file::String, parameters::Vector{S
 
             # Save simulation results
             data = context.results.model_results[1].simulations[1].data
+            println(data)
             dataframe = DataFrame(data)
             CSV.write(output_file, dataframe)
 
@@ -92,7 +95,7 @@ function parse_commandline()
         "--num_samples"
             help = "Number of parameter combinations to sample"
             arg_type = Int
-            default = 10
+            default = 1
     end
 
     return parse_args(s)
@@ -154,7 +157,7 @@ function main()
             # Save parameter config
             YAML.write_file(config_file, values)
             
-            run_model(input_file, output_file, parameters)
+            run_model(input_file, output_file, model_settings["periods"], parameters)
             println("Output saved to $output_file")
             println("Config saved to $config_file")
         end
