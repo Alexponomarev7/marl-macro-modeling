@@ -63,6 +63,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             nhead: int = 4,
             num_layers: int = 4,
             max_seq_len: int = 512,
+            model_params_dim: int = 5,
     ):
         super().__init__()
         self.state_dim = state_dim
@@ -73,7 +74,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
         self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
-        self.task_embedding = nn.Embedding(num_tasks, d_model)
+        self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
 
         # Add token type embedding
         # 4 types: task(0), state(1), action(2), reward(3)
@@ -116,6 +117,9 @@ class AlgorithmDistillationTransformer(nn.Module):
         class_embeddings = self.action_embedding(actions_info)
         class_embeddings = class_embeddings.unsqueeze(1).expand(-1, actions.shape[1], -1, -1)
         actions = actions.unsqueeze(-1)
+        # print(class_embeddings.shape)
+        # print(actions.shape)
+        # assert False
         combined = torch.cat([class_embeddings, actions], dim=-1)  
         return combined.view(combined.shape[0], combined.shape[1], -1)
         
@@ -127,6 +131,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             actions_info: torch.Tensor = None,
             rewards: torch.Tensor = None,
             task_ids: torch.Tensor = None,
+            model_params: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
@@ -145,7 +150,14 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         # Embed state and task
         state_emb = self.get_state_embedding(states, states_info)
-        task_emb = self.task_embedding(task_ids).unsqueeze(1)  # [bs, 1, d_model]    
+
+        # print(self.task_embedding(task_ids).unsqueeze(1).shape)
+        # print(model_params.unsqueeze(1).shape)
+        task_emb = torch.cat([
+            self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model] 
+            model_params.unsqueeze(1)  # [bs, 1, num_params]
+        ], dim=2)  # [bs, 1, d_model + num_params]
+        
         # Sequence will only include task + states and actions until the current state
         # if actions is None or rewards is None:
         #     sequence = torch.cat([task_emb, state_emb[:, 0:1]], dim=1)  # [bs, 2, d_model]

@@ -110,9 +110,9 @@ class EconomicPolicyModel(L.LightningModule):
             optimizer_cfg: dict[str, Any],
             scheduler_cfg: dict[str, Any],
             criterion_cfg: dict[str, Any],
-            test_envs: list[tuple[str, AbstractEconomicEnv]],
             state_max_dim: int,
             action_max_dim: int,
+            test_envs: list[tuple[str, AbstractEconomicEnv]] = [],
             val_episodes: int = 10,
             val_steps: int = 1000,
     ):
@@ -140,7 +140,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
 
-    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, padding_mask=None):
+    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params, padding_mask=None):
         """Forward pass matching the transformer's interface"""
         return self.model(
             states=states,
@@ -149,6 +149,7 @@ class EconomicPolicyModel(L.LightningModule):
             actions_info=actions_info,
             rewards=rewards,
             task_ids=task_ids,
+            model_params=model_params,
             # padding_mask=padding_mask
         )
 
@@ -167,6 +168,7 @@ class EconomicPolicyModel(L.LightningModule):
         actions = batch['actions']
         rewards = batch['reward']
         task_ids = batch['task_id']
+        model_params = batch['model_params']
         states_info = batch['states_info']
         actions_info = batch['actions_info']
 
@@ -182,6 +184,7 @@ class EconomicPolicyModel(L.LightningModule):
             actions_info=actions_info,
             rewards=rewards,
             task_ids=task_ids,
+            model_params=model_params,
         )
 
         # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
@@ -199,6 +202,8 @@ class EconomicPolicyModel(L.LightningModule):
         task_ids = batch['task_id']
         states_info = batch['states_info']
         actions_info = batch['actions_info']
+        model_params = batch['model_params']
+
 
         # weird bug with nan values
         states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
@@ -212,6 +217,7 @@ class EconomicPolicyModel(L.LightningModule):
             task_ids=task_ids,
             states_info=states_info,
             actions_info=actions_info,
+            model_params=model_params,
         )
 
         loss = self.criterion(predicted_actions, actions[:, 1:, :])
@@ -348,7 +354,7 @@ class DatasetGenerator:
         self.workdir.mkdir(parents=True, exist_ok=True)
         logger.info(f"WorkDir: {self.workdir}")
 
-        for stage in ['train', 'val', 'test']:
+        for stage in ['train', 'val']:
             logger.info(f"generating stage: {stage}")
             stage_dir = self.workdir / stage
             stage_dir.mkdir(parents=True, exist_ok=True)

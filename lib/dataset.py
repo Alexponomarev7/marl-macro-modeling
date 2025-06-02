@@ -277,6 +277,12 @@ x
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
+        info = data.iloc[0]["info"]
+        model_params = info["model_params"]
+
+        sorted_model_params = list(sorted(model_params.items()))
+        model_params_values = torch.tensor([v for k, v in sorted_model_params], dtype=torch.float32)
+
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
         state_description = data.iloc[0]["info"]["state_description"]
@@ -307,5 +313,6 @@ x
             'actions_info': actions_info,  # [action_dim]
             'reward': rewards,  # [max_seq_len, 1]
             'task_id': task_id,  # scalar
+            'model_params': model_params_values,
             'attention_mask': attention_mask  # [max_seq_len]
         }

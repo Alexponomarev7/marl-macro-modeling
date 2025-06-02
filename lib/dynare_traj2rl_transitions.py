@@ -183,6 +183,7 @@ def dynare_trajectories2rl_transitions(
     reward_fn: Callable,
     reward_kwargs: dict,
     discount_factor: float,
+    model_params: dict,
 ) -> pd.DataFrame:
     """Converts Dynare trajectories into reinforcement learning transitions.
 
@@ -220,6 +221,7 @@ def dynare_trajectories2rl_transitions(
         info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
         info = row[info_columns].to_dict()
         info["row_id"] = idx
+        info["model_params"] = model_params
         transition = {
             "state": state,
             "action": action,
@@ -262,7 +264,7 @@ def process_model_data(
         reward_fn=reward_fn,
         reward_kwargs=rl_env_conf["reward_kwargs"],
         discount_factor=model_params["beta"],
-
+        model_params=model_params,
     )
     logger.info("Transitions successfully generated.")
 
@@ -273,7 +275,6 @@ def process_model_data(
 
     transitions.to_parquet(output_path)
 
-    transitions["info"] = model_params
     logger.info(f"Data saved to {output_path}")
 
 def extract_model_name(filename: str) -> str:
@@ -304,8 +305,8 @@ def main() -> None:
     logger.info("Models run successfully.")
 
     # Directory containing raw data files
-    raw_data_dir = "./data/raw"
-    output_dir = "./data/processed"
+    raw_data_dir = "./data/val_raw"
+    output_dir = "./data/val_processed"
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
