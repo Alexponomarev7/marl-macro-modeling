@@ -55,7 +55,7 @@
 Ramsey:
   dynare_model_settings:
     periods: 50
-    num_samples: 1000
+    num_samples: 1
     column_names:
       - Consumption
       - Capital
@@ -80,35 +80,32 @@ Ramsey:
       data_path: ./data/processed/Ramsey
 
 
-# RBC_baseline:
-#   dynare_model_settings:
-#     periods: 1000
-#     parameter_ranges:
-#       discount_rate: [0.95, 0.99]               # Discount factor
-#       # sigma: [0.8, 1.2]                # Risk aversion
-#       # rhog: [0.95, 0.999]              # Persistence of gov spending shock
-#       # rhoz: [0.95, 0.99]               # Persistence of TFP shock
-#       # alpha: [0.33, 0.33]              # Important to keep it constant
-#       # delta: [0.02, 0.05]              # Depreciation rate
-#       # psi: [2.0, 4.0]                  # Labor disutility parameter
-#       # gshare: [0.18, 0.22]             # Government spending share
-#       # x: [0.004, 0.007]                # Technology growth
-#       # n: [0.002, 0.004]                # Population growth
-#       # i_y: [0.20, 0.30]                # Investment-output ratio
-#       # k_y: [9.0, 12.0]                 # Capital-output ratio
+RBC_baseline:
+  dynare_model_settings:
+    periods: 50
+    num_samples: 1
+    column_names:
+      - Consumption
+      - Capital
+      - LoggedProductivity
+    parameter_ranges:
+      beta: [0.95, 0.99]               # Discount factor
+      alpha: [0.33, 0.33]              # Important to keep it constant
+      delta: [0.02, 0.05]              # Depreciation rate
+      rho: [0.7, 0.9]                  # Persistence of productivity shock
 
-#   rl_env_settings:
-#     reward: lib.rewards.crra_reward
-#     reward_kwargs:
-#       target_column: Consumption
-#     input:
-#       state_columns:
-#         - Capital
-#         - LoggedProductivity
-#       action_columns:
-#         - Consumption
-#     output:
-#       data_path: ./data/processed/RBC_baseline
+  rl_env_settings:
+    reward: lib.rewards.crra_reward
+    reward_kwargs:
+      target_column: Consumption
+    input:
+      state_columns:
+        - Capital
+        - LoggedProductivity
+      action_columns:
+        - Consumption
+    output:
+      data_path: ./data/processed/RBC_baseline
 
 
 # Born_Pfeifer_2018_MP:

@@ -116,10 +116,11 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
                 oo_simul = oo_.endo_simul';
                 csvwrite('{output_file}', oo_simul);"""
             ]
-            logger.info(f"Running command: {cmd}")
             process = subprocess.run(cmd, capture_output=True, text=True)
+            logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
+
             if process.returncode != 0:
-                raise RuntimeError(f"Dynare failed with error: {process.stderr}")
+                raise RuntimeError(f"Dynare failed with error: {process.stdout} {process.stderr}")
             
             # Save parameters
             params_output = str(output_file).replace(".csv", "_params.yml")
@@ -141,9 +142,9 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
 
 
 def process_model_combination(args):
-    model_name, input_file, base_name, combination, values = args
-    output_file = os.path.join(os.getcwd(), "data/raw", base_name + "_raw.csv")
-    config_file = os.path.join(os.getcwd(), "data/raw", base_name + "_config.yml")
+    model_name, input_file, base_name, combination, values, raw_data_dir = args
+    output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
+    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
     
     # Save parameter config
     with open(config_file, 'w') as f:
@@ -153,10 +154,11 @@ def process_model_combination(args):
     print(f"Output saved to {output_file}")
     print(f"Config saved to {config_file}")
 
-def run_models(config: dict) -> None:
+def run_models(config: dict, raw_data_dir: str) -> None:
     from multiprocessing import Pool, cpu_count
-    
+    output_files = []
     tasks = []
+
     for model_name, model_config in config.items():
         model_settings = model_config["dynare_model_settings"]
         num_samples = model_settings["num_samples"]
@@ -165,8 +167,9 @@ def run_models(config: dict) -> None:
         for i, (combination, values) in enumerate(zip(parameter_combinations, parameter_values)):
             input_file = os.path.join(os.getcwd(), "dynare/docker/dynare_models", model_name + ".mod")
             base_name = "_".join([model_name, f"config_{i}"])
-            
-            task = (model_name, input_file, base_name, combination, values)
+            output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
+            output_files.append(Path(output_file))
+            task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
     
     num_processes = min(cpu_count(), len(tasks))
@@ -174,6 +177,8 @@ def run_models(config: dict) -> None:
     
     with Pool(processes=num_processes) as pool:
         pool.map(process_model_combination, tasks)
+
+    return output_files
 
 def dynare_trajectories2rl_transitions(
     input_data_path: str,
@@ -265,6 +270,10 @@ def process_model_data(
         reward_kwargs=rl_env_conf["reward_kwargs"],
         discount_factor=model_params["beta"],
         model_params=model_params,
+<<<<<<< HEAD
+=======
+
+>>>>>>> 79eb6af (wip)
     )
     logger.info("Transitions successfully generated.")
 
@@ -300,13 +309,13 @@ def main() -> None:
         config = hydra.compose(config_name=config_name)
 
 
-    logger.info("Running models...")
-    # run_models(config)
-    logger.info("Models run successfully.")
-
     # Directory containing raw data files
     raw_data_dir = "./data/val_raw"
     output_dir = "./data/val_processed"
+
+    logger.info("Running models...")
+    output_files = run_models(config, raw_data_dir)
+    logger.info("Models run successfully.")
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -314,7 +323,7 @@ def main() -> None:
     # Find all raw data files
     raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
 
-    for raw_data_file in raw_data_files:
+    for raw_data_file in output_files:
         config_data_file = Path(str(raw_data_file).replace("_raw.csv", "_config.yml"))
         with open(config_data_file, 'r') as f:
             model_params = yaml.load(f, Loader=yaml.FullLoader)
@@ -339,4 +348,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # run_model(
+    #     input_file=Path("dynare/docker/dynare_models/Ramsey.mod"),
+    #     output_file=Path("theoretical_ramsey_0.5.csv"),
+    #     parameters=["-Dalpha=0.5", "-Dbeta=0.96", "-Ddelta=0.1", "-Dstart_capital=1.0", "-Dperiods=50"],
+    #     max_retries=3
+    # )
     main()

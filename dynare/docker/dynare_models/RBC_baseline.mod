@@ -28,17 +28,19 @@ steady_state_model;
   Consumption = exp(LoggedProductivity)*Capital^alpha-delta*Capital;
 end;
 
+steady;
+
 initval;
   LoggedProductivityInnovation = 0;
   LoggedProductivity = .05;
   Capital = 0.5;
 end;
 
-% endval;
-%   LoggedProductivityInnovation = 0;
-% end;
+shocks;
+  var LoggedProductivityInnovation;
+  periods 10 15 20 25;
+  values -0.02 0.12 0.04 0.06;
+end;
 
-steady;
-
-perfect_foresight_setup(periods=40);
+perfect_foresight_setup(periods=@{periods});
 perfect_foresight_solver;
