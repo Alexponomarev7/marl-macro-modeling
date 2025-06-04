@@ -270,10 +270,6 @@ def process_model_data(
         reward_kwargs=rl_env_conf["reward_kwargs"],
         discount_factor=model_params["beta"],
         model_params=model_params,
-<<<<<<< HEAD
-=======
-
->>>>>>> 79eb6af (wip)
     )
     logger.info("Transitions successfully generated.")
 
