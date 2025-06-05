@@ -144,6 +144,7 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
 
 def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
     processed_path = dynare_output_path
+    
     assert processed_path.exists()
     with DatasetWriter(workdir) as writer:
         for file in processed_path.glob("*.parquet"):

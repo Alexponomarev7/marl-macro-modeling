@@ -2,7 +2,7 @@
 # GLOBALS                                                                       #
 #################################################################################
 
-PYTHON_INTERPRETER = python
+PYTHON_INTERPRETER = python3
 
 #################################################################################
 # COMMANDS                                                                      #
@@ -28,23 +28,10 @@ pipeline: setup
 build_julia_dynare_image:
 	docker build -f ./dynare/docker/julia.Dockerfile -t julia-dynare .
 
-
-## Run python script for translation dynare simulations
-## to RL transitions
-.PHONY: dynare2rl
-dynare2rl:
-	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
-
 ## Run Dynare models simulations
 .PHONY: dynare
 dynare:
-	docker run -it \
-	-v ./dynare/docker/dynare_models:/app/input \
-	-v ./data/raw/:/app/output \
-	-v ./dynare/docker/main.jl:/app/main.jl \
-	-v ./dynare/conf/config.yaml:/app/config.yaml \
-	julia-dynare julia main.jl --input_dir input --output_dir output --config_path config.yaml
-	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
+	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py $(ARGS)
 
 
 #################################################################################
