@@ -1,6 +1,7 @@
 import importlib
 from typing import Callable, Optional, cast
 from multiprocessing import Pool, cpu_count
+from collections import deque
 from omegaconf import DictConfig, OmegaConf
 import pandas as pd
 import numpy as np
@@ -19,6 +20,30 @@ import pyarrow.parquet as pq
 import traceback
 
 from research.utils import PathStorage
+
+
+class StateAccessor:
+    def __init__(self, state_columns: list[str], buffer_size: int = 10):
+        self.state_columns = state_columns
+        self.buffer = deque(maxlen=buffer_size)
+        self.raw_columns = [column[0] if isinstance(column, list) else column for column in state_columns]
+
+    def get_columns(self) -> list[str]:
+        return self.raw_columns
+
+    def __call__(self, row: pd.Series) -> np.ndarray:
+        state = []
+        for column in self.state_columns:
+            if isinstance(column, list):
+                state_column, shift = column
+                assert int(shift) < 0, "shift should be negative"
+                state.append(float(self.buffer[int(shift)][state_column]))
+            else:
+                state.append(float(row[column]))
+
+        self.buffer.append(pd.Series(row))
+        return np.array(state)
+
 
 def sample_from_range(range_values: list[float]) -> float:
     return np.random.random() * (range_values[1] - range_values[0]) + range_values[0]
@@ -112,14 +137,24 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
         print(f"Running model: {input_file} (attempt {retries + 1})")
         try:
             # Run Dynare model
-            cmd = [
+            cmd: list[str] = [
                 "octave",
                 "--eval",
-                f"""addpath {os.environ["DYNARE_PATH"]}; 
-                cd {input_file.parent}; dynare {input_file.name} {' '.join(parameters)}; 
-                oo_simul = oo_.endo_simul';
-                csvwrite('{output_file}', oo_simul);"""
-            ]
+                f"""
+                addpath {os.environ["DYNARE_PATH"]}; 
+                cd {input_file.parent}; 
+                dynare {input_file.name} {' '.join(parameters)}; 
+                oo_simul = oo_.endo_simul'; 
+                var_names = M_.endo_names_tex;
+
+                fid = fopen('{output_file}', 'w');
+                fprintf(fid, '%s,', var_names{{1:end-1}});
+                fprintf(fid, '%s\\n', var_names{{end}});
+                fclose(fid);
+
+                dlmwrite('{output_file}', oo_simul, '-append');
+                """
+            ]            
             process = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
 
@@ -186,7 +221,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[Path]:
 def dynare_trajectories2rl_transitions(
     input_data_path: Path,
     column_names: list[str],
-    state_columns: list[str],
+    state_accessor: StateAccessor,
     action_columns: list[str],
     reward_fn: Callable,
     reward_kwargs: dict,
@@ -205,8 +240,7 @@ def dynare_trajectories2rl_transitions(
     Returns:
         pd.DataFrame: A DataFrame containing the transitions.
     """
-    data = pd.read_csv(input_data_path, header=None)
-    data.columns = column_names
+    data = pd.read_csv(input_data_path)
     transitions = []
 
     current_discount_factor = 1.0
@@ -217,16 +251,17 @@ def dynare_trajectories2rl_transitions(
     for idx, row in data.iterrows():
         if idx == 0:
             # first row is the initial state
+            state_accessor.buffer.append(row)
             continue
 
-        state = row[state_columns].to_numpy()
+        state = state_accessor(row)
         action = row[action_columns].to_numpy()
         reward = float(row["REWARD_COMPUTED"])
 
         accumulated_reward += reward * current_discount_factor
         current_discount_factor *= discount_factor
 
-        info_columns = list(set(row.index.to_list()) - set(state_columns + action_columns))
+        info_columns = list(set(row.index.to_list()) - set(state_accessor.get_columns() + action_columns))
         info = row[info_columns].to_dict()
         info["row_id"] = idx
         info["model_params"] = model_params
@@ -240,7 +275,6 @@ def dynare_trajectories2rl_transitions(
         }
 
         transitions.append(transition)
-
     return pd.DataFrame(transitions)
 
 
@@ -262,12 +296,13 @@ def process_model_data(
     # Generate output path
     output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
 
+    state_accessor = StateAccessor(rl_env_conf["input"]["state_columns"])
 
     reward_fn = get_reward_object(rl_env_conf["reward"])
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
         column_names=model_config["dynare_model_settings"]["column_names"],
-        state_columns=rl_env_conf["input"]["state_columns"],
+        state_accessor=state_accessor,
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_fn=reward_fn, # type: ignore
         reward_kwargs=rl_env_conf["reward_kwargs"],
@@ -279,7 +314,7 @@ def process_model_data(
     logger.info("Saving data...")
 
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
-    transitions["state_description"] = pd.Series([list(rl_env_conf["input"]["state_columns"])] * len(transitions))
+    transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))
 
     transitions.to_parquet(output_path)
 
@@ -335,6 +370,7 @@ def main(cfg: DictConfig) -> None:
             )
         except Exception as e:
             logger.error(f"Error processing {model_name}: {e}")
+            logger.error(traceback.format_exc())
             continue
 
 

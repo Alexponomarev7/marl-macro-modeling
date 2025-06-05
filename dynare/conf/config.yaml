@@ -77,7 +77,8 @@ models:
         target_column: Consumption
       input:
         state_columns:
-          - Capital
+          - [Capital, -1]
+          - Output
         action_columns:
           - Consumption
       output:

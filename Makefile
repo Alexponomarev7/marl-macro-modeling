@@ -33,6 +33,8 @@ build_julia_dynare_image:
 dynare:
 	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py $(ARGS)
 
+test:
+	@$(PYTHON_INTERPRETER) tests/test_envs.py
 
 #################################################################################
 # Self Documenting Commands                                                     #

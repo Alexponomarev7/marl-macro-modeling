@@ -12,8 +12,8 @@ class GenerationType(Enum):
     GYMNASIUM = "gymnasium"
 
 def plot_data_file(model_name: str, sample_id: int, n_iters: int | None = None):
-    config_params = PathStorage.raw_root / f"{model_name}_config_{sample_id}_config.yml"
-    data_path = PathStorage.processed_root / f"{model_name}_config_{sample_id}.parquet"
+    config_params = PathStorage().raw_root / f"{model_name}_config_{sample_id}_config.yml"
+    data_path = PathStorage().processed_root / f"{model_name}_config_{sample_id}.parquet"
     data = pd.read_parquet(data_path)
 
     if n_iters is not None:
@@ -55,34 +55,47 @@ def generate_model_dynare(model_name: str, params: dict, periods: int = 50) -> t
         tmp_file = Path(temp_dir) / f"{model_name}.csv"
 
         run_model(
-            input_file=Path(f"dynare/docker/dynare_models/{model_name}.mod"),
+            input_file=PathStorage().dynare_configs_root / f"{model_name}.mod",
             output_file=tmp_file,
             parameters=[f"-Dperiods={periods}"] + [f"-D{param}={value}" for param, value in params.items()],
             max_retries=1,
         )
 
-        output_file_csv = pd.read_csv(tmp_file, header=None)
+        output_file_csv = pd.read_csv(tmp_file)
         return output_file_csv, params
 
-def generate_model_gymnasium(model_name: str, params: dict, periods: int = 50) -> tuple[pd.DataFrame, dict]:
+def generate_model_gymnasium(
+    model_name: str,
+    params: dict,
+    periods: int = 50,
+    trajectory: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict]:
     env = NAME_TO_ENV[model_name](**params)
-    env.reset()
-    states = []
-    actions = []
-    for _ in range(periods):
-        action = env.action_space.sample()
-        state, reward, done, truncated, info = env.step(action)
+    state, info = env.reset()
+    states = [state]
+    for i in range(periods):
+        if trajectory is not None:
+            state, reward, done, truncated, info = env.step(
+                **trajectory[list(env.action_description.keys())].iloc[i + 1].to_dict()
+            )
+        else:
+            state, reward, done, truncated, info = env.analytical_step()
         states.append(state)
-        actions.append(action)
-    df_states = pd.DataFrame(states, columns=list(env.state_description.keys()))
-    df_actions = pd.DataFrame(actions, columns=list(env.action_description.keys()))
-    df = pd.concat([df_states, df_actions], axis=1)
+
+    df = pd.DataFrame(states)
     return df, env.params
 
-def generate_model(model_name: str, params: dict, periods: int = 50, type: GenerationType = GenerationType.DYNARE) -> tuple[pd.DataFrame, dict]:
+def generate_model(
+    model_name: str,
+    params: dict,
+    periods: int = 50,
+    type: GenerationType = GenerationType.DYNARE,
+    trajectory: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict]:
     if type == GenerationType.DYNARE:
+        assert trajectory is None, "trajectory is not supported for dynare"
         return generate_model_dynare(model_name, params, periods)
     elif type == GenerationType.GYMNASIUM:
-        return generate_model_gymnasium(model_name, params, periods)
+        return generate_model_gymnasium(model_name, params, periods, trajectory)
     else:
         raise ValueError(f"Invalid generation type: {type}")
