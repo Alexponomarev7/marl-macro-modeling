@@ -60,10 +60,10 @@ class AlgorithmDistillationTransformer(nn.Module):
             state_dim: int,
             action_dim: int,
             num_tasks: int,
-            d_model: int = 128,
-            nhead: int = 4,
-            num_layers: int = 4,
-            max_seq_len: int = 512,
+            d_model: int,
+            nhead: int,
+            num_layers: int,
+            max_seq_len: int,
             model_params_dim: int = 5,
     ):
         super().__init__()
@@ -84,7 +84,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         # self.positional_encoding = PositionalEncoding(d_model)
         
         # Create causal mask to ensure transformer only looks at past tokens
-        self.register_buffer('causal_mask', torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1).bool())
+        self.register_buffer('causal_mask', torch.triu(torch.ones(2048, 2048), diagonal=1).bool())
         
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
@@ -232,7 +232,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             )
 
 
-            action = 
-            state, reward, done, info = env.step(action)
-            states.append(state)
-            actions.append(action)
+            # action = 
+            # state, reward, done, info = env.step(action)
+            # states.append(state)
+            # actions.append(action)

@@ -51,61 +51,65 @@
 #         - Labor
 #     output:
 #       data_path: ./data/processed/Aguiar_Gopinath_2007
-
-Ramsey:
-  dynare_model_settings:
-    periods: 50
-    num_samples: 1
-    column_names:
-      - Consumption
-      - Capital
-      - Output
-      - Investment
-    parameter_ranges:
-      start_capital: [0.5, 3]
-      beta: [0.95, 0.99]
-      delta: [0.02, 0.15]
-      alpha: [0.33, 0.66]
-
-  rl_env_settings:
-    reward: lib.rewards.crra_reward
-    reward_kwargs:
-      target_column: Consumption
-    input:
-      state_columns:
-        - Capital
-      action_columns:
+metadata:
+  data_folder: data
+  periods: 50
+  num_samples: 1
+models:
+  Ramsey:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      column_names:
         - Consumption
-    output:
-      data_path: ./data/processed/Ramsey
+        - Capital
+        - Output
+        - Investment
+      parameter_ranges:
+        start_capital: [0.5, 3]
+        beta: [0.95, 0.99]
+        delta: [0.02, 0.15]
+        alpha: [0.33, 0.66]
+
+    rl_env_settings:
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: Consumption
+      input:
+        state_columns:
+          - Capital
+        action_columns:
+          - Consumption
+      output:
+        data_path: ./data/processed/Ramsey
 
 
-RBC_baseline:
-  dynare_model_settings:
-    periods: 50
-    num_samples: 1
-    column_names:
-      - Consumption
-      - Capital
-      - LoggedProductivity
-    parameter_ranges:
-      beta: [0.95, 0.99]               # Discount factor
-      alpha: [0.33, 0.33]              # Important to keep it constant
-      delta: [0.02, 0.05]              # Depreciation rate
-      rho: [0.7, 0.9]                  # Persistence of productivity shock
-
-  rl_env_settings:
-    reward: lib.rewards.crra_reward
-    reward_kwargs:
-      target_column: Consumption
-    input:
-      state_columns:
+  RBC_baseline:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      column_names:
+        - Consumption
         - Capital
         - LoggedProductivity
-      action_columns:
-        - Consumption
-    output:
-      data_path: ./data/processed/RBC_baseline
+      parameter_ranges:
+        beta: [0.95, 0.99]               # Discount factor
+        alpha: [0.33, 0.33]              # Important to keep it constant
+        delta: [0.02, 0.05]              # Depreciation rate
+        rho: [0.7, 0.9]                  # Persistence of productivity shock
+
+    rl_env_settings:
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: Consumption
+      input:
+        state_columns:
+          - Capital
+          - LoggedProductivity
+        action_columns:
+          - Consumption
+      output:
+        data_path: ./data/processed/RBC_baseline
 
 
 # Born_Pfeifer_2018_MP:

@@ -6,7 +6,8 @@ from abc import (
 )
 
 ENV_TO_ID = {
-    "Ramsey": 0
+    "Ramsey": 0,
+    "RBC_baseline": 1,
 }
 
 class AbstractEconomicEnv(gym.Env, ABC):

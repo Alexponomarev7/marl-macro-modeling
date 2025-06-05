@@ -1,7 +1,7 @@
 import importlib
 from typing import Callable, Optional, cast
 from multiprocessing import Pool, cpu_count
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import pandas as pd
 import numpy as np
 import pickle
@@ -302,11 +302,13 @@ def extract_model_name(filename: str) -> str:
 
 @hydra.main(config_path="../dynare/conf", config_name="config")
 def main(cfg: DictConfig) -> None:
-    config = cast(dict, cfg)
+    config = cast(dict, OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True))
     
-    path_storage = PathStorage()
+    path_storage = PathStorage(data_folder=config["metadata"]["data_folder"])
+    path_storage.raw_root.mkdir(parents=True, exist_ok=True)
+    path_storage.processed_root.mkdir(parents=True, exist_ok=True)
     logger.info("Running models...")
-    output_files = run_models(config, path_storage.raw_root)
+    output_files = run_models(config["models"], path_storage.raw_root)
     logger.info("Models run successfully.")
 
     # Ensure output directory exists
@@ -319,14 +321,14 @@ def main(cfg: DictConfig) -> None:
         
         model_name = extract_model_name(raw_data_file.stem)
 
-        if model_name not in config:
+        if model_name not in config["models"]:
             logger.warning(f"Model {model_name} not found in config")
             continue
 
         try:
             process_model_data(
                 model_name=model_name,
-                model_config=config[model_name],
+                model_config=config["models"][model_name],
                 model_params=model_params,
                 raw_data_path=raw_data_file,
                 output_dir=path_storage.processed_root,

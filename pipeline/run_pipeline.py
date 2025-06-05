@@ -29,6 +29,7 @@ from lib.generate_dataset import (
     run_generation_batch,
     run_generation_batch_dynare,
 )
+from research.utils import PathStorage
 
 
 def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
@@ -256,7 +257,10 @@ class DatasetGenerator:
             if stage_cfg['type'] == 'envs':
                 run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
             elif stage_cfg['type'] == 'dynare':
-                run_generation_batch_dynare(Path(stage_cfg['dynare_output_path']), stage_dir)
+                run_generation_batch_dynare(
+                    PathStorage(stage_cfg['dynare_output_path']).processed_root,
+                    stage_dir
+                )
             else:
                 raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
 
@@ -319,7 +323,8 @@ def main(hydra_cfg: DictConfig) -> None:
                 save_last=True
             )
         ],
-        val_check_interval=cfg['train']['val_freq'],
+        check_val_every_n_epoch=cfg['train']['val_freq'],
+        # val_check_interval=cfg['train']['val_freq'],
         # logger=L.pytorch.loggers.ClearMLLogger(task=task) if task else True
     )
     trainer.fit(model, data_module)

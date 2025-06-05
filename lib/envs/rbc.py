@@ -9,7 +9,7 @@ from typing import (
     Union,
 )
 
-from lib.envs.environment_base import AbstractEconomicEnv
+from lib.envs.environment_base import ENV_TO_ID, AbstractEconomicEnv
 from lib.utility_funcs import (
     log_utility,
     ces_utility,
@@ -92,6 +92,10 @@ class RBCEnv(AbstractEconomicEnv):
             1: "consumption",
             2: "investment",
         }
+
+    @property
+    def task_id(self) -> int:
+        return ENV_TO_ID["RBC_baseline"]
 
     def _set_utility_function(self, utility_function: str, utility_params: dict):
         """

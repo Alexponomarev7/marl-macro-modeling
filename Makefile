@@ -28,17 +28,10 @@ pipeline: setup
 build_julia_dynare_image:
 	docker build -f ./dynare/docker/julia.Dockerfile -t julia-dynare .
 
-
-## Run python script for translation dynare simulations
-## to RL transitions
-.PHONY: dynare2rl
-dynare2rl:
-	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
-
 ## Run Dynare models simulations
 .PHONY: dynare
 dynare:
-	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py
+	@$(PYTHON_INTERPRETER) lib/dynare_traj2rl_transitions.py $(ARGS)
 
 
 #################################################################################
