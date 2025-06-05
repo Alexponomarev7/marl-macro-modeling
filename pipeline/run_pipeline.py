@@ -2,13 +2,13 @@
 from typing import (
     Any,
     Optional,
+    cast,
 )
 from pathlib import Path
 
 import hydra
 import torch
 import clearml
-import numpy as np
 from loguru import logger
 from omegaconf import (
     DictConfig,
@@ -29,6 +29,7 @@ from lib.generate_dataset import (
     run_generation_batch,
     run_generation_batch_dynare,
 )
+from research.utils import PathStorage
 
 
 def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEconomicEnv]]:
@@ -105,16 +106,16 @@ class EconomicPolicyModel(L.LightningModule):
     """PyTorch Lightning module for training economic policies."""
 
     def __init__(
-            self,
-            model_cfg: dict[str, Any],
-            optimizer_cfg: dict[str, Any],
-            scheduler_cfg: dict[str, Any],
-            criterion_cfg: dict[str, Any],
-            test_envs: list[tuple[str, AbstractEconomicEnv]],
-            state_max_dim: int,
-            action_max_dim: int,
-            val_episodes: int = 10,
-            val_steps: int = 1000,
+        self,
+        model_cfg: dict[str, Any],
+        optimizer_cfg: dict[str, Any],
+        scheduler_cfg: dict[str, Any],
+        criterion_cfg: dict[str, Any],
+        state_max_dim: int,
+        action_max_dim: int,
+        test_envs: list[tuple[str, AbstractEconomicEnv]] = [],
+        val_episodes: int = 10,
+        val_steps: int = 1000,
     ):
         """
         Initialize the policy model.
@@ -140,7 +141,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
 
-    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, padding_mask=None):
+    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params):
         """Forward pass matching the transformer's interface"""
         return self.model(
             states=states,
@@ -149,7 +150,7 @@ class EconomicPolicyModel(L.LightningModule):
             actions_info=actions_info,
             rewards=rewards,
             task_ids=task_ids,
-            # padding_mask=padding_mask
+            model_params=model_params,
         )
 
     def configure_optimizers(self):
@@ -167,6 +168,7 @@ class EconomicPolicyModel(L.LightningModule):
         actions = batch['actions']
         rewards = batch['reward']
         task_ids = batch['task_id']
+        model_params = batch['model_params']
         states_info = batch['states_info']
         actions_info = batch['actions_info']
 
@@ -182,6 +184,7 @@ class EconomicPolicyModel(L.LightningModule):
             actions_info=actions_info,
             rewards=rewards,
             task_ids=task_ids,
+            model_params=model_params,
         )
 
         # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
@@ -199,6 +202,8 @@ class EconomicPolicyModel(L.LightningModule):
         task_ids = batch['task_id']
         states_info = batch['states_info']
         actions_info = batch['actions_info']
+        model_params = batch['model_params']
+
 
         # weird bug with nan values
         states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
@@ -212,117 +217,12 @@ class EconomicPolicyModel(L.LightningModule):
             task_ids=task_ids,
             states_info=states_info,
             actions_info=actions_info,
+            model_params=model_params,
         )
 
         loss = self.criterion(predicted_actions, actions[:, 1:, :])
         self.log('val_loss', loss, on_epoch=True)
         return loss
-
-        # def on_fit_end(self):
-        #     """Perform environment-based validation at the end of training."""
-        #     if not self.test_envs:
-        #         return
-
-        #     for env_name, env in self.test_envs:
-        #         avg_reward = self._validate_with_env(env)
-        #         self.log(f'env_reward/{env_name}', avg_reward)
-
-        # def _validate_with_env(self, env: AbstractEconomicEnv) -> float:
-        """Environment dynamic validation"""
-        total_rewards = []
-
-        for _ in range(self.val_episodes):
-            episode_reward = 0
-            state_dict, _ = env.reset()
-            terminated = truncated = False
-
-            # Keep track of sequence history
-            states_history = []
-            actions_history = []
-            rewards_history = []
-
-            # Get initial state
-            current_state = torch.FloatTensor([
-                list([value[0] for value in state_dict.values()])
-            ]).to(self.device)
-
-            for _ in range(self.val_steps):
-                # Prepare input for model
-                if len(states_history) > self.model.max_seq_len:
-                    states_history = states_history[-self.model.max_seq_len:]
-                    actions_history = actions_history[-self.model.max_seq_len:]
-                    rewards_history = rewards_history[-self.model.max_seq_len:]
-
-                # Create states tensor
-                if states_history:  # If we have previous states
-                    states = torch.cat(states_history, dim=0).unsqueeze(0)
-                    states = torch.cat([states, current_state.unsqueeze(0)], dim=1)
-                else:  # First step
-                    states = current_state.unsqueeze(0)  # [1, 1, state_dim]
-
-                # Pad states if necessary
-                states = torch.nn.functional.pad(
-                    states,
-                    (0, self.state_max_dim - states.shape[2]),
-                    "constant",
-                    0
-                )
-
-                # Create actions and rewards sequences
-                if actions_history:
-                    actions = torch.stack(actions_history, dim=0).unsqueeze(0)
-                    actions = torch.nn.functional.pad(
-                        actions,
-                        (0, self.action_max_dim - actions.shape[-1]),
-                        "constant",
-                        0
-                    )
-                    rewards = torch.tensor(rewards_history).unsqueeze(0).unsqueeze(-1)
-                else:
-                    actions = torch.zeros(1, 0, self.action_max_dim).to(self.device)
-                    rewards = torch.zeros(1, 0, 1).to(self.device)
-
-                task_ids = torch.tensor([0]).to(self.device)
-                attention_mask = torch.ones(1, states.shape[1], dtype=torch.bool).to(self.device)
-
-                # Ensure all tensors are float32
-                states = states.to(torch.float32)
-                actions = actions.to(torch.float32)
-                rewards = rewards.to(torch.float32)
-
-                with torch.no_grad():
-                    predicted_actions = self(
-                        states=states,
-                        actions=actions,
-                        rewards=rewards,
-                        task_ids=task_ids,
-                        states_info=None,
-                        actions_info=None,
-                        # padding_mask=~attention_mask
-                    )
-                    action = predicted_actions[0, -1].cpu().numpy()
-
-                # Update histories
-                states_history.append(current_state)
-
-                # Take action in environment
-                state_dict, reward, terminated, truncated, _ = env.step(action)
-
-                # Prepare for next step
-                current_state = torch.FloatTensor([
-                    list([value[0] for value in state_dict.values()])
-                ]).to(self.device)
-
-                actions_history.append(torch.from_numpy(action).to(self.device))
-                rewards_history.append(reward)
-                episode_reward += reward
-
-                if terminated or truncated:
-                    break
-
-            total_rewards.append(episode_reward)
-
-        return float(np.mean(total_rewards))
 
 class DatasetGenerator:
     """Handles the creation and organization of datasets."""
@@ -348,7 +248,7 @@ class DatasetGenerator:
         self.workdir.mkdir(parents=True, exist_ok=True)
         logger.info(f"WorkDir: {self.workdir}")
 
-        for stage in ['train', 'val', 'test']:
+        for stage in ['train', 'val']:
             logger.info(f"generating stage: {stage}")
             stage_dir = self.workdir / stage
             stage_dir.mkdir(parents=True, exist_ok=True)
@@ -357,21 +257,24 @@ class DatasetGenerator:
             if stage_cfg['type'] == 'envs':
                 run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
             elif stage_cfg['type'] == 'dynare':
-                run_generation_batch_dynare(Path(stage_cfg['dynare_output_path']), stage_dir)
+                run_generation_batch_dynare(
+                    PathStorage(stage_cfg['dynare_output_path']).processed_root,
+                    stage_dir
+                )
             else:
                 raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
 
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
-def main(cfg: DictConfig) -> None:
+def main(hydra_cfg: DictConfig) -> None:
     """Main entry point of the training pipeline."""
     # Initialize configuration
-    if 'run_id' not in cfg.metadata or not cfg.metadata.run_id:
-        cfg.metadata.run_id = get_run_id()
-    cfg = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+    if 'run_id' not in hydra_cfg.metadata or not hydra_cfg.metadata.run_id:
+        hydra_cfg.metadata.run_id = get_run_id()
+
+    cfg = cast(dict, OmegaConf.to_container(hydra_cfg, resolve=True, throw_on_missing=True))
     metadata = cfg['metadata']
 
-    # Set up tracking if enabled
     task = None
     if metadata["track"]:
         task = clearml.Task.init(
@@ -381,15 +284,11 @@ def main(cfg: DictConfig) -> None:
         )
         task.set_parameters_as_dict(cfg)
 
-    # Set random seed
     set_global_seed(metadata['seed'])
     dataset_generator = DatasetGenerator(cfg['dataset'])
     dataset_generator.create()
 
-    # Create test environments
     test_envs = create_test_envs(cfg['dataset'])
-
-    # Initialize model and data module
     model = EconomicPolicyModel(
         model_cfg=cfg['train']['model'],
         optimizer_cfg=cfg['train']['optimizer'],
@@ -408,25 +307,26 @@ def main(cfg: DictConfig) -> None:
         batch_size=cfg['train'].get('batch_size', 32),
     )
 
-    # Set up training
+    checkpoint_dir = Path('checkpoints') / metadata['run_id']
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
         accelerator='gpu' if torch.cuda.is_available() else 'cpu',
         devices=1,
-        strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True),
+        strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True), # type: ignore
         callbacks=[
             ModelCheckpoint(
-                dirpath='checkpoints',
-                filename='{epoch}-{val_loss:.2f}',
+                dirpath=str(checkpoint_dir),
+                filename='model-{epoch:03d}',
                 save_top_k=3,
-                monitor='val_loss'
+                monitor='val_loss',
+                save_last=True
             )
         ],
-        val_check_interval=cfg['train']['val_freq'],
+        check_val_every_n_epoch=cfg['train']['val_freq'],
+        # val_check_interval=cfg['train']['val_freq'],
         # logger=L.pytorch.loggers.ClearMLLogger(task=task) if task else True
     )
-
-    # Train model
     trainer.fit(model, data_module)
 
     if task:

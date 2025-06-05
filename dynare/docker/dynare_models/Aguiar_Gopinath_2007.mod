@@ -31,7 +31,7 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
            risk_aversion ${\sigma}$            (long_name='Risk Aversion')
            debt_share ${\alpha_D}$             (long_name='Debt Share')
            capital_share ${\alpha_K}$          (long_name='Capital Share')
-           discount_rate ${\beta}$             (long_name='Discount Rate')
+           beta ${\beta}$                      (long_name='Discount Rate')
            depreciation ${\delta}$             (long_name='Depreciation Rate')
            capital_adjustment_cost ${\phi_K}$  (long_name='Capital Adjustment Cost')
            labor_share ${\alpha_N}$            (long_name='Labor Share')
@@ -45,13 +45,13 @@ growth_rate = log(1.0066);
 risk_aversion = 2;
 debt_share = 0.1;
 capital_share = 0.68;
-discount_rate = 1/1.02;
+beta = 1/1.02;
 depreciation = 0.05;
 capital_adjustment_cost = 4;
 labor_share = 0.36;
 elasticity_substitution = 0.001;
 steady_state_debt = 0.1;
-interest_rate = 1/discount_rate - 1;
+interest_rate = 1/beta - 1;
 persistence_productivity = 0.95;
 persistence_gov_spending = 0.01;
 
@@ -64,9 +64,9 @@ model;
     marginal_utility_labor = -(1 - labor_share) * utility / (1 - labor) * (1 - risk_aversion);
     consumption + exp(gov_spending) * capital(+1) = output + (1 - depreciation) * capital - capital_adjustment_cost / 2 * (exp(gov_spending) * capital(+1) / capital - exp(growth_rate))^2 * capital - debt + bond_price * exp(gov_spending) * debt(+1);
     1 / bond_price = 1 + interest_rate + elasticity_substitution * (exp(debt(+1) - steady_state_debt) - 1);
-    marginal_utility_consumption * (1 + capital_adjustment_cost * (exp(gov_spending) * capital(+1) / capital - exp(growth_rate))) * exp(gov_spending) = discount_rate * exp(gov_spending * (labor_share * (1 - risk_aversion))) * marginal_utility_consumption(+1) * (1 - depreciation + (1 - capital_share) * output(+1) / capital(+1) - capital_adjustment_cost / 2 * (2 * (exp(gov_spending(+1)) * capital(+2) / capital(+1) - exp(growth_rate)) * (-1) * exp(gov_spending(+1)) * capital(+2) / capital(+1) + (exp(gov_spending(+1)) * capital(+2) / capital(+1) - exp(growth_rate))^2));
+    marginal_utility_consumption * (1 + capital_adjustment_cost * (exp(gov_spending) * capital(+1) / capital - exp(growth_rate))) * exp(gov_spending) = beta * exp(gov_spending * (labor_share * (1 - risk_aversion))) * marginal_utility_consumption(+1) * (1 - depreciation + (1 - capital_share) * output(+1) / capital(+1) - capital_adjustment_cost / 2 * (2 * (exp(gov_spending(+1)) * capital(+2) / capital(+1) - exp(growth_rate)) * (-1) * exp(gov_spending(+1)) * capital(+2) / capital(+1) + (exp(gov_spending(+1)) * capital(+2) / capital(+1) - exp(growth_rate))^2));
     marginal_utility_labor + marginal_utility_consumption * capital_share * output / labor = 0;
-    marginal_utility_consumption * exp(gov_spending) * bond_price = discount_rate * exp(gov_spending * (labor_share * (1 - risk_aversion))) * marginal_utility_consumption(+1);
+    marginal_utility_consumption * exp(gov_spending) * bond_price = beta * exp(gov_spending * (labor_share * (1 - risk_aversion))) * marginal_utility_consumption(+1);
     investment = exp(gov_spending) * capital(+1) - (1 - depreciation) * capital + capital_adjustment_cost / 2 * (exp(gov_spending) * capital(+1) / capital - exp(growth_rate))^2 * capital;
     consumption_to_gdp = consumption / output;
     investment_to_gdp = investment / output;
@@ -78,7 +78,7 @@ model;
 end;
 
 steady_state_model;
-    bond_price = discount_rate * exp(growth_rate)^(labor_share * (1 - risk_aversion) - 1);
+    bond_price = beta * exp(growth_rate)^(labor_share * (1 - risk_aversion) - 1);
     output_capital_ratio = ((1 / bond_price) - (1 - depreciation)) / (1 - capital_share);
     consumption_to_gdp = 1 + (1 - exp(growth_rate) - depreciation) * (1 / output_capital_ratio) - (1 - exp(growth_rate) * bond_price) * debt_share;
     labor = (capital_share * labor_share) / (consumption_to_gdp - labor_share * consumption_to_gdp + capital_share * labor_share);
@@ -109,4 +109,5 @@ end;
 
 steady;
 check;
-stoch_simul(irf=0, order=1, periods=@{periods}, nomoments, nofunctions, nograph, nocorr, noprint);
+
+stoch_simul(irf=0, order=1, periods=@{periods}, drop=0, nomoments, nofunctions, nograph, nocorr, noprint);

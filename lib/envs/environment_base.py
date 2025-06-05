@@ -4,13 +4,11 @@ from abc import (
     ABC,
     abstractmethod,
 )
-from typing import (
-    Optional,
-    Dict,
-    Tuple,
-    Union,
-)
 
+ENV_TO_ID = {
+    "Ramsey": 0,
+    "RBC_baseline": 1,
+}
 
 class AbstractEconomicEnv(gym.Env, ABC):
     """
@@ -22,8 +20,16 @@ class AbstractEconomicEnv(gym.Env, ABC):
     def __init__(self, **kwargs):
         super().__init__()
 
+    @property
     @abstractmethod
-    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[Dict, Dict]:
+    def task_id(self) -> int:
+        """
+        Get the current task ID.
+        """
+        pass
+
+    @abstractmethod
+    def reset(self, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         """
         Reset the environment to initial state.
 
@@ -34,7 +40,7 @@ class AbstractEconomicEnv(gym.Env, ABC):
         pass
 
     @abstractmethod
-    def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, bool, Dict]:
+    def step(self, action: np.ndarray) -> tuple[dict, float, bool, bool, dict]:
         """
         Execute one time step of the economic model.
 
@@ -61,7 +67,7 @@ class AbstractEconomicEnv(gym.Env, ABC):
         pass
 
     @abstractmethod
-    def analytical_step(self) -> Tuple[Dict, float, bool, bool, Dict]:
+    def analytical_step(self) -> tuple[dict, float, bool, bool, dict]:
         """
         Calculate the analytical solution for the economic model for one time step.
 
@@ -76,7 +82,7 @@ class AbstractEconomicEnv(gym.Env, ABC):
 
     @property
     @abstractmethod
-    def params(self) -> Dict[str, Union[float, str, dict]]:
+    def params(self) -> dict[str, float | str | dict]:
         """
         Get the current parameters of the economic environment.
 
@@ -86,7 +92,7 @@ class AbstractEconomicEnv(gym.Env, ABC):
 
     @property
     @abstractmethod
-    def state_description(self):
+    def state_description(self) -> dict[str, str]:
         """
         Provide descriptions of state variables.
 
@@ -96,7 +102,7 @@ class AbstractEconomicEnv(gym.Env, ABC):
 
     @property
     @abstractmethod
-    def action_description(self):
+    def action_description(self) -> dict[str, str]:
         """
         Provide descriptions of action variables.
 
