@@ -1,7 +1,10 @@
-var C       ${C}$ (long_name='consumption')
-    K       ${K}$ (long_name='capital')
-    Y       ${Y}$ (long_name='output')
-    invest  ${I}$ (long_name='investment');
+% Important note: aponomarev
+% At i-th row Capital is the result of the consumption at i-th row
+% So the actual state is K(-1) Y
+var C       $Consumption$ (long_name='consumption')
+    K       $Capital$ (long_name='capital')
+    Y       $Output$ (long_name='output')
+    invest  $Investment$ (long_name='investment');
 
 parameters k_ss c_ss alpha beta delta start_capital;
 
