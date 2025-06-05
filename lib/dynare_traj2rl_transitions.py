@@ -41,7 +41,7 @@ class StateAccessor:
             else:
                 state.append(float(row[column]))
 
-        self.buffer.append(state)
+        self.buffer.append(pd.Series(row))
         return np.array(state)
 
 
