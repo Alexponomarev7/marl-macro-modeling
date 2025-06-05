@@ -1,6 +1,15 @@
+from pathlib import Path
+import tempfile
 import pandas as pd
 from research.utils import PathStorage
+from lib.dynare_traj2rl_transitions import run_model
+from enum import Enum
 import matplotlib.pyplot as plt
+from lib.envs import NAME_TO_ENV
+
+class GenerationType(Enum):
+    DYNARE = "dynare"
+    GYMNASIUM = "gymnasium"
 
 def plot_data_file(model_name: str, sample_id: int, n_iters: int | None = None):
     config_params = PathStorage.raw_root / f"{model_name}_config_{sample_id}_config.yml"
@@ -41,5 +50,39 @@ def plot_data_file(model_name: str, sample_id: int, n_iters: int | None = None):
         print(f.read())
     return combined_df
 
-def generate_model_with_custom_params(model_name: str, params: dict):
-    pass
+def generate_model_dynare(model_name: str, params: dict, periods: int = 50) -> tuple[pd.DataFrame, dict]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tmp_file = Path(temp_dir) / f"{model_name}.csv"
+
+        run_model(
+            input_file=Path(f"dynare/docker/dynare_models/{model_name}.mod"),
+            output_file=tmp_file,
+            parameters=[f"-Dperiods={periods}"] + [f"-D{param}={value}" for param, value in params.items()],
+            max_retries=1,
+        )
+
+        output_file_csv = pd.read_csv(tmp_file, header=None)
+        return output_file_csv, params
+
+def generate_model_gymnasium(model_name: str, params: dict, periods: int = 50) -> tuple[pd.DataFrame, dict]:
+    env = NAME_TO_ENV[model_name](**params)
+    env.reset()
+    states = []
+    actions = []
+    for _ in range(periods):
+        action = env.action_space.sample()
+        state, reward, done, truncated, info = env.step(action)
+        states.append(state)
+        actions.append(action)
+    df_states = pd.DataFrame(states, columns=list(env.state_description.keys()))
+    df_actions = pd.DataFrame(actions, columns=list(env.action_description.keys()))
+    df = pd.concat([df_states, df_actions], axis=1)
+    return df, env.params
+
+def generate_model(model_name: str, params: dict, periods: int = 50, type: GenerationType = GenerationType.DYNARE) -> tuple[pd.DataFrame, dict]:
+    if type == GenerationType.DYNARE:
+        return generate_model_dynare(model_name, params, periods)
+    elif type == GenerationType.GYMNASIUM:
+        return generate_model_gymnasium(model_name, params, periods)
+    else:
+        raise ValueError(f"Invalid generation type: {type}")

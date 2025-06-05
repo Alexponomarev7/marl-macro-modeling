@@ -1,5 +1,7 @@
 import importlib
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
+from multiprocessing import Pool, cpu_count
+from omegaconf import DictConfig
 import pandas as pd
 import numpy as np
 import pickle
@@ -15,6 +17,8 @@ import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
 import traceback
+
+from research.utils import PathStorage
 
 def sample_from_range(range_values: list[float]) -> float:
     return np.random.random() * (range_values[1] - range_values[0]) + range_values[0]
@@ -111,7 +115,7 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
             cmd = [
                 "octave",
                 "--eval",
-                f"""addpath /opt/homebrew/opt/dynare/lib/dynare/matlab; 
+                f"""addpath {os.environ["DYNARE_PATH"]}; 
                 cd {input_file.parent}; dynare {input_file.name} {' '.join(parameters)}; 
                 oo_simul = oo_.endo_simul';
                 csvwrite('{output_file}', oo_simul);"""
@@ -154,8 +158,7 @@ def process_model_combination(args):
     print(f"Output saved to {output_file}")
     print(f"Config saved to {config_file}")
 
-def run_models(config: dict, raw_data_dir: str) -> None:
-    from multiprocessing import Pool, cpu_count
+def run_models(config: dict, raw_data_dir: Path) -> list[Path]:
     output_files = []
     tasks = []
 
@@ -165,7 +168,7 @@ def run_models(config: dict, raw_data_dir: str) -> None:
         parameter_combinations, parameter_values = generate_parameter_combinations(model_settings, num_samples)
         
         for i, (combination, values) in enumerate(zip(parameter_combinations, parameter_values)):
-            input_file = os.path.join(os.getcwd(), "dynare/docker/dynare_models", model_name + ".mod")
+            input_file = os.path.join(PathStorage().dynare_configs_root, model_name + ".mod")
             base_name = "_".join([model_name, f"config_{i}"])
             output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
             output_files.append(Path(output_file))
@@ -181,7 +184,7 @@ def run_models(config: dict, raw_data_dir: str) -> None:
     return output_files
 
 def dynare_trajectories2rl_transitions(
-    input_data_path: str,
+    input_data_path: Path,
     column_names: list[str],
     state_columns: list[str],
     action_columns: list[str],
@@ -245,15 +248,15 @@ def process_model_data(
     model_name: str,
     model_config: dict,
     model_params: dict,
-    raw_data_path: str,
-    output_dir: str,
+    raw_data_path: Path,
+    output_dir: Path,
 ) -> None:
     """Processes raw Dynare data for a specific model and configuration."""
     logger.info(f"Processing {model_name} with data from {raw_data_path}...")
     rl_env_conf = model_config["rl_env_settings"]
 
     # Extract configuration number from the filename (if any)
-    config_match = re.search(r"_config_(\d+)_raw\.csv$", raw_data_path)
+    config_match = re.search(r"_config_(\d+)_raw\.csv$", str(raw_data_path))
     config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
 
     # Generate output path
@@ -266,7 +269,7 @@ def process_model_data(
         column_names=model_config["dynare_model_settings"]["column_names"],
         state_columns=rl_env_conf["input"]["state_columns"],
         action_columns=rl_env_conf["input"]["action_columns"],
-        reward_fn=reward_fn,
+        reward_fn=reward_fn, # type: ignore
         reward_kwargs=rl_env_conf["reward_kwargs"],
         discount_factor=model_params["beta"],
         model_params=model_params,
@@ -297,28 +300,18 @@ def extract_model_name(filename: str) -> str:
     # Если суффикса нет, возвращаем имя файла без расширения
     return filename.replace("_raw", "")
 
-def main() -> None:
-    config_path = "../dynare/conf/"
-    config_name = "config"
-
-    with hydra.initialize(version_base=None, config_path=config_path):
-        config = hydra.compose(config_name=config_name)
-
-
-    # Directory containing raw data files
-    raw_data_dir = "./data/val_raw"
-    output_dir = "./data/val_processed"
-
+@hydra.main(config_path="../dynare/conf", config_name="config")
+def main(cfg: DictConfig) -> None:
+    config = cast(dict, cfg)
+    
+    path_storage = PathStorage()
     logger.info("Running models...")
-    output_files = run_models(config, raw_data_dir)
+    output_files = run_models(config, path_storage.raw_root)
     logger.info("Models run successfully.")
 
     # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Find all raw data files
-    raw_data_files = list(Path(raw_data_dir).glob("*_raw.csv"))
-
+    os.makedirs(path_storage.raw_root, exist_ok=True)
+    os.makedirs(path_storage.processed_root, exist_ok=True)
     for raw_data_file in output_files:
         config_data_file = Path(str(raw_data_file).replace("_raw.csv", "_config.yml"))
         with open(config_data_file, 'r') as f:
@@ -335,8 +328,8 @@ def main() -> None:
                 model_name=model_name,
                 model_config=config[model_name],
                 model_params=model_params,
-                raw_data_path=str(raw_data_file),
-                output_dir=output_dir,
+                raw_data_path=raw_data_file,
+                output_dir=path_storage.processed_root,
             )
         except Exception as e:
             logger.error(f"Error processing {model_name}: {e}")

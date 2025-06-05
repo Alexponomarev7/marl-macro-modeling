@@ -1,5 +1,6 @@
 import math
 from lib.dataset import ACTION_MAPPING, STATE_MAPPING
+from lib.envs.environment_base import AbstractEconomicEnv
 import torch
 import torch.nn as nn
 
@@ -81,6 +82,10 @@ class AlgorithmDistillationTransformer(nn.Module):
         # self.token_type_embedding = nn.Embedding(4, d_model)
 
         # self.positional_encoding = PositionalEncoding(d_model)
+        
+        # Create causal mask to ensure transformer only looks at past tokens
+        self.register_buffer('causal_mask', torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1).bool())
+        
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                d_model=self.d_model,
@@ -124,14 +129,14 @@ class AlgorithmDistillationTransformer(nn.Module):
         return combined.view(combined.shape[0], combined.shape[1], -1)
         
     def forward(
-            self,
-            states: torch.Tensor,
-            states_info: torch.Tensor,
-            actions: torch.Tensor = None,
-            actions_info: torch.Tensor = None,
-            rewards: torch.Tensor = None,
-            task_ids: torch.Tensor = None,
-            model_params: torch.Tensor = None,
+        self,
+        states: torch.Tensor,
+        states_info: torch.Tensor,
+        actions: torch.Tensor,
+        actions_info: torch.Tensor,
+        rewards: torch.Tensor,
+        task_ids: torch.Tensor,
+        model_params: torch.Tensor,
     ) -> torch.Tensor:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
@@ -173,19 +178,61 @@ class AlgorithmDistillationTransformer(nn.Module):
             action_emb, # [bs, seq_length, d_model * action_dim]
             reward_emb # [bs, seq_length, d_model]
         ], dim=2)
-
-        # token_type_emb = self.token_type_embedding(token_types)
         sequence = sequence # + token_type_emb
 
-        # Apply transformer
-        encoded = self.transformer(sequence.transpose(0, 1)).transpose(0, 1)  # [batch_size, seq_len, d_model]
-
-        # Extract only state positions for action prediction
-        # if actions is None or rewards is None:
-        #     state_positions = encoded[:, 1:]  # Skip task token, only predict for the state
-        # else:
-            # Extract positions after each state token (every 3rd position after task token)
-    
-        # Predict actions for all states
+        mask = self.causal_mask[:seq_length, :seq_length]
+        encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
         actions_pred = self.action_head(encoded)[:, :-1, :] # [bs, seq_length-1, action_dim]
         return actions_pred
+
+    def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
+        state_values, state_ids = [], []
+        for state_name, state_value in state.items():
+            assert state_name in STATE_MAPPING, f"State {state_name} not found in STATE_MAPPING"
+            state_ids.append(STATE_MAPPING[state_name])
+            state_values.append(state_value)
+        
+        state_values += [0] * (self.state_dim - len(state_values))
+        state_ids += [STATE_MAPPING["Empty"]] * (self.state_dim - len(state_ids))
+        return torch.tensor(state_values, dtype=torch.float32), torch.tensor(state_ids, dtype=torch.long)
+
+    def _get_action_info(self, action: dict) -> tuple[torch.Tensor, torch.Tensor]:
+        action_values, action_ids = [], []
+        for action_name, action_value in action.items():
+            assert action_name in ACTION_MAPPING, f"Action {action_name} not found in ACTION_MAPPING"
+            action_ids.append(ACTION_MAPPING[action_name])
+            action_values.append(action_value)
+        action_values += [0] * (self.action_dim - len(action_values))
+        action_ids += [ACTION_MAPPING["Empty"]] * (self.action_dim - len(action_ids))
+        return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
+
+    def inference(self, env: AbstractEconomicEnv) -> torch.Tensor:
+        init_state, _ = env.reset()
+        init_state_values, states_info = self._get_state_info(init_state)
+        init_action_values, actions_info = self._get_action_info(
+            {k: 0.0 for k, _ in env.action_description.items()}
+        )
+
+        state_history = [init_state_values]
+        action_history = [init_action_values]
+        reward_history = [torch.tensor(0.0, dtype=torch.float32)]
+        task_ids = torch.tensor([env.task_id], dtype=torch.long)
+        model_params = torch.tensor([env.params], dtype=torch.float32)
+
+        truncated, done = False, False
+        while not truncated and not done:
+            out = self.forward(
+                states=torch.stack(state_history).unsqueeze(0).to(self.device),
+                states_info=states_info.unsqueeze(0).to(self.device),
+                actions=torch.stack(action_history).unsqueeze(0).to(self.device),
+                actions_info=actions_info.unsqueeze(0).to(self.device),
+                rewards=torch.stack(reward_history).unsqueeze(0).to(self.device),
+                task_ids=task_ids.to(self.device),
+                model_params=model_params.unsqueeze(0).to(self.device)
+            )
+
+
+            action = 
+            state, reward, done, info = env.step(action)
+            states.append(state)
+            actions.append(action)
