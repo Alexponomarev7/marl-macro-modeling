@@ -56,61 +56,132 @@ metadata:
   periods: 50
   num_samples: 1
 models:
-  Ramsey:
+  # Ramsey:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     column_names:
+  #       - Consumption
+  #       - Capital
+  #       - Output
+  #       - Investment
+  #     parameter_ranges:
+  #       start_capital: [0.5, 3]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.15]
+  #       alpha: [0.33, 0.66]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - Output
+  #       action_columns:
+  #         - Consumption
+  #     output:
+  #       data_path: ./data/processed/Ramsey
+
+
+  # RBC_baseline:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     column_names:
+  #       - Consumption
+  #       - Capital
+  #       - LoggedProductivity
+  #     parameter_ranges:
+  #       beta: [0.95, 0.99]               # Discount factor
+  #       alpha: [0.33, 0.33]              # Important to keep it constant
+  #       delta: [0.02, 0.05]              # Depreciation rate
+  #       rho: [0.7, 0.9]                  # Persistence of productivity shock
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #     input:
+  #       state_columns:
+  #         - Capital
+  #         - LoggedProductivity
+  #       action_columns:
+  #         - Consumption
+  #     output:
+  #       data_path: ./data/processed/RBC_baseline
+
+  GarciaCicco_et_al_2010:
     dynare_model_settings:
       periods: ${metadata.periods}
       num_samples: ${metadata.num_samples}
-      column_names:
-        - Consumption
-        - Capital
-        - Output
-        - Investment
-      parameter_ranges:
-        start_capital: [0.5, 3]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.15]
-        alpha: [0.33, 0.66]
-
+      parameter_ranges: {}
+        # beta: [0.9, 0.99]
+        # gamma_a: [2.0, 2.0]
+        # delta: [0.05, 0.15]
+        # alpha: [0.3, 0.3]
+        # psi: [2.5, 3.0]
+        # omega: [1.5, 1.7]
+        # theta: [2.2, 2.4]
+        # phi: [4.5, 5.0]
+        # dbar: [0.005, 0.01]
+        # gbar: [1.0, 1.01]
+        # rho_a: [0.8, 0.9]
+        # rho_g: [0.2, 0.3]
+        # rho_nu: [0.8, 0.9]
+        # rho_mu: [0.8, 0.9]
+        # rho_s: [0.1, 0.2]
+        # s_share: [0.05, 0.15]
+        # S: [0.01, 0.03]
     rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: Consumption
-      input:
-        state_columns:
-          - [Capital, -1]
-          - Output
-        action_columns:
-          - Consumption
-      output:
-        data_path: ./data/processed/Ramsey
-
-
-  RBC_baseline:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      column_names:
-        - Consumption
-        - Capital
-        - LoggedProductivity
-      parameter_ranges:
-        beta: [0.95, 0.99]               # Discount factor
-        alpha: [0.33, 0.33]              # Important to keep it constant
-        delta: [0.02, 0.05]              # Depreciation rate
-        rho: [0.7, 0.9]                  # Persistence of productivity shock
-
-    rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: Consumption
+      reward: lib.rewards.GarciaCicco
+      reward_kwargs: {}
       input:
         state_columns:
           - Capital
           - LoggedProductivity
+          - Debt
+          - Output
+          - TradeBalance
         action_columns:
           - Consumption
+          - HoursWorked
+        info_columns:
+          - MUConsumption
       output:
-        data_path: ./data/processed/RBC_baseline
+
+#     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
+
+#   rl_env_settings:
+#     reward: lib.rewards.stability_reward
+#     reward_kwargs:
+#       target_indices: [7]  # Индекс колонки 'Trade Balance'
+#       weights: [1.0]       # Вес для стабильности торгового баланса
+#     input:
+#       data_path: ./data/raw/GarciaCicco_et_al_2010_raw.csv  # Путь к CSV-файлу с данными
+#       state_columns:
+#         - Consumption                        # Потребление (c)
+#         - Capital                            # Капитал (k)
+#         - Total Factor Productivity          # Совокупная факторная производительность (a)
+#         - Hours Worked                       # Отработанные часы (h)
+#         - Debt                               # Долг (d)
+#         - Output                             # Выпуск (y)
+#         - Investment                         # Инвестиции (invest)
+#         - Trade Balance                      # Торговый баланс (tb)
+#         - Marginal Utility of Consumption    # Предельная полезность потребления (mu_c)
+#         - Trade Balance to Output Ratio      # Отношение торгового баланса к выпуску (tb_y)
+#         - Output Growth Rate                 # Рост выпуска (g_y)
+#         - Consumption Growth Rate            # Рост потребления (g_c)
+#         - Investment Growth Rate             # Рост инвестиций (g_invest)
+#         - Technology Growth Rate             # Темп роста технологий (g)
+#         - Interest Rate                      # Процентная ставка (r)
+#         - Preference Shock                   # Шок предпочтений (nu)
+#         - Country Premium Shock              # Шок премии за риск (mu)
+#       action_columns:
+#         - Investment  # Управляемая переменная (инвестиции)
+#     output:
+#       data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
 
 
 # Born_Pfeifer_2018_MP:
@@ -306,42 +377,6 @@ models:
 #         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
 #     output:
 #       data_path: ./data/processed/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
-
-
-# GarciaCicco_et_al_2010:
-#   dynare_model_settings:
-#     periods: 1000
-#     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [7]  # Индекс колонки 'Trade Balance'
-#       weights: [1.0]       # Вес для стабильности торгового баланса
-#     input:
-#       data_path: ./data/raw/GarciaCicco_et_al_2010_raw.csv  # Путь к CSV-файлу с данными
-#       state_columns:
-#         - Consumption                        # Потребление (c)
-#         - Capital                            # Капитал (k)
-#         - Total Factor Productivity          # Совокупная факторная производительность (a)
-#         - Hours Worked                       # Отработанные часы (h)
-#         - Debt                               # Долг (d)
-#         - Output                             # Выпуск (y)
-#         - Investment                         # Инвестиции (invest)
-#         - Trade Balance                      # Торговый баланс (tb)
-#         - Marginal Utility of Consumption    # Предельная полезность потребления (mu_c)
-#         - Trade Balance to Output Ratio      # Отношение торгового баланса к выпуску (tb_y)
-#         - Output Growth Rate                 # Рост выпуска (g_y)
-#         - Consumption Growth Rate            # Рост потребления (g_c)
-#         - Investment Growth Rate             # Рост инвестиций (g_invest)
-#         - Technology Growth Rate             # Темп роста технологий (g)
-#         - Interest Rate                      # Процентная ставка (r)
-#         - Preference Shock                   # Шок предпочтений (nu)
-#         - Country Premium Shock              # Шок премии за риск (mu)
-#       action_columns:
-#         - Investment  # Управляемая переменная (инвестиции)
-#     output:
-#       data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
 
 
 # Hansen_1985:
