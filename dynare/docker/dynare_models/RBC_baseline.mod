@@ -22,12 +22,6 @@ LoggedProductivity = rho*LoggedProductivity(-1)+LoggedProductivityInnovation;
 
 end;
 
-steady_state_model;
-  LoggedProductivity = LoggedProductivityInnovation/(1-rho);
-  Capital = (exp(LoggedProductivity)*alpha/(1/beta-1+delta))^(1/(1-alpha));
-  Consumption = exp(LoggedProductivity)*Capital^alpha-delta*Capital;
-end;
-
 steady;
 
 initval;
@@ -36,11 +30,13 @@ initval;
   Capital = 0.5;
 end;
 
-shocks;
-  var LoggedProductivityInnovation;
-  periods 10 15 20 25;
-  values -0.02 0.12 0.04 0.06;
+endval;
+  LoggedProductivity = LoggedProductivityInnovation/(1-rho);
+  Capital = (exp(LoggedProductivity)*alpha/(1/beta-1+delta))^(1/(1-alpha));
+  Consumption = exp(LoggedProductivity)*Capital^alpha-delta*Capital;
 end;
+
+@{shocks}
 
 perfect_foresight_setup(periods=@{periods});
 perfect_foresight_solver;

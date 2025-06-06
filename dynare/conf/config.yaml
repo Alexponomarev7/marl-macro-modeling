@@ -84,7 +84,6 @@ models:
       output:
         data_path: ./data/processed/Ramsey
 
-
   RBC_baseline:
     dynare_model_settings:
       periods: ${metadata.periods}
@@ -98,7 +97,10 @@ models:
         alpha: [0.33, 0.33]              # Important to keep it constant
         delta: [0.02, 0.05]              # Depreciation rate
         rho: [0.7, 0.9]                  # Persistence of productivity shock
-
+      shocks:
+        shock_periods: [10, 15, 20, 25]
+        shock_values: [-0.02, 0.12, 0.04, 0.06]
+        var_name: LoggedProductivityInnovation
     rl_env_settings:
       reward: lib.rewards.crra_reward
       reward_kwargs:

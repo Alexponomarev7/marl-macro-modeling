@@ -26,5 +26,25 @@ def test_ramsey_env(parameters):
     assert np.allclose(df_dynare, df_gymnasium_with_trajectory, atol=1e-3), "dataframes are not the same"
     assert params1 == params3, "parameters should be the same"
 
+@pytest.mark.parametrize("parameters", [{
+    "start_capital": 1.0, "delta": 0.01, "alpha": 0.33, "beta": 0.95,
+    "shock_var_name": "LoggedProductivityInnovation",
+    "shock_periods": [10, 15, 20, 25],
+    "shock_values": [-0.02, 0.12, 0.04, 0.06],
+}])
+def test_rbc_env(parameters):
+    df_dynare, params1 = generate_model(
+        "RBC_baseline", parameters, periods=50, type=GenerationType.DYNARE
+    )
+    df_gymnasium, params2 = generate_model(
+        "RBC_baseline", parameters, periods=50, type=GenerationType.GYMNASIUM, trajectory=df_dynare
+    )
+
+    df_dynare = df_dynare.iloc[:25]
+    df_gymnasium = df_gymnasium.iloc[:25]
+
+    assert np.allclose(df_dynare, df_gymnasium, atol=5e-2), "dataframes are not the same"
+    assert params1 == params2, "parameters should be the same"
+
 if __name__ == "__main__":
     pytest.main()

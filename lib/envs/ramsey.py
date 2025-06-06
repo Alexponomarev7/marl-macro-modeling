@@ -12,11 +12,11 @@ class RamseyEnv(AbstractEconomicEnv):
     """
 
     def __init__(
-            self,
-            alpha: float = 0.33,
-            beta: float = 0.96,
-            delta: float = 0.1,
-            start_capital: float = 1.0,
+        self,
+        alpha: float = 0.33,
+        beta: float = 0.96,
+        delta: float = 0.1,
+        start_capital: float = 1.0,
     ) -> None:
         super().__init__()
 

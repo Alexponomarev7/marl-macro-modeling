@@ -90,6 +90,17 @@ def generate_parameter_combinations(model_settings: dict, num_samples: int) -> t
                 current_combination.append(f"-D{param}={value}")
                 current_values[param] = value
         
+        if "shocks" in model_settings:
+            var_name = model_settings["shocks"]["var_name"]
+            shock_periods = [str(period) for period in model_settings["shocks"]["shock_periods"]]
+            shock_values = [str(value) for value in model_settings["shocks"]["shock_values"]]
+            shocks_block = f"shocks;var {var_name}; periods {' '.join(shock_periods)}; values {' '.join(shock_values)};end;"
+            current_combination.append(f"-Dshocks='\"{shocks_block}\"'")
+
+            current_values["shock_var_name"] = var_name
+            current_values["shock_periods"] = shock_periods
+            current_values["shock_values"] = shock_values
+
         parameter_combinations.append(current_combination)
         parameter_values.append(current_values)
     
