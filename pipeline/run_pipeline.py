@@ -219,11 +219,11 @@ class EconomicPolicyModel(L.LightningModule):
 
         # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
         # actions shape: [batch_size, seq_length, action_dim]
-        loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
         self.log('train_action_loss', loss, on_step=True, on_epoch=True)
         if "endogenous" in batch and pinn_preds is not None:
             endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds, endogenous[:, 1:, :])
+            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
             self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
             loss += pinn_loss
 
@@ -256,11 +256,11 @@ class EconomicPolicyModel(L.LightningModule):
             model_params=model_params,
         )
 
-        loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
         self.log('val_action_loss', loss, on_epoch=True)
         if "endogenous" in batch and pinn_preds is not None:
             endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds, endogenous[:, 1:, :])
+            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
             self.log('val_pinn_loss', pinn_loss, on_epoch=True)
             loss += pinn_loss
 
@@ -322,7 +322,8 @@ def main(hydra_cfg: DictConfig) -> None:
     if metadata["track"]:
         task = clearml.Task.init(
             project_name=metadata["project"],
-            task_name=metadata["run_id"],
+            task_name=metadata["comment"],
+            tags=[metadata["run_id"]],
             task_type=clearml.Task.TaskTypes.training
         )
         task.set_parameters_as_dict(cfg)

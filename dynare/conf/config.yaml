@@ -52,9 +52,9 @@
 #     output:
 #       data_path: ./data/processed/Aguiar_Gopinath_2007
 metadata:
-  data_folder: data
+  data_folder: val_data
   periods: 50
-  num_samples: 1000
+  num_samples: 100
 models:
   Ramsey:
     dynare_model_settings:

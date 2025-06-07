@@ -74,6 +74,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.max_seq_len = max_seq_len
         self.d_model = d_model * (1 + state_dim + action_dim + 1)
         self.has_pinn = has_pinn
+        self.model_params_dim = model_params_dim
 
         self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
         self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
@@ -188,12 +189,12 @@ class AlgorithmDistillationTransformer(nn.Module):
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
         
         # Main action prediction head
-        actions_pred = self.action_head(encoded)[:, :-1, :] # [bs, seq_length-1, action_dim]
+        actions_pred = self.action_head(encoded) # [bs, seq_length-1, action_dim]
         
         # Optional PINN predictions
         pinn_pred = None
         if self.has_pinn:
-            pinn_pred = self.pinn_head(encoded)[:, :-1, :] # [bs, seq_length-1, pinn_output_dim]
+            pinn_pred = self.pinn_head(encoded) # [bs, seq_length-1, pinn_output_dim]
 
         return actions_pred, pinn_pred
 
@@ -218,22 +219,28 @@ class AlgorithmDistillationTransformer(nn.Module):
         action_ids += [ACTION_MAPPING["Empty"]] * (self.action_dim - len(action_ids))
         return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
 
-    def inference(self, env: AbstractEconomicEnv) -> torch.Tensor:
+    def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
         init_state, _ = env.reset()
-        init_state_values, states_info = self._get_state_info(init_state)
+        init_state_values, states_info = self._get_state_info({
+            state_name: init_state[state_name] for state_name in env.state_description.keys()
+        })
         init_action_values, actions_info = self._get_action_info(
             {k: 0.0 for k, _ in env.action_description.items()}
         )
 
+        state_to_plot = [{
+            state_name: init_state[state_name] for state_name in env.state_description.keys()
+        }]
+        action_to_plot = [{k: 0.0 for k, _ in env.action_description.items()}]
+
         state_history = [init_state_values]
         action_history = [init_action_values]
-        reward_history = [torch.tensor(0.0, dtype=torch.float32)]
+        reward_history = [torch.tensor([0.0], dtype=torch.float32)]
         task_ids = torch.tensor([env.task_id], dtype=torch.long)
-        model_params = torch.tensor([env.params], dtype=torch.float32)
+        model_params = torch.tensor([v for _, v in sorted(env.params.items())] + [0] * (self.model_params_dim - len(env.params)), dtype=torch.float32)
 
-        truncated, done = False, False
-        while not truncated and not done:
-            out = self.forward(
+        for _ in range(max_steps):
+            out, _ = self.forward(
                 states=torch.stack(state_history).unsqueeze(0).to(self.device),
                 states_info=states_info.unsqueeze(0).to(self.device),
                 actions=torch.stack(action_history).unsqueeze(0).to(self.device),
@@ -242,3 +249,16 @@ class AlgorithmDistillationTransformer(nn.Module):
                 task_ids=task_ids.to(self.device),
                 model_params=model_params.unsqueeze(0).to(self.device)
             )
+
+            action = float(out[0][-1][0])
+            next_state, reward, _, _, _ = env.step(action) # type: ignore
+            state_to_plot.append({
+                state_name: next_state[state_name] for state_name in env.state_description.keys()
+            })
+            action_to_plot.append({k: next_state[k] for k, _ in env.action_description.items()})
+
+            state_history.append(self._get_state_info(state_to_plot[-1])[0])
+            action_history.append(self._get_action_info(action_to_plot[-1])[0])
+            reward_history.append(torch.tensor([reward], dtype=torch.float32))
+
+        return state_to_plot, action_to_plot

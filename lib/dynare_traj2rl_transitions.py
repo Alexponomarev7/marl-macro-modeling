@@ -229,7 +229,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
     
-    num_processes = min(cpu_count(), len(tasks))
+    num_processes = min(min(cpu_count(), len(tasks)), 32)
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
     
     with Pool(processes=num_processes) as pool:
