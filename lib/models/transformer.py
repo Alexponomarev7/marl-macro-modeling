@@ -56,21 +56,25 @@ class AlgorithmDistillationTransformer(nn.Module):
     """
 
     def __init__(
-            self,
-            state_dim: int,
-            action_dim: int,
-            num_tasks: int,
-            d_model: int,
-            nhead: int,
-            num_layers: int,
-            max_seq_len: int,
-            model_params_dim: int = 5,
+        self,
+        state_dim: int,
+        action_dim: int,
+        num_tasks: int,
+        d_model: int,
+        nhead: int,
+        num_layers: int,
+        max_seq_len: int,
+        model_params_dim: int,
+        pinn_output_dim: int,  # Optional PINN head output dimension
+        has_pinn: bool,
     ):
         super().__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.max_seq_len = max_seq_len
         self.d_model = d_model * (1 + state_dim + action_dim + 1)
+        self.has_pinn = has_pinn
+        self.model_params_dim = model_params_dim
 
         self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
         self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
@@ -95,6 +99,14 @@ class AlgorithmDistillationTransformer(nn.Module):
             num_layers=num_layers
         )
         self.action_head = nn.Linear(self.d_model, action_dim, dtype=torch.float32)
+
+        # Optional PINN head for predicting additional data
+        if self.has_pinn:
+            self.pinn_head = nn.Sequential(
+                nn.Linear(self.d_model, self.d_model // 2),
+                nn.ReLU(),
+                nn.Linear(self.d_model // 2, pinn_output_dim)
+            )
 
     def get_state_embedding(self, states: torch.Tensor, states_info: torch.Tensor) -> torch.Tensor:
         # states: [batch_size, seq_length, state_dim]
@@ -137,7 +149,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         rewards: torch.Tensor,
         task_ids: torch.Tensor,
         model_params: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
@@ -149,25 +161,18 @@ class AlgorithmDistillationTransformer(nn.Module):
             padding_mask: [batch_size, seq_length]
 
         Returns:
-            torch.Tensor: Predicted actions [batch_size, seq_length, action_dim]
+            tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
         """
         seq_length = states.shape[1]
 
         # Embed state and task
         state_emb = self.get_state_embedding(states, states_info)
 
-        # print(self.task_embedding(task_ids).unsqueeze(1).shape)
-        # print(model_params.unsqueeze(1).shape)
         task_emb = torch.cat([
             self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model] 
             model_params.unsqueeze(1)  # [bs, 1, num_params]
         ], dim=2)  # [bs, 1, d_model + num_params]
         
-        # Sequence will only include task + states and actions until the current state
-        # if actions is None or rewards is None:
-        #     sequence = torch.cat([task_emb, state_emb[:, 0:1]], dim=1)  # [bs, 2, d_model]
-        #     token_types = torch.tensor([0, 1], dtype=torch.long, device=states.device).unsqueeze(0).repeat(batch_size, 1)
-        # else:
         action_emb = self.get_action_embedding(actions, actions_info)
         reward_emb = self.reward_embedding(rewards)
 
@@ -182,8 +187,16 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         mask = self.causal_mask[:seq_length, :seq_length]
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
-        actions_pred = self.action_head(encoded)[:, :-1, :] # [bs, seq_length-1, action_dim]
-        return actions_pred
+        
+        # Main action prediction head
+        actions_pred = self.action_head(encoded) # [bs, seq_length-1, action_dim]
+        
+        # Optional PINN predictions
+        pinn_pred = None
+        if self.has_pinn:
+            pinn_pred = self.pinn_head(encoded) # [bs, seq_length-1, pinn_output_dim]
+
+        return actions_pred, pinn_pred
 
     def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
         state_values, state_ids = [], []
@@ -206,22 +219,28 @@ class AlgorithmDistillationTransformer(nn.Module):
         action_ids += [ACTION_MAPPING["Empty"]] * (self.action_dim - len(action_ids))
         return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
 
-    def inference(self, env: AbstractEconomicEnv) -> torch.Tensor:
+    def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
         init_state, _ = env.reset()
-        init_state_values, states_info = self._get_state_info(init_state)
+        init_state_values, states_info = self._get_state_info({
+            state_name: init_state[state_name] for state_name in env.state_description.keys()
+        })
         init_action_values, actions_info = self._get_action_info(
             {k: 0.0 for k, _ in env.action_description.items()}
         )
 
+        state_to_plot = [{
+            state_name: init_state[state_name] for state_name in env.state_description.keys()
+        }]
+        action_to_plot = [{k: 0.0 for k, _ in env.action_description.items()}]
+
         state_history = [init_state_values]
         action_history = [init_action_values]
-        reward_history = [torch.tensor(0.0, dtype=torch.float32)]
+        reward_history = [torch.tensor([0.0], dtype=torch.float32)]
         task_ids = torch.tensor([env.task_id], dtype=torch.long)
-        model_params = torch.tensor([env.params], dtype=torch.float32)
+        model_params = torch.tensor([v for _, v in sorted(env.params.items())] + [0] * (self.model_params_dim - len(env.params)), dtype=torch.float32)
 
-        truncated, done = False, False
-        while not truncated and not done:
-            out = self.forward(
+        for _ in range(max_steps):
+            out, _ = self.forward(
                 states=torch.stack(state_history).unsqueeze(0).to(self.device),
                 states_info=states_info.unsqueeze(0).to(self.device),
                 actions=torch.stack(action_history).unsqueeze(0).to(self.device),
@@ -231,8 +250,15 @@ class AlgorithmDistillationTransformer(nn.Module):
                 model_params=model_params.unsqueeze(0).to(self.device)
             )
 
+            action = float(out[0][-1][0])
+            next_state, reward, _, _, _ = env.step(action) # type: ignore
+            state_to_plot.append({
+                state_name: next_state[state_name] for state_name in env.state_description.keys()
+            })
+            action_to_plot.append({k: next_state[k] for k, _ in env.action_description.items()})
 
-            # action = 
-            # state, reward, done, info = env.step(action)
-            # states.append(state)
-            # actions.append(action)
+            state_history.append(self._get_state_info(state_to_plot[-1])[0])
+            action_history.append(self._get_action_info(action_to_plot[-1])[0])
+            reward_history.append(torch.tensor([reward], dtype=torch.float32))
+
+        return state_to_plot, action_to_plot
