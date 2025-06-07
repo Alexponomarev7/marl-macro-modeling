@@ -122,7 +122,13 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     assert reward_object is not None, f"reward object is not imported {reward_object_path=}"
     return reward_object
 
-def run_model(input_file: Path, output_file: Path, parameters: list[str], max_retries: int = 3) -> None:
+def run_model(
+    input_file: Path, 
+    output_file: Path,
+    output_params_file: Path,
+    parameters: list[str],
+    max_retries: int = 3,
+) -> None:
     """Run a Dynare model with specified parameters and save results.
     
     Args:
@@ -146,6 +152,8 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
                 dynare {input_file.name} {' '.join(parameters)}; 
                 oo_simul = oo_.endo_simul'; 
                 var_names = M_.endo_names_tex;
+                param_names = M_.param_names;
+                param_values = M_.params;
 
                 fid = fopen('{output_file}', 'w');
                 fprintf(fid, '%s,', var_names{{1:end-1}});
@@ -153,6 +161,11 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
                 fclose(fid);
 
                 dlmwrite('{output_file}', oo_simul, '-append');
+                fid = fopen('{output_params_file}', 'w');
+                for i = 1:length(param_names)
+                    fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
+                end
+                fclose(fid);
                 """
             ]            
             process = subprocess.run(cmd, capture_output=True, text=True)
@@ -161,9 +174,6 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
             if process.returncode != 0:
                 raise RuntimeError(f"Dynare failed with error: {process.stdout} {process.stderr}")
             
-            # Save parameters
-            params_output = str(output_file).replace(".csv", "_params.yml")
-            dump_context_work({}, params_output)
             print(f"Model {input_file} completed successfully.")
             return
 
@@ -178,22 +188,23 @@ def run_model(input_file: Path, output_file: Path, parameters: list[str], max_re
                 print(f"Retrying model {input_file}...")
             else:
                 print(f"Failed to run model {input_file} after {max_retries} attempts.")
+    
+    if retries == max_retries:
+        raise RuntimeError(f"Failed to run model {input_file} after {max_retries} attempts.")
 
 
 def process_model_combination(args):
-    model_name, input_file, base_name, combination, values, raw_data_dir = args
+    _, input_file, base_name, combination, values, raw_data_dir = args
     output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
+    output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
     config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
-    
-    # Save parameter config
-    with open(config_file, 'w') as f:
-        yaml.dump(values, f)
-    
-    run_model(Path(input_file), Path(output_file), combination)
+        
+    run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
     print(f"Output saved to {output_file}")
     print(f"Config saved to {config_file}")
+    print(f"Params saved to {output_params_file}")
 
-def run_models(config: dict, raw_data_dir: Path) -> list[Path]:
+def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
     output_files = []
     tasks = []
 
@@ -206,7 +217,8 @@ def run_models(config: dict, raw_data_dir: Path) -> list[Path]:
             input_file = os.path.join(PathStorage().dynare_configs_root, model_name + ".mod")
             base_name = "_".join([model_name, f"config_{i}"])
             output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
-            output_files.append(Path(output_file))
+            output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
+            output_files.append((Path(output_file), Path(output_params_file)))
             task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
     
@@ -220,7 +232,6 @@ def run_models(config: dict, raw_data_dir: Path) -> list[Path]:
 
 def dynare_trajectories2rl_transitions(
     input_data_path: Path,
-    column_names: list[str],
     state_accessor: StateAccessor,
     action_columns: list[str],
     reward_fn: Callable,
@@ -246,7 +257,7 @@ def dynare_trajectories2rl_transitions(
     current_discount_factor = 1.0
     accumulated_reward = 0.0
 
-    data["REWARD_COMPUTED"] = reward_fn(data, **reward_kwargs)
+    data["REWARD_COMPUTED"] = reward_fn(data, model_params, **reward_kwargs)
 
     for idx, row in data.iterrows():
         if idx == 0:
@@ -301,7 +312,6 @@ def process_model_data(
     reward_fn = get_reward_object(rl_env_conf["reward"])
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
-        column_names=model_config["dynare_model_settings"]["column_names"],
         state_accessor=state_accessor,
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_fn=reward_fn, # type: ignore
@@ -349,9 +359,8 @@ def main(cfg: DictConfig) -> None:
     # Ensure output directory exists
     os.makedirs(path_storage.raw_root, exist_ok=True)
     os.makedirs(path_storage.processed_root, exist_ok=True)
-    for raw_data_file in output_files:
-        config_data_file = Path(str(raw_data_file).replace("_raw.csv", "_config.yml"))
-        with open(config_data_file, 'r') as f:
+    for raw_data_file, params_file in output_files:
+        with open(params_file, 'r') as f:
             model_params = yaml.load(f, Loader=yaml.FullLoader)
         
         model_name = extract_model_name(raw_data_file.stem)

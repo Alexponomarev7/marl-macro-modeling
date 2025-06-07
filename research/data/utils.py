@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import pandas as pd
+import yaml
 from research.utils import PathStorage
 from lib.dynare_traj2rl_transitions import run_model
 from enum import Enum
@@ -53,15 +54,18 @@ def plot_data_file(model_name: str, sample_id: int, n_iters: int | None = None):
 def generate_model_dynare(model_name: str, params: dict, periods: int = 50) -> tuple[pd.DataFrame, dict]:
     with tempfile.TemporaryDirectory() as temp_dir:
         tmp_file = Path(temp_dir) / f"{model_name}.csv"
-
+        tmp_params_file = Path(temp_dir) / f"{model_name}_params.yaml"
         run_model(
             input_file=PathStorage().dynare_configs_root / f"{model_name}.mod",
             output_file=tmp_file,
+            output_params_file=tmp_params_file,
             parameters=[f"-Dperiods={periods}"] + [f"-D{param}={value}" for param, value in params.items()],
             max_retries=1,
         )
 
         output_file_csv = pd.read_csv(tmp_file)
+        with open(tmp_params_file, 'r') as f:
+            params = yaml.safe_load(f)
         return output_file_csv, params
 
 def generate_model_gymnasium(
