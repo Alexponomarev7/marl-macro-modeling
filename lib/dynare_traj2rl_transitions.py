@@ -1,4 +1,6 @@
 import importlib
+import shutil
+import tempfile
 from typing import Callable, Optional, cast
 from multiprocessing import Pool, cpu_count
 from collections import deque
@@ -142,33 +144,38 @@ def run_model(
     while retries < max_retries:
         print(f"Running model: {input_file} (attempt {retries + 1})")
         try:
-            # Run Dynare model
-            cmd: list[str] = [
-                "octave",
-                "--eval",
-                f"""
-                addpath {os.environ["DYNARE_PATH"]}; 
-                cd {input_file.parent}; 
-                dynare {input_file.name} {' '.join(parameters)}; 
-                oo_simul = oo_.endo_simul'; 
-                var_names = M_.endo_names_tex;
-                param_names = M_.param_names;
-                param_values = M_.params;
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                input_tmp_file = Path(tmp_dir) / input_file.name
+                shutil.copy(input_file, input_tmp_file)
 
-                fid = fopen('{output_file}', 'w');
-                fprintf(fid, '%s,', var_names{{1:end-1}});
-                fprintf(fid, '%s\\n', var_names{{end}});
-                fclose(fid);
+                # Run Dynare model
+                cmd: list[str] = [
+                    "octave",
+                    "--eval",
+                    f"""
+                    addpath {os.environ["DYNARE_PATH"]}; 
+                    cd {input_tmp_file.parent}; 
+                    dynare {input_tmp_file.name} {' '.join(parameters)}; 
+                    oo_simul = oo_.endo_simul'; 
+                    var_names = M_.endo_names_tex;
+                    param_names = M_.param_names;
+                    param_values = M_.params;
 
-                dlmwrite('{output_file}', oo_simul, '-append');
-                fid = fopen('{output_params_file}', 'w');
-                for i = 1:length(param_names)
-                    fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
-                end
-                fclose(fid);
-                """
-            ]            
-            process = subprocess.run(cmd, capture_output=True, text=True)
+                    fid = fopen('{output_file}', 'w');
+                    fprintf(fid, '%s,', var_names{{1:end-1}});
+                    fprintf(fid, '%s\\n', var_names{{end}});
+                    fclose(fid);
+
+                    dlmwrite('{output_file}', oo_simul, '-append');
+                    fid = fopen('{output_params_file}', 'w');
+                    for i = 1:length(param_names)
+                        fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
+                    end
+                    fclose(fid);
+                    """
+                ]   
+
+                process = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
 
             if process.returncode != 0:

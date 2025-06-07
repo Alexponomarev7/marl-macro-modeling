@@ -54,7 +54,7 @@
 metadata:
   data_folder: data
   periods: 50
-  num_samples: 1
+  num_samples: 1000
 models:
   Ramsey:
     dynare_model_settings:

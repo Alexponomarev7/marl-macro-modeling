@@ -57,7 +57,11 @@ def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEco
 class DataModule(L.LightningDataModule):
     """PyTorch Lightning data module for handling datasets."""
 
-    def __init__(self, data_root: Path, state_max_dim: int, action_max_dim: int, endogenous_max_dim: int, batch_size: int = 32):
+    def __init__(
+        self, data_root: Path, state_max_dim: int, action_max_dim: int,
+        endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int, 
+        batch_size: int = 32
+    ):
         """
         Initialize DataModule.
 
@@ -71,14 +75,37 @@ class DataModule(L.LightningDataModule):
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
         self.endogenous_max_dim = endogenous_max_dim
+        self.model_params_max_dim = model_params_max_dim
+        self.max_seq_len = max_seq_len
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = EconomicsDataset(self.data_root / "train", self.state_max_dim, self.action_max_dim, self.endogenous_max_dim)
-            self.val_dataset = EconomicsDataset(self.data_root / "val", self.state_max_dim, self.action_max_dim, self.endogenous_max_dim)
+            self.train_dataset = EconomicsDataset(
+                self.data_root / "train", 
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
+            self.val_dataset = EconomicsDataset(
+                self.data_root / "val",
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
         if stage == "test":
-            self.test_dataset = EconomicsDataset(self.data_root / "test", self.state_max_dim, self.action_max_dim, self.endogenous_max_dim)
+            self.test_dataset = EconomicsDataset(
+                self.data_root / "test",
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
 
     def train_dataloader(self):
         """Create training dataloader."""
@@ -196,7 +223,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('train_action_loss', loss, on_step=True, on_epoch=True)
         if "endogenous" in batch and pinn_preds is not None:
             endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds, endogenous)
+            pinn_loss = self.criterion(pinn_preds, endogenous[:, 1:, :])
             self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
             loss += pinn_loss
 
@@ -233,7 +260,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.log('val_action_loss', loss, on_epoch=True)
         if "endogenous" in batch and pinn_preds is not None:
             endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds, endogenous)
+            pinn_loss = self.criterion(pinn_preds, endogenous[:, 1:, :])
             self.log('val_pinn_loss', pinn_loss, on_epoch=True)
             loss += pinn_loss
 
@@ -322,6 +349,8 @@ def main(hydra_cfg: DictConfig) -> None:
         state_max_dim=cfg['train']['max_state_dim'],
         action_max_dim=cfg['train']['max_action_dim'],
         endogenous_max_dim=cfg['train']['max_endogenous_dim'],
+        model_params_max_dim=cfg['train']['max_model_params_dim'],
+        max_seq_len=cfg['train']['max_seq_len'],
         batch_size=cfg['train'].get('batch_size', 32),
     )
 
