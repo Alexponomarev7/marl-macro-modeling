@@ -177,7 +177,7 @@ class EconomicPolicyModel(L.LightningModule):
         actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
 
-        predicted_actions = self(
+        predicted_actions, pinn_preds = self(
             states=states,
             states_info=states_info,
             actions=actions,
@@ -190,6 +190,13 @@ class EconomicPolicyModel(L.LightningModule):
         # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
         # actions shape: [batch_size, seq_length, action_dim]
         loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        self.log('train_action_loss', loss, on_step=True, on_epoch=True)
+        if "info" in batch and pinn_preds is not None:
+            info = torch.clamp(torch.nan_to_num(batch["info"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+            pinn_loss = self.criterion(pinn_preds, info)
+            self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
+            loss += pinn_loss
+
         assert not torch.isnan(loss)
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
@@ -204,13 +211,12 @@ class EconomicPolicyModel(L.LightningModule):
         actions_info = batch['actions_info']
         model_params = batch['model_params']
 
-
         # weird bug with nan values
         states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
 
-        predicted_actions = self(
+        predicted_actions, pinn_preds = self(
             states=states,
             actions=actions,
             rewards=rewards,
@@ -221,6 +227,13 @@ class EconomicPolicyModel(L.LightningModule):
         )
 
         loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        self.log('val_action_loss', loss, on_epoch=True)
+        if "info" in batch and pinn_preds is not None:
+            info = torch.clamp(torch.nan_to_num(batch["info"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+            pinn_loss = self.criterion(pinn_preds, info)
+            self.log('val_pinn_loss', pinn_loss, on_epoch=True)
+            loss += pinn_loss
+
         self.log('val_loss', loss, on_epoch=True)
         return loss
 

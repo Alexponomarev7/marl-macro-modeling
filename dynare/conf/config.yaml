@@ -151,7 +151,7 @@ models:
           - Investment
           - Consumption
           - HoursWorked
-        info_columns:
+        endogenous_columns:
           - [MUConsumption, -1]
 #     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
 

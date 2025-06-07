@@ -233,6 +233,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
 def dynare_trajectories2rl_transitions(
     input_data_path: Path,
     state_accessor: StateAccessor,
+    endogenous_accessor: StateAccessor,
     action_columns: list[str],
     reward_fn: Callable,
     reward_kwargs: dict,
@@ -266,6 +267,7 @@ def dynare_trajectories2rl_transitions(
             continue
 
         state = state_accessor(row)
+        endogenous = endogenous_accessor(row)
         action = row[action_columns].to_numpy()
         reward = float(row["REWARD_COMPUTED"])
 
@@ -273,16 +275,17 @@ def dynare_trajectories2rl_transitions(
         current_discount_factor *= discount_factor
 
         info_columns = list(set(row.index.to_list()) - set(state_accessor.get_columns() + action_columns))
-        info = row[info_columns].to_dict()
-        info["row_id"] = idx
-        info["model_params"] = model_params
+        row_info = row[info_columns].to_dict()
+        row_info["row_id"] = idx
+        row_info["model_params"] = model_params
         transition = {
             "state": state,
             "action": action,
             "reward": reward,
+            "endogenous": endogenous,
             "accumulated_reward": accumulated_reward,
             "truncated": False,
-            "info": info,
+            "info": row_info,
         }
 
         transitions.append(transition)
@@ -308,11 +311,13 @@ def process_model_data(
     output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
 
     state_accessor = StateAccessor(rl_env_conf["input"]["state_columns"])
+    endogenous_accessor = StateAccessor(rl_env_conf["input"]["endogenous_columns"])
 
     reward_fn = get_reward_object(rl_env_conf["reward"])
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
         state_accessor=state_accessor,
+        endogenous_accessor=endogenous_accessor,
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_fn=reward_fn, # type: ignore
         reward_kwargs=rl_env_conf["reward_kwargs"],
@@ -325,6 +330,7 @@ def process_model_data(
 
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
     transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))
+    transitions["endogenous_description"] = pd.Series([list(endogenous_accessor.get_columns())] * len(transitions))
 
     transitions.to_parquet(output_path)
 

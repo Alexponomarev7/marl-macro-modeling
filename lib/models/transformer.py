@@ -65,12 +65,15 @@ class AlgorithmDistillationTransformer(nn.Module):
             num_layers: int,
             max_seq_len: int,
             model_params_dim: int = 5,
+            pinn_output_dim: int = 5,  # Optional PINN head output dimension
+            has_pinn: bool = False,
     ):
         super().__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.max_seq_len = max_seq_len
         self.d_model = d_model * (1 + state_dim + action_dim + 1)
+        self.has_pinn = has_pinn
 
         self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
         self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
@@ -95,6 +98,14 @@ class AlgorithmDistillationTransformer(nn.Module):
             num_layers=num_layers
         )
         self.action_head = nn.Linear(self.d_model, action_dim, dtype=torch.float32)
+
+        # Optional PINN head for predicting additional data
+        if self.has_pinn:
+            self.pinn_head = nn.Sequential(
+                nn.Linear(self.d_model, self.d_model // 2),
+                nn.ReLU(),
+                nn.Linear(self.d_model // 2, pinn_output_dim)
+            )
 
     def get_state_embedding(self, states: torch.Tensor, states_info: torch.Tensor) -> torch.Tensor:
         # states: [batch_size, seq_length, state_dim]
@@ -137,7 +148,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         rewards: torch.Tensor,
         task_ids: torch.Tensor,
         model_params: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
@@ -149,25 +160,18 @@ class AlgorithmDistillationTransformer(nn.Module):
             padding_mask: [batch_size, seq_length]
 
         Returns:
-            torch.Tensor: Predicted actions [batch_size, seq_length, action_dim]
+            tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
         """
         seq_length = states.shape[1]
 
         # Embed state and task
         state_emb = self.get_state_embedding(states, states_info)
 
-        # print(self.task_embedding(task_ids).unsqueeze(1).shape)
-        # print(model_params.unsqueeze(1).shape)
         task_emb = torch.cat([
             self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model] 
             model_params.unsqueeze(1)  # [bs, 1, num_params]
         ], dim=2)  # [bs, 1, d_model + num_params]
         
-        # Sequence will only include task + states and actions until the current state
-        # if actions is None or rewards is None:
-        #     sequence = torch.cat([task_emb, state_emb[:, 0:1]], dim=1)  # [bs, 2, d_model]
-        #     token_types = torch.tensor([0, 1], dtype=torch.long, device=states.device).unsqueeze(0).repeat(batch_size, 1)
-        # else:
         action_emb = self.get_action_embedding(actions, actions_info)
         reward_emb = self.reward_embedding(rewards)
 
@@ -182,8 +186,16 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         mask = self.causal_mask[:seq_length, :seq_length]
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
+        
+        # Main action prediction head
         actions_pred = self.action_head(encoded)[:, :-1, :] # [bs, seq_length-1, action_dim]
-        return actions_pred
+        
+        # Optional PINN predictions
+        pinn_pred = None
+        if self.has_pinn:
+            pinn_pred = self.pinn_head(encoded)[:, :-1, :] # [bs, seq_length-1, pinn_output_dim]
+
+        return actions_pred, pinn_pred
 
     def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
         state_values, state_ids = [], []
@@ -230,9 +242,3 @@ class AlgorithmDistillationTransformer(nn.Module):
                 task_ids=task_ids.to(self.device),
                 model_params=model_params.unsqueeze(0).to(self.device)
             )
-
-
-            # action = 
-            # state, reward, done, info = env.step(action)
-            # states.append(state)
-            # actions.append(action)
