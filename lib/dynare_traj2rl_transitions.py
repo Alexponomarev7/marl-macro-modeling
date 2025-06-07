@@ -264,6 +264,7 @@ def dynare_trajectories2rl_transitions(
         if idx == 0:
             # first row is the initial state
             state_accessor.buffer.append(row)
+            endogenous_accessor.buffer.append(row)
             continue
 
         state = state_accessor(row)
