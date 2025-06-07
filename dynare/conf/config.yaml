@@ -117,6 +117,7 @@ models:
       periods: ${metadata.periods}
       num_samples: ${metadata.num_samples}
       parameter_ranges:
+        start_capital: [0.1, 0.5]
         beta: [0.9, 0.99]
         gamma_a: [2.0, 2.0]
         delta: [0.05, 0.15]
@@ -132,8 +133,6 @@ models:
         rho_nu: [0.8, 0.9]
         rho_mu: [0.8, 0.9]
         rho_s: [0.1, 0.2]
-        s_share: [0.05, 0.15]
-        S: [0.01, 0.03]
     rl_env_settings:
       reward: lib.rewards.GarciaCicco
       reward_kwargs: {}

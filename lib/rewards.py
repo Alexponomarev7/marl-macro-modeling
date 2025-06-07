@@ -23,6 +23,7 @@ def column_reward(state: pd.Series, target_column: str) -> float:
 
 def stability_reward(
     data: pd.DataFrame,
+    parameters: dict[str, float],
     target_column: str | None = None,
 ) -> pd.Series:
     assert target_column is not None
@@ -30,6 +31,7 @@ def stability_reward(
 
 def crra_reward(
     data: pd.DataFrame,
+    parameters: dict[str, float],
     target_column: str | None = None,
 ) -> pd.Series:
     assert target_column is not None
@@ -41,5 +43,5 @@ def GarciaCicco(
 ) -> pd.Series:
     theta = parameters["theta"]
     omega = parameters["omega"]
-    gamma = parameters["gamma"]
+    gamma = parameters["gamma_a"]
     return data["PreferenceShock"] * (data["Consumption"] - theta / omega * data["HoursWorked"]**omega)**(1-gamma)
