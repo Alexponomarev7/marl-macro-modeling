@@ -17,6 +17,9 @@ model:
   nhead: 4
   max_seq_len: 50
   num_tasks: 12
+  model_params_dim: 5
+  has_pinn: true
+  pinn_output_dim: 5
 optimizer:
   _target_: torch.optim.Adam
   lr: 0.0001

@@ -56,17 +56,17 @@ class AlgorithmDistillationTransformer(nn.Module):
     """
 
     def __init__(
-            self,
-            state_dim: int,
-            action_dim: int,
-            num_tasks: int,
-            d_model: int,
-            nhead: int,
-            num_layers: int,
-            max_seq_len: int,
-            model_params_dim: int = 5,
-            pinn_output_dim: int = 5,  # Optional PINN head output dimension
-            has_pinn: bool = False,
+        self,
+        state_dim: int,
+        action_dim: int,
+        num_tasks: int,
+        d_model: int,
+        nhead: int,
+        num_layers: int,
+        max_seq_len: int,
+        model_params_dim: int,
+        pinn_output_dim: int,  # Optional PINN head output dimension
+        has_pinn: bool,
     ):
         super().__init__()
         self.state_dim = state_dim
