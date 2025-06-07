@@ -8,10 +8,12 @@ val_freq: 10
 device: cpu
 max_state_dim: 30
 max_action_dim: 3
+max_endogenous_dim: 5
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
   state_dim: ${train.max_state_dim}
   action_dim: ${train.max_action_dim}
+  pinn_output_dim: ${train.max_endogenous_dim}
   d_model: 32
   num_layers: 2
   nhead: 4
@@ -19,7 +21,6 @@ model:
   num_tasks: 12
   model_params_dim: 5
   has_pinn: true
-  pinn_output_dim: 5
 optimizer:
   _target_: torch.optim.Adam
   lr: 0.0001
