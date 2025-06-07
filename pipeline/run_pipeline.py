@@ -57,7 +57,11 @@ def create_test_envs(dataset_cfg: dict[str, Any]) -> list[tuple[str, AbstractEco
 class DataModule(L.LightningDataModule):
     """PyTorch Lightning data module for handling datasets."""
 
-    def __init__(self, data_root: Path, state_max_dim: int, action_max_dim: int, batch_size: int = 32):
+    def __init__(
+        self, data_root: Path, state_max_dim: int, action_max_dim: int,
+        endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int, 
+        batch_size: int = 32
+    ):
         """
         Initialize DataModule.
 
@@ -70,14 +74,38 @@ class DataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
+        self.endogenous_max_dim = endogenous_max_dim
+        self.model_params_max_dim = model_params_max_dim
+        self.max_seq_len = max_seq_len
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
-            self.train_dataset = EconomicsDataset(self.data_root / "train", self.state_max_dim, self.action_max_dim)
-            self.val_dataset = EconomicsDataset(self.data_root / "val", self.state_max_dim, self.action_max_dim)
+            self.train_dataset = EconomicsDataset(
+                self.data_root / "train", 
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
+            self.val_dataset = EconomicsDataset(
+                self.data_root / "val",
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
         if stage == "test":
-            self.test_dataset = EconomicsDataset(self.data_root / "test", self.state_max_dim, self.action_max_dim)
+            self.test_dataset = EconomicsDataset(
+                self.data_root / "test",
+                self.state_max_dim,
+                self.action_max_dim,
+                self.endogenous_max_dim,
+                self.model_params_max_dim,
+                self.max_seq_len,
+            )
 
     def train_dataloader(self):
         """Create training dataloader."""
@@ -113,6 +141,7 @@ class EconomicPolicyModel(L.LightningModule):
         criterion_cfg: dict[str, Any],
         state_max_dim: int,
         action_max_dim: int,
+        endogenous_max_dim: int,
         test_envs: list[tuple[str, AbstractEconomicEnv]] = [],
         val_episodes: int = 10,
         val_steps: int = 1000,
@@ -140,6 +169,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.val_steps = val_steps
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
+        self.endogenous_max_dim = endogenous_max_dim
 
     def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params):
         """Forward pass matching the transformer's interface"""
@@ -177,7 +207,7 @@ class EconomicPolicyModel(L.LightningModule):
         actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
 
-        predicted_actions = self(
+        predicted_actions, pinn_preds = self(
             states=states,
             states_info=states_info,
             actions=actions,
@@ -189,7 +219,14 @@ class EconomicPolicyModel(L.LightningModule):
 
         # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
         # actions shape: [batch_size, seq_length, action_dim]
-        loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
+        self.log('train_action_loss', loss, on_step=True, on_epoch=True)
+        if "endogenous" in batch and pinn_preds is not None:
+            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
+            self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
+            loss += pinn_loss
+
         assert not torch.isnan(loss)
         self.log('train_loss', loss, on_step=True, on_epoch=True)
         return loss
@@ -204,13 +241,12 @@ class EconomicPolicyModel(L.LightningModule):
         actions_info = batch['actions_info']
         model_params = batch['model_params']
 
-
         # weird bug with nan values
         states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
         rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
 
-        predicted_actions = self(
+        predicted_actions, pinn_preds = self(
             states=states,
             actions=actions,
             rewards=rewards,
@@ -220,7 +256,14 @@ class EconomicPolicyModel(L.LightningModule):
             model_params=model_params,
         )
 
-        loss = self.criterion(predicted_actions, actions[:, 1:, :])
+        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
+        self.log('val_action_loss', loss, on_epoch=True)
+        if "endogenous" in batch and pinn_preds is not None:
+            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
+            self.log('val_pinn_loss', pinn_loss, on_epoch=True)
+            loss += pinn_loss
+
         self.log('val_loss', loss, on_epoch=True)
         return loss
 
@@ -279,7 +322,8 @@ def main(hydra_cfg: DictConfig) -> None:
     if metadata["track"]:
         task = clearml.Task.init(
             project_name=metadata["project"],
-            task_name=metadata["run_id"],
+            task_name=metadata["comment"],
+            tags=[metadata["run_id"]],
             task_type=clearml.Task.TaskTypes.training
         )
         task.set_parameters_as_dict(cfg)
@@ -298,12 +342,16 @@ def main(hydra_cfg: DictConfig) -> None:
         val_episodes=cfg['train'].get('val_episodes', 10),
         state_max_dim=cfg['train']['max_state_dim'],
         action_max_dim=cfg['train']['max_action_dim'],
+        endogenous_max_dim=cfg['train']['max_endogenous_dim'],
     )
 
     data_module = DataModule(
         data_root=Path(cfg['train']['data_root']),
         state_max_dim=cfg['train']['max_state_dim'],
         action_max_dim=cfg['train']['max_action_dim'],
+        endogenous_max_dim=cfg['train']['max_endogenous_dim'],
+        model_params_max_dim=cfg['train']['max_model_params_dim'],
+        max_seq_len=cfg['train']['max_seq_len'],
         batch_size=cfg['train'].get('batch_size', 32),
     )
 

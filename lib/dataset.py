@@ -11,6 +11,12 @@ STATE_MAPPING = {
     "Consumption": 2,
     "Capital": 3,
     "LoggedProductivity": 4,
+    "Debt": 5,
+    "InterestRate": 6,
+    "PreferenceShock": 7,
+    "CountryPremiumShock": 8,
+    "TechGrowthRate": 9,
+    "MUConsumption": 10,
     # "Hours Worked": 4,
     # "Total Factor Productivity": 5,
     # "Annualized Interest Rate": 6,
@@ -116,11 +122,7 @@ ACTION_MAPPING = {
     "Empty": 0,
     "Investment": 1,
     "Consumption": 2,
-    "Government Spending": 3,
-    "Nominal Interest Rate": 4,
-    "Real Consumption": 5,
-    "Growth Rate Of Money Stock": 6,
-    "Capital": 7,
+    "HoursWorked": 3,
 }
 
 ENV_MAPPING = {
@@ -155,7 +157,10 @@ class EconomicsDataset(Dataset):
     4. Task ID encoding for multi-task learning scenarios
     """
 
-    def __init__(self, data_path: Path, max_state_dim: int, max_action_dim: int, max_seq_len: int = 512):
+    def __init__(
+        self, data_path: Path, max_state_dim: int, max_action_dim: int,
+        max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int
+    ):
         """
         Initialize the dataset with the given parameters.
 
@@ -166,7 +171,9 @@ class EconomicsDataset(Dataset):
         """
         self.max_state_dim = max_state_dim
         self.max_action_dim = max_action_dim
+        self.max_endogenous_dim = max_endogenous_dim
         self.max_seq_len = max_seq_len
+        self.max_model_params_dim = max_model_params_dim
 
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
@@ -274,6 +281,7 @@ x
         data = pd.read_parquet(self.metadata[idx]["output_dir"])
 
         states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
+        endogenous = torch.tensor(data['endogenous'].tolist(), dtype=torch.float32)
         actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
@@ -282,18 +290,21 @@ x
         model_params = info["model_params"]
 
         sorted_model_params = list(sorted(model_params.items()))
-        model_params_values = torch.tensor([v for k, v in sorted_model_params], dtype=torch.float32)
+        model_params_values = torch.tensor([v for k, v in sorted_model_params] + [0] * (self.max_model_params_dim - len(sorted_model_params)), dtype=torch.float32)
 
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
         state_description = data.iloc[0]["info"]["state_description"]
         action_description = data.iloc[0]["info"]["action_description"]
+        endogenous_description = data.iloc[0]["info"]["endogenous_description"]
         states_info = torch.tensor([STATE_MAPPING[state] for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
         actions_info = torch.tensor([ACTION_MAPPING[action] for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
+        endogenous_info = torch.tensor([STATE_MAPPING[endogenous] for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"
         assert len(actions_info) == self.max_action_dim, f"actions_info length is {len(actions_info)} but max_action_dim is {self.max_action_dim}"
         # Pad actions to max_actions_dim
         actions = self.pad_dim(actions, self.max_action_dim)
+        endogenous = self.pad_dim(endogenous, self.max_endogenous_dim)
 
         # Get original sequence length
         orig_seq_len = len(states)
@@ -302,6 +313,7 @@ x
         states = self.pad_sequence(states, self.max_seq_len)
         actions = self.pad_sequence(actions, self.max_seq_len)
         rewards = self.pad_sequence(rewards, self.max_seq_len)
+        endogenous = self.pad_sequence(endogenous, self.max_seq_len)
 
         # Create attention mask
         attention_mask = torch.zeros(self.max_seq_len, dtype=torch.bool)
@@ -312,6 +324,8 @@ x
             'states_info': states_info,  # [max_state_dim]
             'actions': actions,  # [max_seq_len, action_dim]
             'actions_info': actions_info,  # [action_dim]
+            'endogenous': endogenous,  # [max_seq_len, max_endogenous_dim]
+            'endogenous_info': endogenous_info,  # [max_endogenous_dim]
             'reward': rewards,  # [max_seq_len, 1]
             'task_id': task_id,  # scalar
             'model_params': model_params_values,

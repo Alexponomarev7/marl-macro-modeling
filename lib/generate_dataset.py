@@ -67,6 +67,7 @@ def generate_env_data_dynare(dynare_file_path: Path):
     info = {
         "action_description": list(df.iloc[0]["action_description"]),
         "state_description": list(df.iloc[0]["state_description"]),
+        "endogenous_description": list(df.iloc[0]["endogenous_description"]),
     }
     df["info"] = df["info"].apply(lambda x: x | info)
     return {
@@ -74,7 +75,7 @@ def generate_env_data_dynare(dynare_file_path: Path):
         "env_params": dynare_file_path.name,
         "action_description": df.iloc[0]["action_description"],
         "state_description": df.iloc[0]["state_description"],
-        "tracks": df[["state", "action", "reward", "done", "truncated", "info"]],
+        "tracks": df[["state", "action", "endogenous", "reward", "done", "truncated", "info"]],
     }
 
 class DatasetWriter:

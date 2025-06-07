@@ -1,4 +1,6 @@
 import importlib
+import shutil
+import tempfile
 from typing import Callable, Optional, cast
 from multiprocessing import Pool, cpu_count
 from collections import deque
@@ -142,33 +144,38 @@ def run_model(
     while retries < max_retries:
         print(f"Running model: {input_file} (attempt {retries + 1})")
         try:
-            # Run Dynare model
-            cmd: list[str] = [
-                "octave",
-                "--eval",
-                f"""
-                addpath {os.environ["DYNARE_PATH"]}; 
-                cd {input_file.parent}; 
-                dynare {input_file.name} {' '.join(parameters)}; 
-                oo_simul = oo_.endo_simul'; 
-                var_names = M_.endo_names_tex;
-                param_names = M_.param_names;
-                param_values = M_.params;
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                input_tmp_file = Path(tmp_dir) / input_file.name
+                shutil.copy(input_file, input_tmp_file)
 
-                fid = fopen('{output_file}', 'w');
-                fprintf(fid, '%s,', var_names{{1:end-1}});
-                fprintf(fid, '%s\\n', var_names{{end}});
-                fclose(fid);
+                # Run Dynare model
+                cmd: list[str] = [
+                    "octave",
+                    "--eval",
+                    f"""
+                    addpath {os.environ["DYNARE_PATH"]}; 
+                    cd {input_tmp_file.parent}; 
+                    dynare {input_tmp_file.name} {' '.join(parameters)}; 
+                    oo_simul = oo_.endo_simul'; 
+                    var_names = M_.endo_names_tex;
+                    param_names = M_.param_names;
+                    param_values = M_.params;
 
-                dlmwrite('{output_file}', oo_simul, '-append');
-                fid = fopen('{output_params_file}', 'w');
-                for i = 1:length(param_names)
-                    fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
-                end
-                fclose(fid);
-                """
-            ]            
-            process = subprocess.run(cmd, capture_output=True, text=True)
+                    fid = fopen('{output_file}', 'w');
+                    fprintf(fid, '%s,', var_names{{1:end-1}});
+                    fprintf(fid, '%s\\n', var_names{{end}});
+                    fclose(fid);
+
+                    dlmwrite('{output_file}', oo_simul, '-append');
+                    fid = fopen('{output_params_file}', 'w');
+                    for i = 1:length(param_names)
+                        fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
+                    end
+                    fclose(fid);
+                    """
+                ]   
+
+                process = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
 
             if process.returncode != 0:
@@ -222,7 +229,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
     
-    num_processes = min(cpu_count(), len(tasks))
+    num_processes = min(min(cpu_count(), len(tasks)), 32)
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
     
     with Pool(processes=num_processes) as pool:
@@ -233,6 +240,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
 def dynare_trajectories2rl_transitions(
     input_data_path: Path,
     state_accessor: StateAccessor,
+    endogenous_accessor: StateAccessor,
     action_columns: list[str],
     reward_fn: Callable,
     reward_kwargs: dict,
@@ -263,9 +271,11 @@ def dynare_trajectories2rl_transitions(
         if idx == 0:
             # first row is the initial state
             state_accessor.buffer.append(row)
+            endogenous_accessor.buffer.append(row)
             continue
 
         state = state_accessor(row)
+        endogenous = endogenous_accessor(row)
         action = row[action_columns].to_numpy()
         reward = float(row["REWARD_COMPUTED"])
 
@@ -273,16 +283,17 @@ def dynare_trajectories2rl_transitions(
         current_discount_factor *= discount_factor
 
         info_columns = list(set(row.index.to_list()) - set(state_accessor.get_columns() + action_columns))
-        info = row[info_columns].to_dict()
-        info["row_id"] = idx
-        info["model_params"] = model_params
+        row_info = row[info_columns].to_dict()
+        row_info["row_id"] = idx
+        row_info["model_params"] = model_params
         transition = {
             "state": state,
             "action": action,
             "reward": reward,
+            "endogenous": endogenous,
             "accumulated_reward": accumulated_reward,
             "truncated": False,
-            "info": info,
+            "info": row_info,
         }
 
         transitions.append(transition)
@@ -308,11 +319,13 @@ def process_model_data(
     output_path = Path(output_dir) / f"{model_name}{config_suffix}.parquet"
 
     state_accessor = StateAccessor(rl_env_conf["input"]["state_columns"])
+    endogenous_accessor = StateAccessor(rl_env_conf["input"]["endogenous_columns"])
 
     reward_fn = get_reward_object(rl_env_conf["reward"])
     transitions = dynare_trajectories2rl_transitions(
         input_data_path=raw_data_path,
         state_accessor=state_accessor,
+        endogenous_accessor=endogenous_accessor,
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_fn=reward_fn, # type: ignore
         reward_kwargs=rl_env_conf["reward_kwargs"],
@@ -325,6 +338,7 @@ def process_model_data(
 
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
     transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))
+    transitions["endogenous_description"] = pd.Series([list(endogenous_accessor.get_columns())] * len(transitions))
 
     transitions.to_parquet(output_path)
 

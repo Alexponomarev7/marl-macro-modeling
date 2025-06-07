@@ -52,19 +52,14 @@
 #     output:
 #       data_path: ./data/processed/Aguiar_Gopinath_2007
 metadata:
-  data_folder: data
+  data_folder: val_data
   periods: 50
-  num_samples: 1
+  num_samples: 100
 models:
   Ramsey:
     dynare_model_settings:
       periods: ${metadata.periods}
       num_samples: ${metadata.num_samples}
-      column_names:
-        - Consumption
-        - Capital
-        - Output
-        - Investment
       parameter_ranges:
         start_capital: [0.5, 3]
         beta: [0.95, 0.99]
@@ -81,6 +76,7 @@ models:
           - Output
         action_columns:
           - Consumption
+        endogenous_columns: []
       output:
         data_path: ./data/processed/Ramsey
 
@@ -89,10 +85,6 @@ models:
     dynare_model_settings:
       periods: ${metadata.periods}
       num_samples: ${metadata.num_samples}
-      column_names:
-        - Consumption
-        - Capital
-        - LoggedProductivity
       parameter_ranges:
         beta: [0.95, 0.99]               # Discount factor
         alpha: [0.33, 0.33]              # Important to keep it constant
@@ -109,6 +101,7 @@ models:
           - LoggedProductivity
         action_columns:
           - Consumption
+        endogenous_columns: []
       output:
         data_path: ./data/processed/RBC_baseline
 
@@ -151,7 +144,7 @@ models:
           - Investment
           - Consumption
           - HoursWorked
-        info_columns:
+        endogenous_columns:
           - [MUConsumption, -1]
 #     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
 
