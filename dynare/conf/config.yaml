@@ -146,7 +146,77 @@ models:
           - HoursWorked
         endogenous_columns:
           - [MUConsumption, -1]
-#     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
+
+  McCandless_2008_Chapter_9:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      parameter_ranges:
+        start_capital: [0.1, 0.5]
+        beta: [0.95, 0.99]
+        delta: [0.02, 0.05]
+        theta: [0.3, 0.4]
+        A: [1.5, 2.0]
+        h_0: [0.5, 0.6]
+        B: [0.005, 0.01]
+        gamma: [0.9, 0.95]
+        pi: [0.4, 0.5]
+        g_bar: [1.0, 1.01]
+        D: [0.005, 0.01]
+
+    rl_env_settings:
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_indices: [3]  # Индекс колонки 'Capital Stock'
+        weights: [1.0]       # Вес для стабильности капитала
+      input:
+        data_path: ./data/raw/McCandless_2008_Chapter_9_raw.csv  # Путь к CSV-файлу с данными
+        state_columns:
+          - Real Wage                          # Реальная заработная плата
+          - Real Return On Capital             # Реальная доходность капитала
+          - Real Consumption                   # Реальное потребление
+          - Capital Stock                      # Капитал
+          - Hours Worked                       # Отработанные часы
+          - Money Stock                        # Денежная масса
+          - Price Level                        # Уровень цен
+          - Growth Rate Of Money Stock         # Темп роста денежной массы
+          - Total Factor Productivity          # Совокупная факторная производительность
+          - Real Output                        # Реальный выпуск
+        action_columns:
+          - Real Consumption  # Управляемая переменная (реальное потребление)
+      output:
+        data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
+
+  McCandless_2008_Chapter_13:
+    dynare_model_settings:
+      periods: 1000
+
+    rl_env_settings:
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_indices: [13]  # Индекс колонки 'Net Exports'
+        weights: [1.0]        # Вес для стабильности чистого экспорта
+      input:
+        data_path: ./data/raw/McCandless_2008_Chapter_13_raw.csv
+        state_columns:
+          - Real Wage
+          - Real Return On Capital
+          - Real Consumption
+          - Capital Stock
+          - Hours Worked
+          - Money Stock
+          - Price Level
+          - Foreign Price Level
+          - Growth Rate Of Money Stock
+          - Total Factor Productivity
+          - Foreign Bonds
+          - Foreign Interest Rate
+          - Exchange Rate
+          - Net Exports
+        action_columns:
+          - 'Growth Rate Of Money Stock'
+      output:
+        data_path: ./data/processed/McCandless_2008_Chapter_13
 
 #   rl_env_settings:
 #     reward: lib.rewards.stability_reward
@@ -401,65 +471,6 @@ models:
 #     output:
 #       data_path: ./data/processed/Hansen_1985  # Путь для сохранения обработанных данных
 
-
-# McCandless_2008_Chapter_9:
-#   dynare_model_settings:
-#     periods: 1000
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [3]  # Индекс колонки 'Capital Stock'
-#       weights: [1.0]       # Вес для стабильности капитала
-#     input:
-#       data_path: ./data/raw/McCandless_2008_Chapter_9_raw.csv  # Путь к CSV-файлу с данными
-#       state_columns:
-#         - Real Wage                          # Реальная заработная плата
-#         - Real Return On Capital             # Реальная доходность капитала
-#         - Real Consumption                   # Реальное потребление
-#         - Capital Stock                      # Капитал
-#         - Hours Worked                       # Отработанные часы
-#         - Money Stock                        # Денежная масса
-#         - Price Level                        # Уровень цен
-#         - Growth Rate Of Money Stock         # Темп роста денежной массы
-#         - Total Factor Productivity          # Совокупная факторная производительность
-#         - Real Output                        # Реальный выпуск
-#       action_columns:
-#         - Real Consumption  # Управляемая переменная (реальное потребление)
-#     output:
-#       data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
-
-
-# McCandless_2008_Chapter_13:
-#   dynare_model_settings:
-#     periods: 1000
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [13]  # Индекс колонки 'Net Exports'
-#       weights: [1.0]        # Вес для стабильности чистого экспорта
-#     input:
-#       data_path: ./data/raw/McCandless_2008_Chapter_13_raw.csv
-#       state_columns:
-#         - Real Wage
-#         - Real Return On Capital
-#         - Real Consumption
-#         - Capital Stock
-#         - Hours Worked
-#         - Money Stock
-#         - Price Level
-#         - Foreign Price Level
-#         - Growth Rate Of Money Stock
-#         - Total Factor Productivity
-#         - Foreign Bonds
-#         - Foreign Interest Rate
-#         - Exchange Rate
-#         - Net Exports
-#       action_columns:
-#         - 'Growth Rate Of Money Stock'
-#     output:
-#       data_path: ./data/processed/McCandless_2008_Chapter_13
 
 # RBC_capitalstock_shock:
 #   dynare_model_settings:

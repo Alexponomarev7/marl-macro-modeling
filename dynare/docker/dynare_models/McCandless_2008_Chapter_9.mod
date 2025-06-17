@@ -2,81 +2,64 @@
     @#define periods = 100
 @#endif
 
-var w           $W$         (long_name='Real Wage')
-    r           $r$         (long_name='Real Return On Capital')
-    c           $C$         (long_name='Real Consumption')
-    k           $K$         (long_name='Capital Stock')
-    h           $H$         (long_name='Hours Worked')
-    m           $M$         (long_name='Money Stock')
-    p           $P$         (long_name='Price Level')
-    g           $g$         (long_name='Growth Rate Of Money Stock')
-    lambda      $\lambda$   (long_name='Total Factor Productivity')
-    y           $y$         (long_name='Real Output');
+var C $Consumption$                         (long_name='Consumption')
+    W_real $Real Wage$                      (long_name='Real Wage')
+    Pi $Inflation$                          (long_name='Inflation')
+    LoggedProductivity $LoggedProductivity$ (long_name='AR(1) Productivity Process')
+    N $HoursWorked$                         (long_name='Hours Worked')
+    R $Nominal Interest Rate$               (long_name='Nominal Interest Rate')
+    r $Real Interest Rate$                  (long_name='Real Interest Rate')
+    Y $Output$                              (long_name='Output')
+    m_growth_ann $Money Growth$             (long_name='Money Growth');
 
-varexo eps_lambda       ${\varepsilon^\lambda}$ (long_name='TFP Shock')
-       eps_g            ${\varepsilon^g}$       (long_name='Money Growth Shock');
+varexo eps_A $Technology Shock$ (long_name='Technology Shock')
+       eps_m $Monetary Policy Shock$ (long_name='Monetary Policy Shock');
 
-parameters beta         ${\beta}$    (long_name='Discount Factor')
-           delta        ${\delta}$   (long_name='Depreciation Rate')
-           theta        ${\theta}$   (long_name='Capital Share Production')
-           A            ${A}$        (long_name='Labor Disutility Parameter')
-           h_0          ${h_0}$      (long_name='Steady State Hours Worked')
-           B            ${B}$        (long_name='Composite Labor Disutility Parameter')
-           gamma        ${\gamma}$   (long_name='Autocorrelation TFP')
-           pi           ${\pi}$      (long_name='Autocorrelation Money Growth')
-           g_bar        ${\bar g}$   (long_name='Steady State Growth Rate Of Money')
-           D            ${D}$        (long_name='Coefficient Log Balances');
+parameters alppha ${\alpha}$ (long_name='Capital Share')
+           betta ${\beta}$   (long_name='Discount Factor')
+           rho ${\rho}$      (long_name='Autocorrelation Technology Shock')
+           siggma ${\sigma}$ (long_name='Log Utility')
+           phi ${\phi}$      (long_name='Unitary Frisch Elasticity')
+           phi_pi ${\phi_{\pi}}$ (long_name='Inflation Feedback Taylor Rule')
+           eta ${\eta}$      (long_name='Semi-Elasticity Of Money Demand');
 
-predetermined_variables k;
-
-beta = 0.99;
-delta = 0.025;
-theta = 0.36;
-A = 1.72;
-h_0 = 0.583;
-gamma = 0.95;
-pi = 0.48;
-g_bar = 1;
-D = 0.01;
+alppha = 0.33;
+betta = 0.99;
+rho = 0.9;
+siggma = 1;
+phi = 1;
+phi_pi = 1.5;
+eta = 4;
 
 model;
-    c + k(+1) + m / p = w * h + r * k + (1 - delta) * k + m(-1) / p + (g - 1) * m(-1) / p;
-    1 / c = beta * p / (c(+1) * p(+1)) + D * p / m;
-    1 / c = -B / w;
-    1 / c = beta / c(+1) * (r(+1) + 1 - delta);
-    m = g * m(-1);
-    y = lambda * k^theta * h^(1 - theta);
-    w = (1 - theta) * lambda * k^theta * h^(-theta);
-    r = theta * lambda * (k / h)^(theta - 1);
-    log(g) = (1 - pi) * log(g_bar) + pi * log(g(-1)) + eps_g;
-    log(lambda) = gamma * log(lambda(-1)) + eps_lambda;
+    W_real = C^siggma * N^phi;
+    1 / R = betta * (C(+1) / C)^(-siggma) / Pi(+1);
+    exp(LoggedProductivity) * N^(1 - alppha) = C;
+    W_real = (1 - alppha) * exp(LoggedProductivity) * N^(-alppha);
+    r = R / Pi(+1);
+    R = 1 / betta * Pi^phi_pi + eps_m;
+    C = Y;
+    LoggedProductivity = rho * LoggedProductivity(-1) + eps_A;
+    m_growth_ann = 4 * (log(Y) - log(Y(-1)) - eta * (log(R) - log(R(-1))) + log(Pi));
+end;
+
+shocks;
+    var eps_A; stderr 0.5;
 end;
 
 steady_state_model;
-    B = A * log(1 - h_0) / h_0;
-    r = 1 / beta - 1 + delta;
-    w = (1 - theta) * (r / theta)^(theta / (theta - 1));
-    c = -w / B;
-    mp = D * g_bar * c / (g_bar - beta);
-    k = c / ((r * (1 - theta) / (w * theta))^(1 - theta) - delta);
-    h = r * (1 - theta) / (w * theta) * k;
-    y = k * (r * (1 - theta) / (w * theta))^(1 - theta);
-    g = 1;
-    lambda = 1;
-    p = 1;
-    m = p * D * g * c / (g - beta);
+    LoggedProductivity = 0;
+    R = 1 / betta;
+    Pi = 1;
+    r = R;
+    N = (1 - alppha)^(1 / ((1 - siggma) * alppha + phi + siggma));
+    C = exp(LoggedProductivity) * N^(1 - alppha);
+    W_real = (1 - alppha) * exp(LoggedProductivity) * N^(-alppha);
+    Y = C;
+    m_growth_ann = 0;
 end;
 
 steady;
+check;
 
-shocks;
-    var eps_g; stderr 0.01;
-end;
-
-stoch_simul(irf=100, order=1) k c w r h m y g p;
-
-shocks(overwrite);
-    var eps_lambda; stderr 0.01;
-end;
-
-stoch_simul(irf=100, order=1, periods=@{periods}, nomoments, nofunctions, nograph, nocorr, noprint);
+stoch_simul(irf=20, order=1, periods=200, nomoments, nofunctions, nograph, nocorr, noprint);

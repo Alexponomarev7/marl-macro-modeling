@@ -20,6 +20,13 @@ class AbstractEconomicEnv(gym.Env, ABC):
     def __init__(self, **kwargs):
         super().__init__()
 
+    @staticmethod
+    def name() -> str:
+        """
+        Get the name of the environment.
+        """
+        return "AbstractEconomicEnv"
+
     @property
     @abstractmethod
     def task_id(self) -> int:

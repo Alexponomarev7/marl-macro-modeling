@@ -23,6 +23,66 @@ import traceback
 
 from research.utils import PathStorage
 
+def get_perfect_foresight_run_command(input_file: Path, output_file: Path, output_params_file: Path, parameters: list[str]):
+    return [
+        "octave",
+        "--eval",
+        f"""
+        addpath {os.environ["DYNARE_PATH"]}; 
+        cd {input_file.parent}; 
+        dynare {input_file.name} {' '.join(parameters)}; 
+        oo_simul = oo_.endo_simul'; 
+        var_names = M_.endo_names_tex;
+        param_names = M_.param_names;
+        param_values = M_.params;
+
+        fid = fopen('{output_file}', 'w');
+        fprintf(fid, '%s,', var_names{{1:end-1}});
+        fprintf(fid, '%s\\n', var_names{{end}});
+        fclose(fid);
+
+        dlmwrite('{output_file}', oo_simul, '-append');
+        fid = fopen('{output_params_file}', 'w');
+        for i = 1:length(param_names)
+            fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
+        end
+        fclose(fid);
+        """
+    ]   
+
+def get_irf_run_command(input_file: Path, output_file: Path, output_params_file: Path, parameters: list[str]):
+    return [
+        "octave",
+        "--eval",
+        f"""
+        addpath {os.environ["DYNARE_PATH"]}; 
+        cd {input_file.parent}; 
+        dynare {input_file.name} {' '.join(parameters)}; 
+        irf_struct = oo_.irfs;
+        irf_names = fieldnames(irf_struct);
+        max_len = max(structfun(@length, irf_struct));
+
+        irf_matrix = nan(max_len, numel(irf_names));
+        for i = 1:numel(irf_names)
+            v = irf_struct.(irf_names{{i}});
+            irf_matrix(1:length(v), i) = v;
+        end
+
+        fid = fopen('{output_file}', 'w');
+        fprintf(fid, '%s,', irf_names{{1:end-1}});
+        fprintf(fid, '%s\\n', irf_names{{end}});
+        fclose(fid);
+
+        dlmwrite('{output_file}', irf_matrix, '-append');
+
+        fid = fopen('{output_params_file}', 'w');
+        for i = 1:length(M_.param_names)
+            fprintf(fid, '%s: %f\\n', char(M_.param_names(i)), M_.params(i));
+        end
+        fclose(fid);
+        """
+    ]
+
 
 class StateAccessor:
     def __init__(self, state_columns: list[str], buffer_size: int = 10):
@@ -149,35 +209,25 @@ def run_model(
                 shutil.copy(input_file, input_tmp_file)
 
                 # Run Dynare model
-                cmd: list[str] = [
-                    "octave",
-                    "--eval",
-                    f"""
-                    addpath {os.environ["DYNARE_PATH"]}; 
-                    cd {input_tmp_file.parent}; 
-                    dynare {input_tmp_file.name} {' '.join(parameters)}; 
-                    oo_simul = oo_.endo_simul'; 
-                    var_names = M_.endo_names_tex;
-                    param_names = M_.param_names;
-                    param_values = M_.params;
+                # cmd: list[str] = get_perfect_foresight_run_command(
+                #     input_file=input_tmp_file,
+                #     output_file=output_file,
+                #     output_params_file=output_params_file,
+                #     parameters=parameters,
+                # )
 
-                    fid = fopen('{output_file}', 'w');
-                    fprintf(fid, '%s,', var_names{{1:end-1}});
-                    fprintf(fid, '%s\\n', var_names{{end}});
-                    fclose(fid);
-
-                    dlmwrite('{output_file}', oo_simul, '-append');
-                    fid = fopen('{output_params_file}', 'w');
-                    for i = 1:length(param_names)
-                        fprintf(fid, '%s: %f\\n', char(param_names(i)), param_values(i));
-                    end
-                    fclose(fid);
-                    """
-                ]   
+                cmd = get_irf_run_command(
+                    input_file=input_tmp_file,
+                    output_file=output_file,
+                    output_params_file=output_params_file,
+                    parameters=parameters,
+                )
 
                 process = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
 
+            logger.debug(f"stdout: {process.stdout}")
+            logger.debug(f"stderr: {process.stderr}")
             if process.returncode != 0:
                 raise RuntimeError(f"Dynare failed with error: {process.stdout} {process.stderr}")
             
