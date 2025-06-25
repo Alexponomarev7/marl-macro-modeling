@@ -43,6 +43,11 @@ class RamseyEnv(AbstractEconomicEnv):
             dtype=np.float32,
         )
 
+
+    @staticmethod
+    def name() -> str:
+        return "Ramsey"
+
     def reset(self, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         """Reset environment with dynamically selected c0"""
         super().reset(seed=seed)

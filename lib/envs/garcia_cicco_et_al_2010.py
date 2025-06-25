@@ -91,6 +91,10 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
             dtype=np.float32,
         )
 
+    @staticmethod
+    def name() -> str:
+        return "GarciaCicco_et_al_2010"
+
     def reset(self, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         """Reset environment"""
         super().reset(seed=seed)
