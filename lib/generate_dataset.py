@@ -1,6 +1,7 @@
 import json
 import hydra
 import hashlib
+from omegaconf import DictConfig
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import (
     Any,
     Dict,
 )
+
+from research.utils import PathStorage
 
 
 def generate_hash(params: Dict) -> str:
@@ -146,9 +149,58 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
 def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
     processed_path = dynare_output_path
     
-    assert processed_path.exists()
+    assert processed_path.exists(), f"processed path {processed_path} does not exist"
     with DatasetWriter(workdir) as writer:
         for file in processed_path.glob("*.parquet"):
             env_data = generate_env_data_dynare(file)
             params_hash = generate_hash({"file_name": file.name})
             writer.write(env_data, params_hash)
+
+class DatasetGenerator:
+    """Handles the creation and organization of datasets."""
+
+    def __init__(self, dataset_cfg: dict[str, Any]):
+        """
+        Initialize DatasetCreator with configuration.
+        Args:
+            dataset_cfg: Configuration dictionary for dataset creation
+        """
+        self.cfg = dataset_cfg
+        self.workdir = Path(dataset_cfg['workdir'])
+        self.enabled = dataset_cfg['enabled']
+
+    # todo: rm
+    def create(self):
+        """Generate datasets for all stages (train, val, test)."""
+        if not self.enabled:
+            logger.info("dataset generation is disabled, skipping")
+            return
+
+        logger.info("stage 1: data generation")
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"WorkDir: {self.workdir}")
+
+        for stage in ['train', 'val']:
+            logger.info(f"generating stage: {stage}")
+            stage_dir = self.workdir / stage
+            stage_dir.mkdir(parents=True, exist_ok=True)
+
+            stage_cfg = self.cfg[stage]
+            if stage_cfg['type'] == 'envs':
+                run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
+            elif stage_cfg['type'] == 'dynare':
+                run_generation_batch_dynare(
+                    PathStorage(stage_cfg['dynare_output_path']).processed_root,
+                    stage_dir
+                )
+            else:
+                raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
+
+
+@hydra.main(config_name='default.yaml', config_path="../pipeline/configs/dataset", version_base=None)
+def main(cfg: DictConfig):
+    dataset_generator = DatasetGenerator(cfg)
+    dataset_generator.create()
+
+if __name__ == "__main__":
+    main()

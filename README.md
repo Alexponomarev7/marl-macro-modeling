@@ -1,13 +1,10 @@
-# Experiment Pipeline
-1. Create environments
-2. Solve them analytically
-3. Save tracks from (2) to the dataset
-4. Train Transformer model
-
 # Useful Commands
-1. Setup working env: `make setup`
-2. To run pipeline: `make pipeline`
-3. To generate data for a specific environment run python command (an example):\
+1. Start with `make setup-python`. After this step you will have a virtual envirnoment with all packages. 
+2. Install octave + dynare (`brew install dynare`) and install in octave required packages `pkg install -forge io statistics`.
+3. Set correct `DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab` in env.
+4. Try to build exp dataset: `make dataset`
+5. To run test pipeline: `make pipeline-exp`
+6*. To generate data for a specific environment run python command (an example):\
 ```python lib/data/generate_data.py --env_class lib.envs.rbc.RBCEnv --num_steps 1000 --discount_rate 0.98```
 
 ## Project Organization
