@@ -145,6 +145,18 @@ ENV_MAPPING = {
     "McCandless_2008_Chapter_9": 16,
 }
 
+def decode_env_name(env_name: str) -> int:
+    prefix = env_name.rsplit('_', 1)[0]
+    if prefix.endswith('_config'):
+        prefix = prefix.removesuffix('_config')
+    return 0
+    return ENV_MAPPING[prefix]
+
+def state_encoder(x):
+    return x
+def action_encoder(x):
+    return x
+
 class EconomicsDataset(Dataset):
     """
     A PyTorch Dataset for loading and processing economic episodes data.
@@ -179,19 +191,13 @@ class EconomicsDataset(Dataset):
         with open(metadata_path) as f:
             self.metadata = json.load(f)
 
-        def decode_env_name(env_name: str) -> int:
-            prefix = env_name.rsplit('_', 1)[0]
-            if prefix.endswith('_config'):
-                prefix = prefix.removesuffix('_config')
-            return 0
-            return ENV_MAPPING[prefix]
         # todo: encode with llm
         # todo: get from dataset task id
         self.task_ids = [decode_env_name(item['env_name']) for item in self.metadata]
 
         # todo: Encoders of environment state and action
-        self.state_encoder = lambda x: x
-        self.action_encoder = lambda x: x
+        self.state_encoder = state_encoder
+        self.action_encoder = action_encoder
 
         # todo: special words embeddings
         self.sw_state_embed = [...]
