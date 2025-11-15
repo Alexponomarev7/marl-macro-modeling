@@ -6,13 +6,12 @@ __pycache__
 *.pkl
 *.csv
 
-# Игнорировать все логи и рез-таты компилирования модели dynare
 dynare/docker/dynare_models/*
 
-# Исключить файлы с определением самих моделей т.е. с расширением .mod
 !dynare/docker/dynare_models/*.mod
 .snakemake
 data
+dataset
 .env
 /marl_experiments
 clearml.conf

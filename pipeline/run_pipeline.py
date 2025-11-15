@@ -26,6 +26,7 @@ from lib.my_utils import (
 from lib.dataset import EconomicsDataset
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
+    DatasetGenerator,
     run_generation_batch,
     run_generation_batch_dynare,
 )
@@ -266,46 +267,6 @@ class EconomicPolicyModel(L.LightningModule):
 
         self.log('val_loss', loss, on_epoch=True)
         return loss
-
-class DatasetGenerator:
-    """Handles the creation and organization of datasets."""
-
-    def __init__(self, dataset_cfg: dict[str, Any]):
-        """
-        Initialize DatasetCreator with configuration.
-        Args:
-            dataset_cfg: Configuration dictionary for dataset creation
-        """
-        self.cfg = dataset_cfg
-        self.workdir = Path(dataset_cfg['workdir'])
-        self.enabled = dataset_cfg['enabled']
-
-    # todo: rm
-    def create(self):
-        """Generate datasets for all stages (train, val, test)."""
-        if not self.enabled:
-            logger.info("dataset generation is disabled, skipping")
-            return
-
-        logger.info("stage 1: data generation")
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"WorkDir: {self.workdir}")
-
-        for stage in ['train', 'val']:
-            logger.info(f"generating stage: {stage}")
-            stage_dir = self.workdir / stage
-            stage_dir.mkdir(parents=True, exist_ok=True)
-
-            stage_cfg = self.cfg[stage]
-            if stage_cfg['type'] == 'envs':
-                run_generation_batch(stage_cfg, self.cfg['envs'], stage_dir)
-            elif stage_cfg['type'] == 'dynare':
-                run_generation_batch_dynare(
-                    PathStorage(stage_cfg['dynare_output_path']).processed_root,
-                    stage_dir
-                )
-            else:
-                raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
 
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
