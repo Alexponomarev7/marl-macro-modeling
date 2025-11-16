@@ -276,6 +276,8 @@ def main(hydra_cfg: DictConfig) -> None:
     if 'run_id' not in hydra_cfg.metadata or not hydra_cfg.metadata.run_id:
         hydra_cfg.metadata.run_id = get_run_id()
 
+    logger.info(f"run id: {hydra_cfg.metadata.run_id}")
+
     cfg = cast(dict, OmegaConf.to_container(hydra_cfg, resolve=True, throw_on_missing=True))
     metadata = cfg['metadata']
 
