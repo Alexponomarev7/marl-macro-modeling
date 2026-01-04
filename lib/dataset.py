@@ -1,9 +1,15 @@
 import json
-import torch
-import pandas as pd
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import torch
+from scipy.stats import kurtosis, skew
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset
-from loguru import logger as log
 
 STATE_MAPPING = {
     "Empty": 0,
@@ -337,3 +343,603 @@ x
             'model_params': model_params_values,
             'attention_mask': attention_mask  # [max_seq_len]
         }
+
+
+@dataclass(frozen=True)
+class EnvReport:
+    """Per-environment (economics model) diversity report produced by `DatasetDiversityScorer`."""
+
+    env_name: str
+    n_episodes: int
+    env_names: list[str]
+    state_names: list[str]
+    action_names: list[str]
+    endogenous_names: list[str]
+
+    # Within-model (episode-to-episode) variety
+    mean_pairwise_vacancy: float
+    mean_pairwise_coverage: float
+    mean_episode_embedding_knn: float
+
+    # Cross-model (env-to-env) variety / redundancy
+    nearest_env: str | None
+    shared_state_frac: float | None  # |S_i ∩ S_j| / |S_i|
+    intersection_over_union: float | None  # |S_i ∩ S_j| / |S_i ∪ S_j|
+    intra_over_inter: float | None   # (avg intra kNN dist) / (avg inter-cluster kNN dist)
+
+
+class DatasetDiversityScorer:
+    """
+    Diversity scorer for trajectory datasets.
+
+    We measure data variety between episodes of the same economics model using:
+      - State-action coverage: pairwise 2D coverage over (state_i, action_j) grids to avoid
+        curse of dimensionality; quantile binning handles both continuous and discrete variables.
+      - Avg k-NN distance between episode embeddings where each embedding consists of extracted
+        time-series features for every state variable.
+
+    To measure variety between economics models, for each model we find the nearest other model by
+    shared state fraction and compute a similarity score restricted to shared states:
+      - shared_state_frac = |S_i ∩ S_j| / |S_i|
+      - intersection_over_union = |S_i ∩ S_j| / |S_i ∪ S_j|
+      - intra_over_inter = avg_intra_cluster_kNN_dist / avg_inter_cluster_kNN_dist
+
+    Expected dataset layout:
+      dataset_path/
+        metadata.json
+        *.parquet (episodes)
+    Each episode parquet is expected to contain:
+      - 'state': array-like per timestep, shape (T, Ds)
+      - 'action': array-like per timestep, shape (T, Da)
+      - 'info': dict per timestep (we read the first row) with 'state_description' and
+        'action_description' (recommended).
+    """
+
+    def __init__(
+        self,
+        dataset_path: str | Path,
+        *,
+        quantile_bins: int = 10,
+        knn_k: int = 5,
+        cache_parquets: bool = True,
+    ):
+        """
+        Args:
+            dataset_path: Path to a dataset directory containing `metadata.json` and episode parquets.
+            quantile_bins: Number of quantile bins per dimension for state-action coverage.
+            knn_k: k for k-NN distance computations (within-env and cross-env).
+            cache_parquets: Cache loaded parquet DataFrames in-memory (faster, more RAM).
+        """
+        self.dataset_path = Path(dataset_path)
+        self.quantile_bins = int(quantile_bins)
+        self.knn_k = int(knn_k)
+        self.cache_parquets = bool(cache_parquets)
+
+        self.metadata: list[dict[str, Any]] = json.loads((self.dataset_path / "metadata.json").read_text())
+
+        env_to_paths: dict[str, list[Path]] = {}
+        env_group_to_env_names: dict[str, set[str]] = {}
+        for item in self.metadata:
+            raw_env_name = str(item.get("env_name", "unknown"))
+            env_group = str(item["env_group"])
+            p = Path(item["output_dir"])
+            env_to_paths.setdefault(env_group, []).append(p)
+            env_group_to_env_names.setdefault(env_group, set()).add(raw_env_name)
+
+        self.env_to_episode_paths = env_to_paths
+        self.env_group_to_env_names = {k: sorted(list(v)) for k, v in env_group_to_env_names.items()}
+
+        # Caches / derived state
+        self._parquet_cache: dict[Path, pd.DataFrame] = {}
+        self._env_state_names: dict[str, list[str]] = {}
+        self._env_action_names: dict[str, list[str]] = {}
+        self._env_endogenous_names: dict[str, list[str]] = {}
+        self._env_episode_state_featdicts: dict[str, list[dict[str, np.ndarray]]] = {}
+        self._env_episode_embeddings_full: dict[str, np.ndarray] = {}
+        self._env_bin_edges: dict[str, dict[str, list[np.ndarray]]] = {}
+
+        # Names and order of per-variable time-series features used to build embeddings.
+        self.feature_names = [
+            "mean",
+            "std",
+            "min",
+            "q25",
+            "median",
+            "q75",
+            "max",
+            "skew",
+            "kurtosis",
+            "autocorr1",
+            "trend_slope",
+            "energy",
+        ]
+
+    def _calculate_trajectories_embeddings(self) -> None:
+        """
+        Compute per-episode embeddings for each environment.
+
+        Embedding construction:
+          - For each episode, for each state variable, extract TS features over time.
+          - Concatenate features over all state variables (sorted by state name) => episode embedding.
+
+        Side-effects:
+          - Populates `_env_episode_embeddings_full` and `_env_episode_state_featdicts`.
+          - Populates `_env_state_names` / `_env_action_names`.
+        """
+        env_featdicts: dict[str, list[dict[str, np.ndarray]]] = {}
+        env_embs: dict[str, list[np.ndarray]] = {}
+
+        for env, paths in self.env_to_episode_paths.items():
+            per_episode_featdicts: list[dict[str, np.ndarray]] = []
+            per_episode_embs: list[np.ndarray] = []
+
+            state_names_ref: list[str] | None = None
+            action_names_ref: list[str] | None = None
+            endogenous_names_ref: list[str] | None = None
+
+            for p in paths:
+                df = self._read_parquet(p)
+                state_names, action_names, endogenous_names = self._get_descriptions(df)
+                if state_names_ref is None:
+                    state_names_ref = list(state_names)
+                if action_names_ref is None:
+                    action_names_ref = list(action_names)
+                if endogenous_names_ref is None:
+                    endogenous_names_ref = list(endogenous_names)
+
+                S, _A = self._get_state_action_arrays(df)
+
+                featdict: dict[str, np.ndarray] = {}
+                for j, name in enumerate(state_names):
+                    featdict[str(name)] = self._extract_ts_features(S[:, j])
+
+                per_episode_featdicts.append(featdict)
+
+                ordered_names = sorted(featdict.keys())
+                emb = np.concatenate([featdict[n] for n in ordered_names], axis=0)
+                per_episode_embs.append(emb)
+
+            self._env_state_names[env] = state_names_ref or []
+            self._env_action_names[env] = action_names_ref or []
+            self._env_endogenous_names[env] = endogenous_names_ref or []
+            env_featdicts[env] = per_episode_featdicts
+            env_embs[env] = per_episode_embs
+
+        self._env_episode_state_featdicts = env_featdicts
+        self._env_episode_embeddings_full = {
+            env: np.stack(v, axis=0) if len(v) else np.zeros((0, 0), dtype=float)
+            for env, v in env_embs.items()
+        }
+
+    def _get_inner_state_action_coverage(self, env_name: str | None = None) -> dict[str, Any]:
+        """
+        Compute pairwise 2D (state_i, action_j) coverage using quantile binning.
+
+        Motivation: full (Ds+Da)-dim coverage is sparse; pairwise 2D grids are stable and comparable.
+
+        Definitions:
+          - For each (state_i, action_j) pair, define a 2D grid with `B_i * B_j` cells
+            where `B_i = len(edges_i)-1` and edges are quantile edges.
+          - For an episode, occupancy = number of unique visited cells across timesteps.
+          - vacant_share(pair) = 1 - occupancy / (B_i*B_j)
+          - episode_vacancy = mean over all pairs of vacant_share(pair)
+          - env_vacancy = mean over episodes of episode_vacancy
+
+        Args:
+            env_name: If None, pre-fits bin edges for all envs and returns {"status": "ok"}.
+                     If set, computes mean vacancy/coverage for that environment.
+
+        Returns:
+            For a specific env: {"mean_pairwise_vacancy": float, "mean_pairwise_coverage": float}
+        """
+        if env_name is None:
+            for env in self.env_to_episode_paths:
+                self._env_bin_edges[env] = self._fit_quantile_bin_edges_for_env(env)
+            return {"status": "ok"}
+
+        if env_name not in self._env_bin_edges:
+            self._env_bin_edges[env_name] = self._fit_quantile_bin_edges_for_env(env_name)
+
+        edges = self._env_bin_edges[env_name]
+        s_edges = edges["states"]
+        a_edges = edges["actions"]
+
+        paths = self.env_to_episode_paths.get(env_name, [])
+        if len(paths) == 0:
+            return {"mean_pairwise_vacancy": None, "mean_pairwise_coverage": None}
+
+        per_episode_scores = []
+        for p in paths:
+            df = self._read_parquet(p)
+            S, A = self._get_state_action_arrays(df)
+
+            s_bins = np.column_stack(
+                [self._digitize(S[:, i], s_edges[i]) for i in range(S.shape[1])]
+            )
+            a_bins = np.column_stack(
+                [self._digitize(A[:, j], a_edges[j]) for j in range(A.shape[1])]
+            )
+
+            vacancies = []
+            for i in range(S.shape[1]):
+                nb_s = max(1, len(s_edges[i]) - 1)
+                for j in range(A.shape[1]):
+                    nb_a = max(1, len(a_edges[j]) - 1)
+
+                    code = s_bins[:, i].astype(np.int64) * nb_a + a_bins[:, j].astype(np.int64)
+                    occupied = np.unique(code).size
+                    total = nb_s * nb_a
+                    vacant_share = 1.0 - (occupied / max(1, total))
+                    vacancies.append(vacant_share)
+
+            per_episode_scores.append(float(np.mean(vacancies)) if vacancies else 1.0)
+
+        mean_vacancy = float(np.mean(per_episode_scores))
+        return {
+            "mean_pairwise_vacancy": mean_vacancy,
+            "mean_pairwise_coverage": 1.0 - mean_vacancy,
+        }
+
+    def _get_inner_sim(self, env_name: str) -> float:
+        """
+        Compute within-environment episode diversity via average k-NN distance between episode embeddings.
+
+        Returns:
+            Mean Euclidean distance to the k nearest neighbors (excluding self) in standardized embedding space.
+        """
+        X = self._env_episode_embeddings_full.get(env_name)
+        if X is None or X.shape[0] < 2:
+            return 0.0
+
+        Xs = StandardScaler().fit_transform(X)
+        k = min(self.knn_k + 1, Xs.shape[0])
+        nbrs = NearestNeighbors(n_neighbors=k, metric="euclidean").fit(Xs)
+        dists, _ = nbrs.kneighbors(Xs, return_distance=True)
+        return float(dists[:, 1:].mean())
+
+    def _get_env_importance(self, env_name: str) -> dict[str, Any]:
+        """
+        Estimate how "unique" a given environment is compared to the nearest other environment.
+
+        Steps:
+          1) Find nearest other env by shared state fraction:
+               shared_state_frac = |S_i ∩ S_j| / |S_i|
+               intersection_over_union = |S_i ∩ S_j| / |S_i ∪ S_j|
+          2) Restrict embeddings to shared state variables only.
+          3) Compute:
+               intra = avg intra-cluster kNN distance (averaged across the two env clusters)
+               inter = avg distance from points in one cluster to kNN in the other (symmetrized)
+               intra_over_inter = intra / inter
+
+        Interpretation:
+          - Larger shared_state_frac => more overlap in state space (by columns).
+          - Smaller intra_over_inter => clusters well-separated relative to their internal spread (more unique).
+
+        Returns:
+            {
+              "nearest_env": str|None,
+              "shared_state_frac": float|None,
+              "intersection_over_union": float|None,
+              "intra_over_inter": float|None
+            }
+        """
+        base_states = set(self._env_state_names.get(env_name, []))
+        if not base_states:
+            return {
+                "nearest_env": None,
+                "shared_state_frac": None,
+                "intersection_over_union": None,
+                "intra_over_inter": None,
+            }
+
+        best_env = None
+        best_shared = -1.0
+        best_iou = None
+
+        for other in self._env_state_names.keys():
+            if other == env_name:
+                continue
+            other_states = set(self._env_state_names.get(other, []))
+            inter = base_states & other_states
+            shared = (len(inter) / len(base_states)) if len(base_states) > 0 else 0.0
+            union = len(base_states | other_states)
+            iou = (len(inter) / union) if union > 0 else 0.0
+
+            if shared > best_shared:
+                best_shared = shared
+                best_iou = iou
+                best_env = other
+
+        if best_env is None:
+            return {
+                "nearest_env": None,
+                "shared_state_frac": None,
+                "intersection_over_union": None,
+                "intra_over_inter": None,
+            }
+
+        shared_vars = sorted(list(base_states & set(self._env_state_names.get(best_env, []))))
+        if len(shared_vars) == 0:
+            return {
+                "nearest_env": best_env,
+                "shared_state_frac": float(best_shared),
+                "intersection_over_union": float(best_iou) if best_iou is not None else None,
+                "intra_over_inter": None,
+            }
+
+        X1 = self._build_embeddings_for_shared_states(env_name, shared_vars)
+        X2 = self._build_embeddings_for_shared_states(best_env, shared_vars)
+
+        if X1.shape[0] < 2 or X2.shape[0] < 2:
+            return {
+                "nearest_env": best_env,
+                "shared_state_frac": float(best_shared),
+                "intersection_over_union": float(best_iou) if best_iou is not None else None,
+                "intra_over_inter": None,
+            }
+
+        X = np.vstack([X1, X2])
+        Xs = StandardScaler().fit_transform(X)
+        X1s = Xs[: X1.shape[0]]
+        X2s = Xs[X1.shape[0] :]
+
+        intra = 0.5 * (self._avg_intra_knn(X1s) + self._avg_intra_knn(X2s))
+        inter = self._avg_inter_knn(X1s, X2s)
+        ratio = float(intra / inter) if inter > 0 else None
+
+        return {
+            "nearest_env": best_env,
+            "shared_state_frac": float(best_shared),
+            "intersection_over_union": float(best_iou) if best_iou is not None else None,
+            "intra_over_inter": ratio,
+        }
+
+    def generate_report(self) -> dict[str, Any]:
+        """
+        Run the full scoring pipeline and return a report.
+
+        Returns:
+            {
+              "overall": dict[str, float|None],
+              "per_env": pd.DataFrame  # one row per env_name
+            }
+        """
+        self._calculate_trajectories_embeddings()
+        self._get_inner_state_action_coverage()
+
+        env_reports: list[EnvReport] = []
+        for env in sorted(self.env_to_episode_paths.keys()):
+            inner_knn = self._get_inner_sim(env)
+            cov = self._get_inner_state_action_coverage(env)
+            imp = self._get_env_importance(env)
+
+            env_reports.append(
+                EnvReport(
+                    env_name=env,
+                    n_episodes=len(self.env_to_episode_paths[env]),
+                    env_names=self.env_group_to_env_names.get(env, []),
+                    state_names=self._env_state_names.get(env, []),
+                    action_names=self._env_action_names.get(env, []),
+                    endogenous_names=self._env_endogenous_names.get(env, []),
+                    mean_pairwise_vacancy=cov["mean_pairwise_vacancy"],
+                    mean_pairwise_coverage=cov["mean_pairwise_coverage"],
+                    mean_episode_embedding_knn=inner_knn,
+                    nearest_env=imp["nearest_env"],
+                    shared_state_frac=imp["shared_state_frac"],
+                    intersection_over_union=imp["intersection_over_union"],
+                    intra_over_inter=imp["intra_over_inter"],
+                )
+            )
+
+        df = pd.DataFrame([r.__dict__ for r in env_reports])
+        overall = {
+            "n_envs": int(df.shape[0]),
+            "mean_pairwise_coverage": float(df["mean_pairwise_coverage"].mean()) if len(df) else None,
+            "mean_episode_embedding_knn": float(df["mean_episode_embedding_knn"].mean()) if len(df) else None,
+            "mean_shared_state_frac": float(df["shared_state_frac"].dropna().mean()) if len(df) else None,
+            "mean_intersection_over_union": float(df["intersection_over_union"].dropna().mean()) if len(df) else None,
+            "mean_intra_over_inter": float(df["intra_over_inter"].dropna().mean()) if len(df) else None,
+        }
+
+        return {"overall": overall, "per_env": df}
+
+    # -------- Helpers --------
+
+    def _read_parquet(self, p: Path) -> pd.DataFrame:
+        """
+        Read an episode parquet file.
+
+        Uses an in-memory cache when `cache_parquets=True` to avoid repeated disk IO.
+        """
+        if self.cache_parquets and p in self._parquet_cache:
+            return self._parquet_cache[p]
+        df = pd.read_parquet(p)
+        if self.cache_parquets:
+            self._parquet_cache[p] = df
+        return df
+
+    def _get_descriptions(self, df: pd.DataFrame) -> tuple[list[str], list[str], list[str]]:
+        """
+        Extract (state_description, action_description, endogenous_description) from the episode.
+
+        Priority:
+          1) `df.iloc[0]["info"]` dict keys: state_description/action_description
+          2) Episode columns: state_description/action_description
+          3) Fallback: generated names s0..s(D-1), a0..a(A-1), and empty endogenous list
+        """
+        info0 = None
+        if "info" in df.columns and len(df) > 0:
+            info0 = df.iloc[0]["info"]
+
+        if isinstance(info0, dict) and "state_description" in info0 and "action_description" in info0:
+            s = list(map(str, info0["state_description"]))
+            a = list(map(str, info0["action_description"]))
+            e = list(map(str, info0.get("endogenous_description", [])))
+            return s, a, e
+
+        if "state_description" in df.columns and "action_description" in df.columns:
+            s = list(map(str, df.iloc[0]["state_description"]))
+            a = list(map(str, df.iloc[0]["action_description"]))
+            e = list(map(str, df.iloc[0].get("endogenous_description", []))) if "endogenous_description" in df.columns else []
+            return s, a, e
+
+        S = np.stack(df["state"].to_list())
+        A = np.stack(df["action"].to_list())
+        return [f"s{i}" for i in range(S.shape[1])], [f"a{j}" for j in range(A.shape[1])], []
+
+    def _get_state_action_arrays(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Extract dense numpy arrays for state/action from an episode.
+
+        Args:
+            df: Episode dataframe.
+
+        Returns:
+            (S, A) where S has shape (T, Ds) and A has shape (T, Da).
+        """
+        S = np.stack(df["state"].to_list()).astype(float)
+        A = np.stack(df["action"].to_list()).astype(float)
+        return S, A
+
+    def _fit_quantile_bin_edges_for_env(self, env_name: str) -> dict[str, list[np.ndarray]]:
+        """
+        Fit quantile bin edges for each state and action dimension for a given environment.
+
+        Edges are fit on pooled timesteps across all episodes.
+        """
+        all_S = []
+        all_A = []
+        for p in self.env_to_episode_paths[env_name]:
+            df = self._read_parquet(p)
+            S, A = self._get_state_action_arrays(df)
+            all_S.append(S)
+            all_A.append(A)
+
+        S = np.concatenate(all_S, axis=0)
+        A = np.concatenate(all_A, axis=0)
+
+        s_edges = [self._quantile_edges(S[:, i], self.quantile_bins) for i in range(S.shape[1])]
+        a_edges = [self._quantile_edges(A[:, j], self.quantile_bins) for j in range(A.shape[1])]
+        return {"states": s_edges, "actions": a_edges}
+
+    def _quantile_edges(self, x: np.ndarray, bins: int) -> np.ndarray:
+        """
+        Compute monotonic bin edges for 1D data using quantiles (robust for continuous variables).
+
+        For (near-)discrete variables with few unique values, falls back to using unique values as edges.
+        """
+        x = np.asarray(x, dtype=float)
+        if x.size == 0:
+            return np.array([0.0, 1.0])
+
+        x = x[np.isfinite(x)]
+        if x.size == 0:
+            return np.array([0.0, 1.0])
+
+        uniq = np.unique(x)
+        if uniq.size <= bins:
+            if uniq.size == 1:
+                v = float(uniq[0])
+                return np.array([v - 0.5, v + 0.5], dtype=float)
+            # Use uniq as "edges" (digitize will still work; bins ~= len(uniq)-1)
+            return uniq.astype(float)
+
+        qs = np.linspace(0.0, 1.0, bins + 1)
+        edges = np.quantile(x, qs)
+        edges = np.unique(edges)
+        if edges.size < 2:
+            m = float(np.mean(x))
+            return np.array([m - 0.5, m + 0.5], dtype=float)
+        return edges.astype(float)
+
+    def _digitize(self, x: np.ndarray, edges: np.ndarray) -> np.ndarray:
+        """Digitize x into bin indices [0, n_bins-1] given edges returned by `_quantile_edges`."""
+        if len(edges) <= 2:
+            return np.zeros_like(x, dtype=np.int64)
+        bins = np.digitize(x, edges[1:-1], right=True)
+        return np.clip(bins, 0, len(edges) - 2).astype(np.int64)
+
+    def _extract_ts_features(self, x: np.ndarray) -> np.ndarray:
+        """
+        Extract a fixed-length TS feature vector from a 1D series.
+
+        Features include distributional stats (mean/std/quantiles), shape (skew/kurtosis),
+        simple dynamics (lag-1 autocorr, linear trend slope), and energy.
+        """
+        x = np.asarray(x, dtype=float)
+        x = x[np.isfinite(x)]
+        if x.size == 0:
+            return np.zeros(len(self.feature_names), dtype=float)
+
+        q25, med, q75 = np.quantile(x, [0.25, 0.5, 0.75])
+
+        ac1 = 0.0
+        if x.size >= 2 and np.std(x[:-1]) > 0 and np.std(x[1:]) > 0:
+            ac1 = float(np.corrcoef(x[:-1], x[1:])[0, 1])
+
+        slope = 0.0
+        if x.size >= 3 and np.std(x) > 0:
+            t = np.arange(x.size, dtype=float)
+            slope = float(np.polyfit(t, x, 1)[0])
+
+        feats = np.array(
+            [
+                float(np.mean(x)),
+                float(np.std(x)),
+                float(np.min(x)),
+                float(q25),
+                float(med),
+                float(q75),
+                float(np.max(x)),
+                float(skew(x, bias=False)) if x.size >= 3 else 0.0,
+                float(kurtosis(x, fisher=True, bias=False)) if x.size >= 4 else 0.0,
+                float(ac1),
+                float(slope),
+                float(np.mean(x * x)),
+            ],
+            dtype=float,
+        )
+        return np.nan_to_num(feats)
+
+    def _build_embeddings_for_shared_states(self, env_name: str, shared_states: list[str]) -> np.ndarray:
+        """
+        Build episode embeddings for a given env restricted to the provided shared state names.
+
+        Returns:
+            Array of shape (n_episodes, len(shared_states) * n_features_per_state).
+        """
+        featdicts = self._env_episode_state_featdicts[env_name]
+        shared_states = list(shared_states)
+        embs = [np.concatenate([d[s] for s in shared_states], axis=0) for d in featdicts]
+        return np.stack(embs, axis=0) if embs else np.zeros((0, 0), dtype=float)
+
+    def _avg_intra_knn(self, X: np.ndarray) -> float:
+        """
+        Average kNN distance within a single cluster (excluding self-neighbor).
+
+        Args:
+            X: Array of points (n, d), typically standardized.
+        """
+        if X.shape[0] < 2:
+            return 0.0
+        k = min(self.knn_k + 1, X.shape[0])
+        nbrs = NearestNeighbors(n_neighbors=k, metric="euclidean").fit(X)
+        dists, _ = nbrs.kneighbors(X)
+        return float(dists[:, 1:].mean())
+
+    def _avg_inter_knn(self, X1: np.ndarray, X2: np.ndarray) -> float:
+        """
+        Average cross-cluster kNN distance (symmetrized).
+
+        Computes mean distance from each point in X1 to its k nearest neighbors in X2,
+        and vice-versa, then averages the two means.
+        """
+        k12 = min(self.knn_k, X2.shape[0])
+        nbrs2 = NearestNeighbors(n_neighbors=k12, metric="euclidean").fit(X2)
+        d12, _ = nbrs2.kneighbors(X1)
+
+        k21 = min(self.knn_k, X1.shape[0])
+        nbrs1 = NearestNeighbors(n_neighbors=k21, metric="euclidean").fit(X1)
+        d21, _ = nbrs1.kneighbors(X2)
+
+        return float(0.5 * (d12.mean() + d21.mean()))

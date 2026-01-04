@@ -1,6 +1,7 @@
 __pycache__
 .idea
 /marl_venv
+/marl-exp
 .venv
 .ipynb_checkpoints
 *.pkl
@@ -16,3 +17,8 @@ dataset
 /marl_experiments
 clearml.conf
 outputs
+
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml

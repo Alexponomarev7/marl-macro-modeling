@@ -1,6 +1,6 @@
 # Useful Commands
-1. Start with `make setup-python`. After this step you will have a virtual envirnoment with all packages. 
-2. Install octave + dynare (`brew install dynare`) and install in octave required packages `pkg install -forge io statistics`.
+1. Start with `make setup-python`. After this step you will have a virtual envirnoment with all packages.
+2. Install octave (`brew install octave && octave --gui`) + dynare (`brew install dynare`) and install in octave required packages `pkg install -forge io statistics`.
 3. Set correct `DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab` in env.
 4. Try to build exp dataset: `make dataset`
 5. To run test pipeline: `make pipeline-exp`
