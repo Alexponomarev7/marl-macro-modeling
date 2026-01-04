@@ -57,6 +57,7 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
 
     return {
         'env_name': env.__class__.__name__,
+        'env_group': env.__class__.__name__,
         'env_params': env.params,
         'action_description': env.action_description,
         'state_description': env.state_description,
@@ -70,12 +71,15 @@ def generate_env_data_dynare(dynare_file_path: Path):
     info = {
         "action_description": list(df.iloc[0]["action_description"]),
         "state_description": list(df.iloc[0]["state_description"]),
-        "endogenous_description": list(df.iloc[0]["endogenous_description"]),
+        "endogenous_description": list(df.iloc[0]["info"].get("endogenous_description", [])),
     }
     df["info"] = df["info"].apply(lambda x: x | info)
+    env_name = dynare_file_path.name
+    env_group = df.iloc[0]["info"]["env_group"]
     return {
-        "env_name": dynare_file_path.name,
-        "env_params": dynare_file_path.name,
+        "env_name": env_name,
+        "env_group": env_group,
+        "env_params": env_name,
         "action_description": df.iloc[0]["action_description"],
         "state_description": df.iloc[0]["state_description"],
         "tracks": df[["state", "action", "endogenous", "reward", "done", "truncated", "info"]],
@@ -93,8 +97,10 @@ class DatasetWriter:
     def write(self, env_data: dict[str, Any], hash: str):
         output_path = self.workdir / f"{self.idx}_{hash}.parquet"
         env_data['tracks'].to_parquet(output_path)
+        env_group = env_data["env_group"]
         self.metadata.append({
             'env_name': env_data['env_name'],
+            'env_group': env_group,
             'env_params': env_data['env_params'],
             'output_dir': str(output_path),
         })
@@ -148,7 +154,7 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
 
 def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
     processed_path = dynare_output_path
-    
+
     assert processed_path.exists(), f"processed path {processed_path} does not exist"
     with DatasetWriter(workdir) as writer:
         for file in processed_path.glob("*.parquet"):
