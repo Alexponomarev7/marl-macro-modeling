@@ -154,6 +154,8 @@ class RamseyEnv(AbstractEconomicEnv):
         return {
             "Capital": "Capital stock",
             "Output": "Current output",
+            "Consumption": "Consumption",
+            "Investment": "Investment",
         }
 
     @property

@@ -11,125 +11,236 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset
 
-STATE_MAPPING = {
-    "Empty": 0,
-    "Output": 1,
-    "Consumption": 2,
-    "Capital": 3,
-    "LoggedProductivity": 4,
-    "Debt": 5,
-    "InterestRate": 6,
-    "PreferenceShock": 7,
-    "CountryPremiumShock": 8,
-    "TechGrowthRate": 9,
-    "MUConsumption": 10,
-    # "Hours Worked": 4,
-    # "Total Factor Productivity": 5,
-    # "Annualized Interest Rate": 6,
-    # "Real Wage": 7,
-    # "Investment": 8,
-    # "Technology Shock": 9,
-    # "Labor": 10,
-    # "Preference Shock": 11,
-    # "Marginal Utility": 12,
-    # "Utility": 13,
-    # "Price Inflation": 14,
-    # "Debt": 15,
-    # "Trade Balance To Output Ratio": 16,
-    # "Trade Balance to Output Ratio": 16,
-    # "Output Gap": 17,
-    # "Current Account To Output Ratio": 18,
-    # "Natural Output": 19,
-    # "Output Deviation From Steady State": 20,
-    # "Bond Price": 21,
-    # "Government Spending": 22,
-    # "Marginal Utility of Consumption": 23,
-    # "Marginal Utility of Labor": 24,
-    # "Consumption to GDP Ratio": 25,
-    # "Investment to GDP Ratio": 26,
-    # "Net Exports": 27,
-    # "Log Output": 28,
-    # "Log Consumption": 29,
-    # "Log Investment": 30,
-    # "Output Growth": 31,
-    # "Natural Interest Rate": 32,
-    # "Real Interest Rate": 33,
-    # "Nominal Interest Rate": 34,
-    # "Real Money Stock": 35,
-    # "Money Growth Annualized": 36,
-    # "Nominal Money Stock": 37,
-    # "AR(1) Monetary Policy Shock Process": 38,
-    # "AR(1) Technology Shock Process": 39,
-    # "AR(1) Preference Shock Process": 40,
-    # "Price Level": 41,
-    # "Nominal Wage": 42,
-    # "Real Wage Gap": 43,
-    # "Wage Inflation": 44,
-    # "Natural Real Wage": 45,
-    # "Markup": 46,
-    # "Annualized Wage Inflation Rate": 47,
-    # "Value Function": 48,
-    # "Auxiliary Variable For Value Function": 49,
-    # "Expected Stochastic Discount Factor": 50,
-    # "Volatility": 51,
-    # "Expected Return On Capital": 52,
-    # "Risk-Free Rate": 53,
-    # "Money Growth": 54,
-    # "Output Growth Rate": 55,
-    # "Consumption Growth Rate": 56,
-    # "Investment Growth Rate": 57,
-    # "Technology Growth Rate": 58,
-    # "Interest Rate": 59,
-    # "Country Premium Shock": 60,
-    # "Productivity": 61,
-    # "Real Return On Capital": 62,
-    # "Real Consumption": 63,
-    # "Money Stock": 64,
-    # "Growth Rate Of Money Stock": 65,
-    # "Foreign Price Level": 66,
-    # "Foreign Bonds": 67,
-    # "Foreign Interest Rate": 68,
-    # "Exchange Rate": 69,
-    # "Log Capital Stock": 70,
-    # "Log Labor": 71,
-    # "Log Real Wage": 72,
-    # "Annualized Real Interest Rate": 73,
-    # "Annualized Nominal Interest Rate": 74,
-    # "Annualized Natural Interest Rate": 75,
-    # "Annualized Inflation Rate": 76,
-    # "Trade Balance": 77,
-    # "Capital Stock": 78,
-    # "Real Output": 79,
-    # "Output Minus Consumption": 80,
-    # "Lagrange Multiplier A": 81,
-    # "Lagrange Multiplier B": 82,
-    # "Inflation Rate": 83,
-    # "Inflation": 83,
-    # "Marginal Costs": 84,
-    # "Market Tightness": 85,
-    # "Log TFP": 86,
-    # "Log Vacancies": 87,
-    # "Log Wages": 88,
-    # "Log Unemployment": 89,
-    # "Log Tightness A": 90,
-    # "Log Tightness B": 91,
-    # "Vacancies": 92,
-    # "Unemployment Rate": 93,
-    # "Matches": 94,
-    # "Meeting Rate Between Firms And Workers": 95,
-    # "Employment": 96,
-    # "Gross Output A": 97,
-    # "Gross Output B": 98,
-    # "Government Spending Shock": 99,
-    # "AR(1) Technology Process": 100,
+def _validate_token_mapping(mapping: dict[str, int], *, mapping_name: str) -> None:
+    """Ensure token->id mapping is safe for nn.Embedding and stable to use as IDs."""
+    if "Empty" not in mapping or mapping["Empty"] != 0:
+        raise ValueError(f"{mapping_name} must include 'Empty': 0")
+    ids = list(mapping.values())
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"{mapping_name} has duplicate IDs: {mapping}")
+    if min(ids) != 0 or max(ids) != len(mapping) - 1:
+        raise ValueError(
+            f"{mapping_name} IDs must be contiguous 0..{len(mapping)-1}, got {sorted(ids)}"
+        )
+
+
+# State vocabulary used for variable embeddings.
+STATE_TOKENS: tuple[str, ...] = (
+    "Empty",
+    "Output",
+    "Consumption",
+    "Capital",
+    "LoggedProductivity",
+    "Debt",
+    "InterestRate",
+    "PreferenceShock",
+    "CountryPremiumShock",
+    "TechGrowthRate",
+    "MUConsumption",
+    "AR(1) Monetary Policy Shock Process",
+    "AR(1) Preference Shock Process",
+    "AR(1) Technology Process",
+    "AR(1) Technology Shock Process",
+    "Annualized Inflation Rate",
+    "Annualized Interest Rate",
+    "Annualized Natural Interest Rate",
+    "Annualized Nominal Interest Rate",
+    "Annualized Real Interest Rate",
+    "Annualized Wage Inflation Rate",
+    "Auxiliary Variable For Value Function",
+    "Consumption Growth Rate",
+    "Consumption to GDP Ratio",
+    "ConsumptionPerCapita",
+    "CapitalPerCapita",
+    "OutputPerCapita",
+    "InvestmentPerCapita",
+    "ConsYoung",
+    "ConsOld",
+    "Current Account To Output Ratio",
+    "Employment",
+    "Exchange Rate",
+    "Expected Return On Capital",
+    "Expected Stochastic Discount Factor",
+    "Foreign Bonds",
+    "Foreign Interest Rate",
+    "Foreign Price Level",
+    "GovSpending",
+    "Government Spending Shock",
+    "Gross Output A",
+    "Gross Output B",
+    "Growth Rate Of Money Stock",
+    "HoursWorked",
+    "Inflation",
+    "Inflation Rate",
+    "Investment",
+    "Investment Growth Rate",
+    "Investment to GDP Ratio",
+    "Labor",
+    "Lagrange Multiplier A",
+    "Lagrange Multiplier B",
+    "Log Output",
+    "Log Tightness A",
+    "Log Tightness B",
+    "Log Unemployment",
+    "Log Vacancies",
+    "Log Wages",
+    "Marginal Costs",
+    "Market Tightness",
+    "Markup",
+    "Matches",
+    "Meeting Rate Between Firms And Workers",
+    "Money Growth",
+    "Money Growth Annualized",
+    "Money Stock",
+    "MoneySupply",
+    "Natural Interest Rate",
+    "Natural Output",
+    "Natural Real Wage",
+    "Net Exports",
+    "Nominal Interest Rate",
+    "Nominal Money Stock",
+    "Nominal Wage",
+    "Output Deviation From Steady State",
+    "Output Gap",
+    "Output Growth",
+    "Output Growth Rate",
+    "Output Minus Consumption",
+    "Price Inflation",
+    "Price Level",
+    "Productivity",
+    "Real Consumption",
+    "Real Interest Rate",
+    "Real Money Stock",
+    "Real Output",
+    "Real Return On Capital",
+    "Real Wage",
+    "Real Wage Gap",
+    "Wage",
+    "WagePerEffectiveLabor",
+    "Savings",
+    "Risk-Free Rate",
+    "TaxRate",
+    "Technology Shock",
+    "Trade Balance to Output Ratio",
+    "TradeBalance",
+    "Unemployment Rate",
+    "Utility",
+    "Vacancies",
+    "Value Function",
+    "Volatility",
+    "Wage Inflation",
+)
+STATE_MAPPING: dict[str, int] = {name: i for i, name in enumerate(STATE_TOKENS)}
+_validate_token_mapping(STATE_MAPPING, mapping_name="STATE_MAPPING")
+
+_STATE_ALIASES_GLOBAL: dict[str, str] = {
+    # High-confidence spelling variants (same meaning, different formatting)
+    "Capital Stock": "Capital",
+    "Country Premium Shock": "CountryPremiumShock",
+    "Hours Worked": "HoursWorked",
+    "Interest Rate": "InterestRate",
+    "Log TFP": "LoggedProductivity",
+    "Marginal Utility": "MUConsumption",
+    "Marginal Utility of Consumption": "MUConsumption",
+    "Preference Shock": "PreferenceShock",
+    "Technology": "LoggedProductivity",
+    "Technology Growth Rate": "TechGrowthRate",
+    "Trade Balance": "TradeBalance",
+    "Trade Balance To Output Ratio": "Trade Balance to Output Ratio",
+    # Some models use long_name='Total Factor Productivity' for a state that is
+    # actually logged productivity in our pipeline/configs.
+    "Total Factor Productivity": "LoggedProductivity",
+    # Some `.mod` files use lower-case long_name values even when the TeX/header is title-cased
+    # (e.g. `Ramsey.mod`: long_name='consumption'). Canonicalize those back to our column names.
+    "consumption": "Consumption",
+    "capital": "Capital",
+    "output": "Output",
+    "investment": "Investment",
+    # Per-capita variables (from Dynare long_name format)
+    "consumption per capita": "ConsumptionPerCapita",
+    "capital per capita": "CapitalPerCapita",
+    "output per capita": "OutputPerCapita",
+    "investment per capita": "InvestmentPerCapita",
+    # Per-effective-labor variables
+    "consumption per effective labor": "ConsumptionPerEffectiveLabor",
+    "capital per effective labor": "CapitalPerEffectiveLabor",
+    "output per effective labor": "OutputPerEffectiveLabor",
+    "investment per effective labor": "InvestmentPerEffectiveLabor",
+    "wage per effective labor unit": "WagePerEffectiveLabor",
+    "wage per effective labor": "WagePerEffectiveLabor",
+    # OLG model variables
+    "consumption young": "ConsYoung",
+    "consumption old": "ConsOld",
+    "savings per effective worker": "Savings",
+    "capital stock (end of period)": "Capital",
+    "output per effective worker": "Output",
+    "wage rate": "Wage",
+    "rental rate of capital": "InterestRate",
+    # Other common lowercase long_name variants
+    "labor/population": "Labor",
+    "technology level": "Technology",
+    "real interest rate": "InterestRate",
+    "gross return on capital": "GrossReturn",
+    "marginal product of capital": "MarginalProductCapital",
+    "logged tfp": "LoggedProductivity",
+    "tfp level": "Productivity",
+    "aggregate consumption": "Consumption",
+    "aggregate capital": "Capital",
+    "aggregate output": "Output",
+    # Abbreviations / formatting
+    "Government Spending": "GovSpending",
 }
 
-ACTION_MAPPING = {
-    "Empty": 0,
-    "Investment": 1,
-    "Consumption": 2,
-    "HoursWorked": 3,
-}
+
+def canonical_state_name(name: str) -> str:
+    """Canonicalize a state variable name across environments."""
+    return _STATE_ALIASES_GLOBAL.get(name, name)
+
+
+def state_token_id(name: str) -> int:
+    """Map a state variable name (possibly an alias) to a stable token id."""
+    canon = canonical_state_name(name)
+    if canon not in STATE_MAPPING:
+        raise KeyError(
+            f"Unknown state token '{name}' (canonical '{canon}'). "
+            f"Known tokens: {list(STATE_MAPPING.keys())}"
+        )
+    return STATE_MAPPING[canon]
+
+
+ACTION_TOKENS: tuple[str, ...] = (
+    "Empty",
+    "Investment",
+    "Consumption",
+    "HoursWorked",
+    "Consumers", #? from marl_rbc_with_irrational_behavior.py
+    "Firms", #? from marl_rbc_with_irrational_behavior.py
+    "Government", #? from marl_rbc_with_irrational_behavior.py
+    "Labor", #? from marl_rbc_with_irrational_behavior.py
+    "Nominal Interest Rate",
+    "Real Consumption",
+    "consumption_fraction",
+    "consumption_rate",
+    "gov_spending_change",
+    "investment_rate",
+    "leisure",
+    "money_supply_change",
+    "tax_rate_change",
+)
+ACTION_MAPPING: dict[str, int] = {name: i for i, name in enumerate(ACTION_TOKENS)}
+_validate_token_mapping(ACTION_MAPPING, mapping_name="ACTION_MAPPING")
+
+def action_token_id(name: str) -> int:
+    """Map an action variable name to a stable token id.
+
+    Assumption: identical strings represent identical variables (no cross-env aliasing).
+    """
+    if name not in ACTION_MAPPING:
+        raise KeyError(
+            f"Unknown action token '{name}'. "
+            f"Known tokens: {list(ACTION_MAPPING.keys())}"
+        )
+    return ACTION_MAPPING[name]
 
 ENV_MAPPING = {
     "Born_Pfeifer_2018_MP": 0,
@@ -309,9 +420,9 @@ x
         state_description = data.iloc[0]["info"]["state_description"]
         action_description = data.iloc[0]["info"]["action_description"]
         endogenous_description = data.iloc[0]["info"]["endogenous_description"]
-        states_info = torch.tensor([STATE_MAPPING[state] for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
-        actions_info = torch.tensor([ACTION_MAPPING[action] for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
-        endogenous_info = torch.tensor([STATE_MAPPING[endogenous] for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
+        states_info = torch.tensor([state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
+        actions_info = torch.tensor([action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
+        endogenous_info = torch.tensor([state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"
         assert len(actions_info) == self.max_action_dim, f"actions_info length is {len(actions_info)} but max_action_dim is {self.max_action_dim}"
         # Pad actions to max_actions_dim
