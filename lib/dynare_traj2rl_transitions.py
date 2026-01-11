@@ -381,6 +381,7 @@ def dynare_trajectories2rl_transitions(
     reward_kwargs: dict,
     discount_factor: float,
     model_params: dict,
+    column_renames: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """Converts Dynare trajectories into reinforcement learning transitions.
 
@@ -395,6 +396,9 @@ def dynare_trajectories2rl_transitions(
         pd.DataFrame: A DataFrame containing the transitions.
     """
     data = pd.read_csv(input_data_path)
+    if column_renames:
+        # Only rename columns that actually exist in the file (safe no-op otherwise).
+        data = data.rename(columns={k: v for k, v in column_renames.items() if k in data.columns})
     transitions = []
 
     current_discount_factor = 1.0
@@ -446,6 +450,134 @@ def process_model_data(
     logger.info(f"Processing {model_name} with data from {raw_data_path}...")
     rl_env_conf = model_config["rl_env_settings"]
 
+    def _parse_mod_symbol_tex_to_long(mod_text: str) -> dict[str, str]:
+        """
+        Parse Dynare .mod variable declarations to map possible CSV headers to long_name.
+
+        Dynare's `M_.endo_names_tex` sometimes produces headers like `{c}` (SGU_2004),
+        sometimes `$\\omega$`, etc. We map all of these to the variable's `long_name`.
+
+        Returns mapping for keys:
+          - sym (e.g. 'c')
+          - '{sym}' (e.g. '{c}')
+          - tex (e.g. '${c}$')
+          - tex stripped of surrounding '$' (e.g. '{c}')
+        """
+        mapping: dict[str, str] = {}
+        # NOTE: this regex matches *actual* Dynare syntax in `.mod` files like:
+        #   consumption ${C}$ (long_name='Consumption')
+        # Keep the pattern readable: use real regex escapes (e.g. \b, \s) rather than
+        # double-escaped sequences (\\b), otherwise it will never match.
+        pat = re.compile(
+            r"\b(?P<sym>[A-Za-z_][A-Za-z0-9_]*)\s+(?P<tex>\$[^$]+\$)\s*\(long_name='(?P<long>[^']+)'\)"
+        )
+        for m in pat.finditer(mod_text):
+            sym = m.group("sym")
+            tex = m.group("tex")
+            long_name = m.group("long")
+            mapping[sym] = long_name
+            mapping["{" + sym + "}"] = long_name
+            mapping[tex] = long_name
+            mapping[tex.strip("$")] = long_name
+        return mapping
+
+    # Canonicalize common long_name variants to the codebase's canonical column names.
+    _COLUMN_ALIASES: dict[str, str] = {
+        "Country Premium Shock": "CountryPremiumShock",
+        "Hours Worked": "HoursWorked",
+        "Interest Rate": "InterestRate",
+        "Preference Shock": "PreferenceShock",
+        # Some models use long_name='Total Factor Productivity' for a state that is
+        # actually logged productivity in our pipeline/configs.
+        "Total Factor Productivity": "LoggedProductivity",
+        # Some `.mod` files use lower-case long_name values even when the TeX/header is title-cased
+        # (e.g. `Ramsey.mod`: long_name='consumption'). Canonicalize those back to our column names.
+        "consumption": "Consumption",
+        "capital": "Capital",
+        "output": "Output",
+        "investment": "Investment",
+        "Trade Balance To Output Ratio": "Trade Balance to Output Ratio",
+        "Trade Balance": "TradeBalance",
+        "Marginal Utility": "MUConsumption",
+        "Marginal Utility of Consumption": "MUConsumption",
+        "Technology Growth Rate": "TechGrowthRate",
+        "Government Spending": "GovSpending",
+        "Capital Stock": "Capital",
+        "Log TFP": "LoggedProductivity",
+    }
+
+    def _build_column_renames_for_raw_csv(raw_csv_path: Path) -> dict[str, str]:
+        """
+        Build a renaming dict to make raw Dynare CSV column headers match our canonical names.
+        Handles:
+          1) TeX headers (${c}$) -> long_name via .mod parsing
+          2) long_name variants -> canonical names via _COLUMN_ALIASES
+        """
+        renames: dict[str, str] = {}
+
+        # 1) Header entries (symbol or TeX-like) -> long_name via .mod parsing.
+        #
+        # We avoid pandas here (robust for unusual headers like '{c}') and just read
+        # the first line which contains the CSV header written by Octave.
+        try:
+            header_line = raw_csv_path.read_text(errors="ignore").splitlines()[0]
+            header = [h.strip() for h in header_line.split(",") if h.strip()]
+        except Exception:
+            header = []
+
+        mod_path = PathStorage().dynare_configs_root / f"{model_name}.mod"
+        if mod_path.exists():
+            sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_path.read_text(errors="ignore"))
+            # If we successfully parsed the header, map those entries.
+            for c in header:
+                if c in sym_tex_to_long:
+                    long_name = sym_tex_to_long[c]
+                    renames[c] = _COLUMN_ALIASES.get(long_name, long_name)
+
+        # 2) long_name variants -> canonical names
+        renames.update({k: v for k, v in _COLUMN_ALIASES.items()})
+        return renames
+
+    def _resolve_discount_factor(params: dict, rl_conf: dict) -> float:
+        """
+        Resolve discount factor used for accumulated reward computation.
+
+        Historically we assumed Dynare parameter name `beta`, but different .mod files use
+        different conventions (e.g. `BETTA`, `discount_factor`).
+
+        Priority:
+          1) Explicit constant: rl_env_settings.discount_factor
+          2) Explicit param name: rl_env_settings.discount_factor_param
+          3) Auto-detect from params keys (case/underscore-insensitive)
+          4) Fallback to 1.0 (no discounting)
+        """
+        if isinstance(rl_conf, dict):
+            if "discount_factor" in rl_conf and rl_conf["discount_factor"] is not None:
+                return float(rl_conf["discount_factor"])
+
+            if "discount_factor_param" in rl_conf and rl_conf["discount_factor_param"] is not None:
+                k = str(rl_conf["discount_factor_param"])
+                if k not in params:
+                    raise KeyError(
+                        f"discount_factor_param='{k}' not found in model_params keys={list(params.keys())}"
+                    )
+                return float(params[k])
+
+        def norm_key(s: str) -> str:
+            return "".join(ch for ch in s.lower() if ch.isalnum())
+
+        norm_map = {norm_key(str(k)): k for k in params.keys()}
+        for candidate in ("beta", "betta", "discountfactor", "discount_factor"):
+            nk = norm_key(candidate)
+            if nk in norm_map:
+                return float(params[norm_map[nk]])
+
+        logger.warning(
+            f"[{model_name}] Could not resolve discount factor from params; "
+            f"known keys={list(params.keys())}. Falling back to 1.0"
+        )
+        return 1.0
+
     # Extract configuration number from the filename (if any)
     config_match = re.search(r"_config_(\d+)_raw\.csv$", str(raw_data_path))
     config_suffix = f"_config_{config_match.group(1)}" if config_match else ""
@@ -464,8 +596,9 @@ def process_model_data(
         action_columns=rl_env_conf["input"]["action_columns"],
         reward_fn=reward_fn, # type: ignore
         reward_kwargs=rl_env_conf["reward_kwargs"],
-        discount_factor=model_params["beta"],
+        discount_factor=_resolve_discount_factor(model_params, rl_env_conf),
         model_params=model_params,
+        column_renames=_build_column_renames_for_raw_csv(raw_data_path),
     )
     logger.info("Transitions successfully generated.")
 
@@ -473,7 +606,21 @@ def process_model_data(
 
     # Persist the economics model identifier through the pipeline so downstream
     # dataset builders can group episodes robustly even if filenames include hashes.
-    transitions["info"] = transitions["info"].apply(lambda x: x | {"env_group": model_name})
+    if "info" not in transitions.columns:
+        logger.warning(
+            f"[{model_name}] Transitions missing 'info' column (len={len(transitions)}). "
+            "Creating an empty one."
+        )
+        transitions["info"] = pd.Series([{}] * len(transitions))
+
+    def _add_env_group(x: object) -> dict:
+        if isinstance(x, dict):
+            base = x
+        else:
+            base = {}
+        return base | {"env_group": model_name}
+
+    transitions["info"] = transitions["info"].apply(_add_env_group)
 
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
     transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))

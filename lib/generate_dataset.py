@@ -66,6 +66,9 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
 
 def generate_env_data_dynare(dynare_file_path: Path):
     df = pd.read_parquet(dynare_file_path)
+    if df.empty:
+        logger.warning(f"Skipping empty dynare episode parquet: {dynare_file_path}")
+        return None
     df["done"] = False
 
     info = {
@@ -159,6 +162,8 @@ def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
     with DatasetWriter(workdir) as writer:
         for file in processed_path.glob("*.parquet"):
             env_data = generate_env_data_dynare(file)
+            if env_data is None:
+                continue
             params_hash = generate_hash({"file_name": file.name})
             writer.write(env_data, params_hash)
 
