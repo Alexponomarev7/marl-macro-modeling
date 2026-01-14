@@ -258,14 +258,14 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
 
 
 def run_model(
-    input_file: Path, 
+    input_file: Path,
     output_file: Path,
     output_params_file: Path,
     parameters: list[str],
     max_retries: int = 3,
 ) -> None:
     """Run a Dynare model with specified parameters and save results.
-    
+
     Args:
         input_file: Path to the Dynare .mod file
         output_file: Path to save the output CSV
@@ -286,10 +286,10 @@ def run_model(
                     "octave",
                     "--eval",
                     f"""
-                    addpath {os.environ["DYNARE_PATH"]}; 
-                    cd {input_tmp_file.parent}; 
-                    dynare {input_tmp_file.name} {' '.join(parameters)}; 
-                    oo_simul = oo_.endo_simul'; 
+                    addpath {os.environ["DYNARE_PATH"]};
+                    cd {input_tmp_file.parent};
+                    dynare {input_tmp_file.name} {' '.join(parameters)};
+                    oo_simul = oo_.endo_simul';
                     var_names = M_.endo_names_tex;
                     param_names = M_.param_names;
                     param_values = M_.params;
@@ -306,14 +306,14 @@ def run_model(
                     end
                     fclose(fid);
                     """
-                ]   
+                ]
 
                 process = subprocess.run(cmd, capture_output=True, text=True)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
 
             if process.returncode != 0:
                 raise RuntimeError(f"Dynare failed with error: {process.stdout} {process.stderr}")
-            
+
             print(f"Model {input_file} completed successfully.")
             return
 
@@ -322,13 +322,13 @@ def run_model(
             print(f"Error message: {str(e)}")
             print("Stack trace:")
             traceback.print_exc()
-            
+
             retries += 1
             if retries < max_retries:
                 print(f"Retrying model {input_file}...")
             else:
                 print(f"Failed to run model {input_file} after {max_retries} attempts.")
-    
+
     if retries == max_retries:
         raise RuntimeError(f"Failed to run model {input_file} after {max_retries} attempts.")
 
@@ -337,8 +337,8 @@ def process_model_combination(args):
     _, input_file, base_name, combination, values, raw_data_dir = args
     output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
     output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
-    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
-    
+    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")    
+
     run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
     print(f"Output saved to {output_file}")
     print(f"Config saved to {config_file}")
@@ -353,7 +353,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
         model_settings = model_config["dynare_model_settings"]
         num_samples = model_settings["num_samples"]
         parameter_combinations, parameter_values = generate_parameter_combinations(model_settings, num_samples)
-        
+
         for i, (combination, values) in enumerate(zip(parameter_combinations, parameter_values)):
             input_file = os.path.join(PathStorage().dynare_configs_root, model_name + ".mod")
             base_name = "_".join([model_name, f"config_{i}"])
@@ -362,10 +362,10 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             output_files.append((Path(output_file), Path(output_params_file)))
             task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
-    
+
     num_processes = min(min(cpu_count(), len(tasks)), 32)
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
-    
+
     with Pool(processes=num_processes) as pool:
         pool.map(process_model_combination, tasks)
 
@@ -471,6 +471,10 @@ def process_model_data(
 
     logger.info("Saving data...")
 
+    # Persist the economics model identifier through the pipeline so downstream
+    # dataset builders can group episodes robustly even if filenames include hashes.
+    transitions["info"] = transitions["info"].apply(lambda x: x | {"env_group": model_name})
+
     transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
     transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))
     transitions["endogenous_description"] = pd.Series([list(endogenous_accessor.get_columns())] * len(transitions))
@@ -513,7 +517,7 @@ def main(cfg: DictConfig) -> None:
     for raw_data_file, params_file in output_files:
         with open(params_file, 'r') as f:
             model_params = yaml.load(f, Loader=yaml.FullLoader)
-        
+
         model_name = extract_model_name(raw_data_file.stem)
 
         if model_name not in config["models"]:
