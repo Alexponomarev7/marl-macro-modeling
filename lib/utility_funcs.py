@@ -2,8 +2,37 @@ import numpy as np
 from typing import Union
 
 
-def crra(c: float, theta: float = 0.99):
-    return (c ** (1 - theta) - 1) / (1 - theta)
+def crra(c: float, sigma: float = 1.0) -> float:
+    """
+    CRRA utility function.
+    
+    U(c) = log(c)           if sigma = 1
+    U(c) = (c^(1-σ) - 1)/(1-σ)  otherwise
+    
+    :param c: consumption, must be positive
+    :param sigma: coefficient of relative risk aversion (CRRA parameter)
+    :return: utility value
+    """
+    if c <= 0:
+        return -np.inf
+    if np.isclose(sigma, 1.0):
+        return np.log(c)
+    return c ** (1 - sigma) / (1 - sigma)
+
+
+def cara(c: float, sigma: float = 1.0) -> float:
+    """
+    CARA utility function.
+    
+    U(c) = -exp(-σ*c) / η  or  1 - exp(-σ*c) (monotonic transform)
+    
+    :param c: consumption, must be non-negative
+    :param sigma: coefficient of absolute risk aversion
+    :return: utility value
+    """
+    if c < 0:
+        return -np.inf
+    return 1 - np.exp(-sigma * c)
 
 
 def log_utility(C: Union[float, np.array], L: Union[float, np.array], A: float = 1.0) -> Union[float, np.array]:
