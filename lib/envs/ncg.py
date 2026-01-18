@@ -148,7 +148,7 @@ class NCGEnv(AbstractEconomicEnv):
         :return: Dictionary mapping state variable names to their descriptions
         """
         return {
-            "capital": "Current capital stock"
+            "Capital": "Current capital stock"
         }
 
     @property
@@ -161,7 +161,7 @@ class NCGEnv(AbstractEconomicEnv):
         return {
             "consumption_fraction": "Fraction of capital to consume"
         }
-    
+
     def reset(self, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         """
         Reset the environment to initial state.
