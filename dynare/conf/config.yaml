@@ -32,7 +32,7 @@ models:
         endogenous_columns:
           - Investment
       output:
-        data_path: ./data/processed/Ramsey_base
+        data_path: ./data/interim/Ramsey_base
 
 
   Ramsey_crra:
@@ -68,7 +68,7 @@ models:
         endogenous_columns:
           - InvestmentPerCapita
       output:
-        data_path: ./data/processed/Ramsey_cara
+        data_path: ./data/interim/Ramsey_cara
 
 
   Ramsey_cara:
@@ -104,7 +104,7 @@ models:
         endogenous_columns:
           - InvestmentPerCapita
       output:
-        data_path: ./data/processed/Ramsey_cara
+        data_path: ./data/interim/Ramsey_cara
 
 
   Ramsey_upgrade:
@@ -142,7 +142,7 @@ models:
           - MarginalProductCapital
           - WagePerEffectiveLabor
       output:
-        data_path: ./data/processed/Ramsey_upgrade
+        data_path: ./data/interim/Ramsey_upgrade
 
 
   OLG:
@@ -176,7 +176,7 @@ models:
           - ConsYoung
           - ConsOld
       output:
-        data_path: ./data/processed/OLG
+        data_path: ./data/interim/OLG
 
 
   RBC_baseline_pf:
@@ -208,7 +208,7 @@ models:
           - Consumption
         endogenous_columns: []
       output:
-        data_path: ./data/processed/RBC_baseline_pf
+        data_path: ./data/interim/RBC_baseline_pf
 
   RBC_baseline_stoch:
     dynare_model_settings:
@@ -237,7 +237,7 @@ models:
           - Consumption
         endogenous_columns: []
       output:
-        data_path: ./data/processed/RBC_baseline_stoch
+        data_path: ./data/interim/RBC_baseline_stoch
 
 #  RBC_capital_stock_shock:
 #    dynare_model_settings:
@@ -281,7 +281,7 @@ models:
 #          - Wage
 #          - InterestRate
 #      output:
-#        data_path: ./data/processed/RBC_capital_stock_shock
+#        data_path: ./data/interim/RBC_capital_stock_shock
 
 
   GarciaCicco_et_al_2010:
@@ -326,7 +326,7 @@ models:
         endogenous_columns:
           - [MUConsumption, -1]
       output:
-        data_path: ./data/processed/GarciaCicco_et_al_2010
+        data_path: ./data/interim/GarciaCicco_et_al_2010
 
   Aguiar_Gopinath_2007:
     dynare_model_settings:
@@ -380,7 +380,7 @@ models:
            - Consumption
            - Labor
        output:
-         data_path: ./data/processed/Aguiar_Gopinath_2007
+         data_path: ./data/interim/Aguiar_Gopinath_2007
 
 #   rl_env_settings:
 #     reward: lib.rewards.stability_reward
@@ -410,7 +410,7 @@ models:
 #       action_columns:
 #         - Investment  # Управляемая переменная (инвестиции)
 #     output:
-#       data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
 
 
 ##  Born_Pfeifer_2018_MP:
@@ -461,7 +461,7 @@ models:
 ##       action_columns:
 ##         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
 ##     output:
-##       data_path: ./data/processed/Born_Pfeifer_2018_MP
+##       data_path: ./data/interim/Born_Pfeifer_2018_MP
 
 
   Caldara_et_al_2012:
@@ -492,7 +492,7 @@ models:
        action_columns:
          - Investment
      output:
-       data_path: ./data/processed/Caldara_et_al_2012
+       data_path: ./data/interim/Caldara_et_al_2012
 
 
   Collard_2001_example1:
@@ -515,7 +515,7 @@ models:
        action_columns:
          - Consumption
      output:
-       data_path: ./data/processed/Collard_2001_example1
+       data_path: ./data/interim/Collard_2001_example1
 
 
   Faia_2008:
@@ -558,7 +558,7 @@ models:
        action_columns:
          - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
      output:
-       data_path: ./data/processed/Faia_2008  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/Faia_2008  # Путь для сохранения обработанных данных
 
 
   FV_et_al_2007_ABCD:
@@ -580,7 +580,7 @@ models:
        action_columns:
          - Consumption  # Управляемая переменная (потребление)
      output:
-       data_path: ./data/processed/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
 
 
   Gali_2008_chapter_2:
@@ -608,7 +608,7 @@ models:
        action_columns:
          - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
      output:
-       data_path: ./data/processed/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
 
 
   Hansen_1985:
@@ -637,7 +637,7 @@ models:
        action_columns:
          - Investment  # Управляемая переменная (инвестиции)
      output:
-       data_path: ./data/processed/Hansen_1985  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/Hansen_1985  # Путь для сохранения обработанных данных
 
 
   McCandless_2008_Chapter_9:
@@ -666,7 +666,7 @@ models:
        action_columns:
          - Real Consumption  # Управляемая переменная (реальное потребление)
      output:
-       data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
 
 
   McCandless_2008_Chapter_13:
@@ -699,7 +699,7 @@ models:
        action_columns:
          - 'Growth Rate Of Money Stock'
      output:
-       data_path: ./data/processed/McCandless_2008_Chapter_13
+       data_path: ./data/interim/McCandless_2008_Chapter_13
 
   RBC_news_shock_model:
    dynare_model_settings:
@@ -725,7 +725,7 @@ models:
        action_columns:
          - 'Investment'            # invest (управляемая переменная)
      output:
-       data_path: ./data/processed/RBC_news_shock_model  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/RBC_news_shock_model  # Путь для сохранения обработанных данных
 
   RBC_state_dependent_GIRF:
    dynare_model_settings:
@@ -752,7 +752,7 @@ models:
        action_columns:
          - 'Government Spending'   # ghat (управляемая переменная)
      output:
-       data_path: ./data/processed/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 
 #  SGU_2003:
 #   dynare_model_settings:
@@ -787,7 +787,7 @@ models:
 #       action_columns:
 #         - 'Investment'
 #     output:
-#       data_path: ./data/processed/SGU_2003
+#       data_path: ./data/interim/SGU_2003
 
   SGU_2004:
    dynare_model_settings:
@@ -810,4 +810,4 @@ models:
        action_columns:
          - 'Capital'               # k (управляемая переменная)
      output:
-       data_path: ./data/processed/SGU_2004  # Путь для сохранения обработанных данных
+       data_path: ./data/interim/SGU_2004  # Путь для сохранения обработанных данных

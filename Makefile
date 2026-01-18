@@ -46,7 +46,7 @@ dataset: dynare-models
 	@$(PYTHON) lib/generate_dataset.py \
 		train.dynare_output_path=data \
 		val.dynare_output_path=data \
-		workdir=dataset $(ARGS)
+		workdir=data/processed $(ARGS)
 	@echo "✓ Dataset generation complete"
 
 .PHONY: pipeline-exp
@@ -56,7 +56,7 @@ pipeline-exp:
 		metadata.output_dir=experiments \
 		metadata.track=False \
 		dataset.enabled=False \
-		dataset.workdir=dataset \
+		dataset.workdir=data/processed \
 		train.epochs=1 \
 		dataset.train.dynare_output_path=data \
 		dataset.val.dynare_output_path=data \
