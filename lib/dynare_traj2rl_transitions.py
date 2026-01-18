@@ -50,27 +50,150 @@ class StateAccessor:
 def sample_from_range(range_values: list[float]) -> float:
     return np.random.random() * (range_values[1] - range_values[0]) + range_values[0]
 
-def dump_context_work(context: dict, output_path: str = "config_dump.yml") -> None:
-    config = {}
 
-    for name, field_value in context.items():
-        try:
-            if isinstance(field_value, dict):
-                config[str(name)] = {str(k): str(v) for k, v in field_value.items()}
-            elif isinstance(field_value, (list, tuple)):
-                config[str(name)] = [str(x) for x in field_value]
-            elif isinstance(field_value, (int, float, str, bool)):
-                config[str(name)] = field_value
-            else:
-                # Fallback for other types
-                config[str(name)] = str(field_value)
-        except Exception as e:
-            logger.warning(f"Skipping field {name} due to error: {e}")
+# def generate_parameter_combinations(model_settings: dict, num_samples: int) -> tuple[list[list[str]], list[dict]]:
+#     parameter_combinations = []
+#     parameter_values = []
 
-    with open(output_path, 'w') as f:
-        yaml.dump(config, f)
+#     for _ in range(num_samples):
+#         current_combination = []
+#         current_values = {}
 
-    logger.info(f"✅ Dumped context.work to {output_path}")
+#         # Handle periods separately since it's not a range
+#         if "periods" in model_settings:
+#             current_combination.append(f"-Dperiods={model_settings['periods']}")
+#             current_values["periods"] = model_settings["periods"]
+
+#         # Sample from parameter ranges
+#         if "parameter_ranges" in model_settings:
+#             for param, range_values in model_settings["parameter_ranges"].items():
+#                 value = sample_from_range(range_values)
+#                 current_combination.append(f"-D{param}={value}")
+#                 current_values[param] = value
+
+#         if "shock_settings" in model_settings:
+#             shock_settings = model_settings["shock_settings"]
+#             num_shocks = shock_settings.get("num_shocks", 0)
+#             current_combination.append(f"-Dnum_shocks={num_shocks}")
+#             current_values["num_shocks"] = num_shocks
+
+#             periods_available = list(range(
+#                 shock_settings.get("period_range", [1, model_settings["periods"]])[0],
+#                 shock_settings.get("period_range", [1, model_settings["periods"]])[1] + 1
+#             ))
+
+#             if num_shocks > 0 and len(periods_available) >= num_shocks:
+#                 shock_periods = sorted(np.random.choice(periods_available, size=num_shocks, replace=False))
+#             else:
+#                 shock_periods = []
+            
+#             value_range = shock_settings.get("value_range", [-0.05, 0.05])
+
+#             for i in range(num_shocks):
+#                 if i < len(shock_periods):
+#                     period = int(shock_periods[i])      
+#                     value = sample_from_range(value_range)
+#                 else:
+#                     period = 1
+#                     value = 0.0
+                
+#                 current_combination.append(f"-Dshock_period_{i+1}={period}")
+#                 current_combination.append(f"-Dshock_value_{i+1}={value}")
+#                 current_values[f"shock_period_{i+1}"] = period
+#                 current_values[f"shock_value_{i+1}"] = value
+
+#         parameter_combinations.append(current_combination)
+#         parameter_values.append(current_values)
+
+#     return parameter_combinations, parameter_values
+
+
+def _generate_shock_params(
+    shock_settings: dict,
+    periods: int,
+    prefix: str,
+    shock_count_name: str,
+    max_shocks: int = 6
+) -> dict:
+    """
+    Generate shock parameters for a single shock type.
+    
+    Args:
+        shock_settings: Settings for this shock type (num_shocks, period_range, value_range).
+        periods: Total simulation periods.
+        prefix: Prefix for parameter names (e.g., 'productivity_shock').
+        shock_count_name: Name for the shock count parameter.
+        max_shocks: Maximum number of shocks to generate.
+    
+    Returns:
+        Dictionary with shock parameters.
+    """
+    params = {}
+    
+    num_shocks = shock_settings.get("num_shocks", 0)
+    params[shock_count_name] = num_shocks
+    
+    period_range = shock_settings.get("period_range", [1, periods])
+    period_start = max(1, period_range[0])
+    period_end = min(periods, period_range[1])
+    periods_available = list(range(period_start, period_end + 1))
+    
+    actual_num_shocks = min(num_shocks, len(periods_available))
+    if actual_num_shocks > 0:
+        shock_periods = sorted(np.random.choice(
+            periods_available, 
+            size=actual_num_shocks, 
+            replace=False
+        ))
+    else:
+        shock_periods = []
+    
+    value_range = shock_settings.get("value_range", [-0.05, 0.05])
+    
+    for i in range(max_shocks):
+        if i < len(shock_periods):
+            period = int(shock_periods[i])
+            value = sample_from_range(value_range)
+        else:
+            period = 1
+            value = 0.0
+        
+        params[f"{prefix}_period_{i+1}"] = period
+        params[f"{prefix}_value_{i+1}"] = value
+    
+    return params
+
+
+def _generate_all_shocks(
+    shocks_config: dict,
+    periods: int,
+    max_shocks_per_type: int = 6
+) -> dict:
+    """
+    Generate parameters for all shock types.
+    
+    Args:
+        shocks_config: Dictionary where keys are shock names and values are settings.
+        periods: Total simulation periods.
+        max_shocks_per_type: Maximum number of shocks per type.
+    
+    Returns:
+        Dictionary with all shock parameters for Dynare.
+    """
+    all_params = {}
+    
+    for shock_name, shock_settings in shocks_config.items():
+        shock_params = _generate_shock_params(
+            shock_settings=shock_settings,
+            periods=periods,
+            prefix=f"{shock_name}_shock",
+            shock_count_name=f"num_{shock_name}_shocks",
+            max_shocks=max_shocks_per_type
+        )
+        all_params.update(shock_params)
+    
+    return all_params
+
 
 def generate_parameter_combinations(model_settings: dict, num_samples: int) -> tuple[list[list[str]], list[dict]]:
     parameter_combinations = []
@@ -91,6 +214,15 @@ def generate_parameter_combinations(model_settings: dict, num_samples: int) -> t
                 value = sample_from_range(range_values)
                 current_combination.append(f"-D{param}={value}")
                 current_values[param] = value
+
+        if "shocks" in model_settings:
+            shock_params = _generate_all_shocks(
+                shocks_config=model_settings["shocks"],
+                periods=model_settings.get("periods", 100)
+            )
+            for key, value in shock_params.items():
+                current_combination.append(f"-D{key}={value}")
+                current_values[key] = value
 
         parameter_combinations.append(current_combination)
         parameter_values.append(current_values)
@@ -123,6 +255,7 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
 
     assert reward_object is not None, f"reward object is not imported {reward_object_path=}"
     return reward_object
+
 
 def run_model(
     input_file: Path,
@@ -204,12 +337,13 @@ def process_model_combination(args):
     _, input_file, base_name, combination, values, raw_data_dir = args
     output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
     output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
-    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
+    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")    
 
     run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
     print(f"Output saved to {output_file}")
     print(f"Config saved to {config_file}")
     print(f"Params saved to {output_params_file}")
+
 
 def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
     output_files = []
@@ -236,6 +370,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
         pool.map(process_model_combination, tasks)
 
     return output_files
+
 
 def dynare_trajectories2rl_transitions(
     input_data_path: Path,
@@ -348,6 +483,7 @@ def process_model_data(
 
     logger.info(f"Data saved to {output_path}")
 
+
 def extract_model_name(filename: str) -> str:
     """Extracts the base model name from a filename.
 
@@ -362,6 +498,7 @@ def extract_model_name(filename: str) -> str:
         return filename.split("_config_")[0]
     # Если суффикса нет, возвращаем имя файла без расширения
     return filename.replace("_raw", "")
+
 
 @hydra.main(config_path="../dynare/conf", config_name="config")
 def main(cfg: DictConfig) -> None:
@@ -402,10 +539,4 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    # run_model(
-    #     input_file=Path("dynare/docker/dynare_models/Ramsey.mod"),
-    #     output_file=Path("theoretical_ramsey_0.5.csv"),
-    #     parameters=["-Dalpha=0.5", "-Dbeta=0.96", "-Ddelta=0.1", "-Dstart_capital=1.0", "-Dperiods=50"],
-    #     max_retries=3
-    # )
     main()
