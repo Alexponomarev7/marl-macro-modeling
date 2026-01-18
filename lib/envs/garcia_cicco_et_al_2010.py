@@ -45,7 +45,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
         self.psi = psi
         self.dbar = dbar
         self.gbar = gbar
-        
+
         # Shock persistence
         self.rho_a = rho_a
         self.rho_g = rho_g
@@ -95,7 +95,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
         """Reset environment"""
         super().reset(seed=seed)
         self.current_step = 0
-        
+
         # Reset state variables
         self.capital = self.start_capital
         self.debt = 0.0
@@ -199,6 +199,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
             "HoursWorked": "Hours worked",
             "Output": "Output",
             "Consumption": "Consumption",
+            "Investment": "Investment",
             "TradeBalance": "Trade balance",
             "TechGrowthRate": "Technology growth rate",
             "InterestRate": "Interest rate",

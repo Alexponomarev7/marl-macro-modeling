@@ -23,7 +23,7 @@ from lib.my_utils import (
     set_global_seed,
     get_run_id,
 )
-from lib.dataset import EconomicsDataset
+from lib.dataset import EconomicsDataset, Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
     DatasetGenerator,
@@ -60,7 +60,7 @@ class DataModule(L.LightningDataModule):
 
     def __init__(
         self, data_root: Path, state_max_dim: int, action_max_dim: int,
-        endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int, 
+        endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int,
         batch_size: int = 32
     ):
         """
@@ -83,7 +83,7 @@ class DataModule(L.LightningDataModule):
         """Set up datasets for different stages."""
         if stage == "fit" or stage is None:
             self.train_dataset = EconomicsDataset(
-                self.data_root / "train", 
+                self.data_root / "train",
                 self.state_max_dim,
                 self.action_max_dim,
                 self.endogenous_max_dim,
@@ -294,6 +294,11 @@ def main(hydra_cfg: DictConfig) -> None:
     set_global_seed(metadata['seed'])
     dataset_generator = DatasetGenerator(cfg['dataset'])
     dataset_generator.create()
+
+    # Automatically compute num_tasks from Tokenizer's ENV_MAPPING
+    tokenizer = Tokenizer()
+    num_tasks = tokenizer.num_tasks
+    cfg['train']['model']['num_tasks'] = num_tasks
 
     test_envs = create_test_envs(cfg['dataset'])
     model = EconomicPolicyModel(

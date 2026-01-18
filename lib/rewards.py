@@ -1,6 +1,40 @@
 import numpy as np
 import pandas as pd
+from abc import ABC, abstractmethod
 from typing import Optional
+
+
+class RewardFunction(ABC):
+    """
+    Abstract base class for reward functions.
+
+    All reward functions must implement the compute method with the signature:
+    - data: pd.DataFrame - The data containing state/action variables
+    - parameters: dict[str, float] - Model parameters
+    - **kwargs - Additional configuration parameters (e.g., target_column, sigma_column, etc.)
+
+    Reward functions should accept **kwargs and ignore any parameters they don't use.
+    """
+
+    @abstractmethod
+    def __call__(
+        self,
+        data: pd.DataFrame,
+        parameters: dict[str, float],
+        **kwargs
+    ) -> pd.Series:
+        """
+        Compute reward for each row in the data.
+
+        Args:
+            data: DataFrame with state/action variables
+            parameters: Model parameters dictionary
+            **kwargs: Additional configuration (target_column, sigma_column, etc.)
+
+        Returns:
+            Series of reward values, one per row
+        """
+        pass
 
 
 def l1_norm(state: np.ndarray, action: np.ndarray, next_state: np.ndarray) -> float:
@@ -25,19 +59,46 @@ def stability_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     target_column: str | None = None,
+    target_indices: list[int] | None = None,
+    **kwargs  # Accept any additional kwargs (e.g., weights) and ignore them
 ) -> pd.Series:
-    assert target_column is not None
-    return data[target_column]
+    """
+    Stability reward: returns the target column value directly.
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters (unused)
+        target_column: Column name to use as reward
+        target_indices: Alternative to target_column - list of column indices to use as reward.
+                       If provided and target_column is None, uses the first index.
+        **kwargs: Additional parameters (ignored)
+    """
+    if target_column is not None:
+        return data[target_column]
+    elif target_indices is not None and len(target_indices) > 0:
+        # Use the first target index to get the column name
+        col_idx = target_indices[0]
+        column_name = data.columns[col_idx]
+        return data[column_name]
+    else:
+        raise ValueError("Either target_column or target_indices must be provided")
 
 
 def log_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     target_column: str = "Consumption",
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     Log utility: U(C) = ln(C)
     This is CRRA with sigma = 1.
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters (unused)
+        target_column: Column name for consumption
+        **kwargs: Additional parameters (ignored)
     """
     consumption = data[target_column]
 
@@ -54,8 +115,21 @@ def crra_reward(
     target_column: str | None = None,
     sigma_column: str | None = None,
     sigma_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
-    assert target_column is not None
+    """
+    CRRA (Constant Relative Risk Aversion) utility reward:
+    U(c) = c^(1-σ)/(1-σ) for σ ≠ 1, or U(c) = ln(c) for σ = 1
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        target_column: Column name for consumption
+        sigma_column: Column name or parameter name for risk aversion coefficient
+        sigma_default: Default value for sigma
+        **kwargs: Additional parameters (ignored)
+    """
+    assert target_column is not None, "target_column must be provided"
 
     consumption = data[target_column]
 
@@ -89,6 +163,7 @@ def cara_reward(
     target_column: str | None = None,
     sigma_column: str | None = None,
     sigma_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CARA (Constant Absolute Risk Aversion) utility reward:
@@ -97,14 +172,15 @@ def cara_reward(
     Or equivalently (monotonic transformation):
     U(c) = 1 - exp(-σ * c)
 
-    :param data: DataFrame with consumption data
-    :param parameters: model parameters
-    :param target_column: column name for consumption
-    :param sigma_column: column name or parameter name for risk aversion coefficient
-    :param sigma_default: default value for sigma
-    :return: utility series
+    Args:
+        data: DataFrame with consumption data
+        parameters: Model parameters
+        target_column: Column name for consumption
+        sigma_column: Column name or parameter name for risk aversion coefficient
+        sigma_default: Default value for sigma
+        **kwargs: Additional parameters (ignored)
     """
-    assert target_column is not None
+    assert target_column is not None, "target_column must be provided"
 
     consumption = data[target_column]
 
@@ -129,6 +205,7 @@ def olg_log_utility_reward(
     consumption_old_column: str = 'ConsOld',
     beta_column: str | None = None,
     beta_default: float = 0.4,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     OLG (Overlapping Generations) log utility reward:
@@ -137,13 +214,14 @@ def olg_log_utility_reward(
     Note: In OLG models, β represents discounting between youth and old age,
     not between periods as in Ramsey model.
 
-    :param data: DataFrame with consumption data
-    :param parameters: model parameters including beta
-    :param consumption_young_column: column name for young consumption
-    :param consumption_old_column: column name for old consumption
-    :param beta_column: column name or parameter name for discount factor
-    :param beta_default: default value for beta
-    :return: utility series
+    Args:
+        data: DataFrame with consumption data
+        parameters: Model parameters including beta
+        consumption_young_column: Column name for young consumption
+        consumption_old_column: Column name for old consumption
+        beta_column: Column name or parameter name for discount factor
+        beta_default: Default value for beta
+        **kwargs: Additional parameters (ignored)
     """
 
     c1 = data[consumption_young_column]
@@ -155,7 +233,7 @@ def olg_log_utility_reward(
         beta = parameters[beta_column]
     else:
         beta = beta_default
-    
+
     utility = np.log(c1) + beta * np.log(c2)
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
@@ -165,8 +243,17 @@ def olg_log_utility_reward(
 
 def GarciaCicco(
     data: pd.DataFrame,
-    parameters: dict[str, float]
+    parameters: dict[str, float],
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
+    """
+    Garcia-Cicco et al. (2010) utility reward function.
+
+    Args:
+        data: DataFrame with Consumption, HoursWorked, PreferenceShock columns
+        parameters: Model parameters (theta, omega, gamma_a)
+        **kwargs: Additional parameters (ignored)
+    """
     theta = parameters["theta"]
     omega = parameters["omega"]
     gamma = parameters["gamma_a"]
@@ -191,10 +278,20 @@ def log_utility_reward(
     labor_column: str = 'Population',
     A_column: str | None = None,
     A_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     Log utility reward:
     U(C,L) = ln(C) + A * ln(1-L)
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        consumption_column: Column name for consumption
+        labor_column: Column name for labor
+        A_column: Column name or parameter name for A coefficient
+        A_default: Default value for A
+        **kwargs: Additional parameters (ignored)
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -224,10 +321,24 @@ def ces_utility_reward(
     sigma_default: float = 2.0,
     eta_default: float = 1.0,
     A_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CES utility reward:
     U(C,L) = C^(1-σ)/(1-σ) + A * (1-L)^(1-η)/(1-η)
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        consumption_column: Column name for consumption
+        labor_column: Column name for labor
+        sigma_column: Column name or parameter name for sigma
+        eta_column: Column name or parameter name for eta
+        A_column: Column name or parameter name for A
+        sigma_default: Default value for sigma
+        eta_default: Default value for eta
+        A_default: Default value for A
+        **kwargs: Additional parameters (ignored)
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -270,7 +381,7 @@ def ces_utility_reward(
         )
 
     leisure = np.maximum(1 - L, 1e-10)
-    
+
     if isinstance(eta, (int, float)):
         if np.isclose(eta, 1.0):
             leisure_utility = A * np.log(leisure)

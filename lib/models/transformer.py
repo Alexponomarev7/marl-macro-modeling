@@ -1,5 +1,5 @@
 import math
-from lib.dataset import ACTION_MAPPING, STATE_MAPPING
+from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 import torch
 import torch.nn as nn
@@ -76,8 +76,9 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.has_pinn = has_pinn
         self.model_params_dim = model_params_dim
 
-        self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
-        self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
+        self.tokenizer = Tokenizer()
+        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - 1)
+        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 1)
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
 
@@ -86,16 +87,16 @@ class AlgorithmDistillationTransformer(nn.Module):
         # self.token_type_embedding = nn.Embedding(4, d_model)
 
         # self.positional_encoding = PositionalEncoding(d_model)
-        
+
         # Create causal mask to ensure transformer only looks at past tokens
         self.register_buffer('causal_mask', torch.triu(torch.ones(2048, 2048), diagonal=1).bool())
-        
+
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                d_model=self.d_model,
                 nhead=nhead,
                 dtype=torch.float32
-            ), 
+            ),
             num_layers=num_layers
         )
         self.action_head = nn.Linear(self.d_model, action_dim, dtype=torch.float32)
@@ -111,21 +112,21 @@ class AlgorithmDistillationTransformer(nn.Module):
     def get_state_embedding(self, states: torch.Tensor, states_info: torch.Tensor) -> torch.Tensor:
         # states: [batch_size, seq_length, state_dim]
         # states_info: [batch_size, state_dim]
-        
+
         # Get embeddings for state classes [batch_size, state_dim, d_model-1]
         class_embeddings = self.state_embedding(states_info)
-        
+
         # Reshape states to [batch_size, seq_len, state_dim] and expand class embeddings
         # Expand class embeddings to match sequence length
         class_embeddings = class_embeddings.unsqueeze(1).expand(-1, states.shape[1], -1, -1)
         states = states.unsqueeze(-1)
-        
+
         # Concatenate states with class embeddings along last dimension
         # [batch_size, seq_len, state_dim, d_model]
         combined = torch.cat([class_embeddings, states], dim=-1)
-        
+
         # Flatten the state_dim dimension into d_model
-        # [batch_size, seq_len, d_model] 
+        # [batch_size, seq_len, d_model]
         return combined.view(combined.shape[0], combined.shape[1], -1)
 
     def get_action_embedding(self, actions: torch.Tensor, actions_info: torch.Tensor) -> torch.Tensor:
@@ -137,9 +138,9 @@ class AlgorithmDistillationTransformer(nn.Module):
         # print(class_embeddings.shape)
         # print(actions.shape)
         # assert False
-        combined = torch.cat([class_embeddings, actions], dim=-1)  
+        combined = torch.cat([class_embeddings, actions], dim=-1)
         return combined.view(combined.shape[0], combined.shape[1], -1)
-        
+
     def forward(
         self,
         states: torch.Tensor,
@@ -169,10 +170,10 @@ class AlgorithmDistillationTransformer(nn.Module):
         state_emb = self.get_state_embedding(states, states_info)
 
         task_emb = torch.cat([
-            self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model] 
+            self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model]
             model_params.unsqueeze(1)  # [bs, 1, num_params]
         ], dim=2)  # [bs, 1, d_model + num_params]
-        
+
         action_emb = self.get_action_embedding(actions, actions_info)
         reward_emb = self.reward_embedding(rewards)
 
@@ -187,10 +188,10 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         mask = self.causal_mask[:seq_length, :seq_length]
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
-        
+
         # Main action prediction head
         actions_pred = self.action_head(encoded) # [bs, seq_length-1, action_dim]
-        
+
         # Optional PINN predictions
         pinn_pred = None
         if self.has_pinn:
@@ -201,22 +202,22 @@ class AlgorithmDistillationTransformer(nn.Module):
     def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
         state_values, state_ids = [], []
         for state_name, state_value in state.items():
-            assert state_name in STATE_MAPPING, f"State {state_name} not found in STATE_MAPPING"
-            state_ids.append(STATE_MAPPING[state_name])
+            state_ids.append(self.tokenizer.state_token_id(state_name))
             state_values.append(state_value)
-        
+
         state_values += [0] * (self.state_dim - len(state_values))
-        state_ids += [STATE_MAPPING["Empty"]] * (self.state_dim - len(state_ids))
+        empty_token_id = self.tokenizer.state_mapping["Empty"]
+        state_ids += [empty_token_id] * (self.state_dim - len(state_ids))
         return torch.tensor(state_values, dtype=torch.float32), torch.tensor(state_ids, dtype=torch.long)
 
     def _get_action_info(self, action: dict) -> tuple[torch.Tensor, torch.Tensor]:
         action_values, action_ids = [], []
         for action_name, action_value in action.items():
-            assert action_name in ACTION_MAPPING, f"Action {action_name} not found in ACTION_MAPPING"
-            action_ids.append(ACTION_MAPPING[action_name])
+            action_ids.append(self.tokenizer.action_token_id(action_name))
             action_values.append(action_value)
         action_values += [0] * (self.action_dim - len(action_values))
-        action_ids += [ACTION_MAPPING["Empty"]] * (self.action_dim - len(action_ids))
+        empty_token_id = self.tokenizer.action_mapping["Empty"]
+        action_ids += [empty_token_id] * (self.action_dim - len(action_ids))
         return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
 
     def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
@@ -225,7 +226,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             state_name: init_state[state_name] for state_name in env.state_description.keys()
         })
         init_action_values, actions_info = self._get_action_info(
-            {k: 0.0 for k, _ in env.action_description.items()}
+            {k: 0.0 for k, _ in env.action_description.items()},
         )
 
         state_to_plot = [{
