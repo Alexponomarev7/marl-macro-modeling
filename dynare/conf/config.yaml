@@ -130,7 +130,7 @@ models:
       input:
         state_columns:
           - [CapitalPerEffectiveLabor, -1]
-          - Technology
+          - Productivity                    # Technology (long_name='technology level' -> canonicalized to 'Productivity')
           - Labor
           - InterestRate
         action_columns:
@@ -540,7 +540,7 @@ models:
          - Unemployment Rate                   # Уровень безработицы
          - Matches                             # Совпадения на рынке труда
          - Meeting Rate Between Firms And Workers  # Вероятность встречи фирм и работников
-         - Employment                          # Занятость
+         - Employment                         # Занятость (long_name='Employment' is preserved as it's in STATE_TOKENS)
          - Gross Output A                      # Валовой выпуск A
          - Gross Output B                      # Валовой выпуск B
          - Lagrange Multiplier B               # Лагранжиан B
@@ -596,15 +596,15 @@ models:
      input:
        data_path: ./data/raw/Gali_2008_chapter_2_raw.csv  # Путь к CSV-файлу с данными
        state_columns:
-         - Consumption                        # Потребление
-         - Real Wage                          # Реальная заработная плата
-         - Inflation                          # Инфляция
-         - AR(1) Technology Process           # Технологический процесс AR(1)
-         - Hours Worked                       # Отработанные часы
-         - Nominal Interest Rate              # Номинальная процентная ставка
-         - Real Interest Rate                 # Реальная процентная ставка
-         - Output                             # Выпуск
-         - Money Growth                       # Рост денежной массы
+         - Consumption                        # Потребление (long_name='Consumption')
+         - Real Wage                          # Реальная заработная плата (long_name='Real Wage')
+         - Inflation                          # Инфляция (long_name='Inflation')
+         - AR(1) Technology Process           # Технологический процесс AR(1) (long_name='AR(1) Technology Process')
+         - HoursWorked                       # Отработанные часы (long_name='Hours Worked' -> canonicalized to 'HoursWorked')
+         - Nominal Interest Rate              # Номинальная процентная ставка (long_name='Nominal Interest Rate')
+         - Real Interest Rate                 # Реальная процентная ставка (long_name='Real Interest Rate')
+         - Output                             # Выпуск (long_name='Output')
+         - Money Growth                       # Рост денежной массы (long_name='Money Growth')
        action_columns:
          - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
      output:
@@ -629,10 +629,10 @@ models:
          - Real Wage                          # Реальная заработная плата
          - Real Interest Rate                 # Реальная процентная ставка
          - Output                             # Выпуск
-         - Hours Worked                       # Отработанные часы
-         - Capital Stock                      # Капитал
+         - HoursWorked                       # Отработанные часы (long_name='Hours Worked' -> canonicalized to 'HoursWorked')
+         - Capital                            # Капитал (long_name='Capital Stock' -> canonicalized to 'Capital')
          - Investment                         # Инвестиции
-         - Total Factor Productivity          # Совокупная факторная производительность
+         - LoggedProductivity                 # Совокупная факторная производительность (long_name='Total Factor Productivity' -> canonicalized to 'LoggedProductivity')
          - Productivity                       # Производительность (выпуск на единицу труда)
        action_columns:
          - Investment  # Управляемая переменная (инвестиции)
@@ -653,16 +653,16 @@ models:
      input:
        data_path: ./data/raw/McCandless_2008_Chapter_9_raw.csv  # Путь к CSV-файлу с данными
        state_columns:
-         - Real Wage                          # Реальная заработная плата
-         - Real Return On Capital             # Реальная доходность капитала
-         - Real Consumption                   # Реальное потребление
-         - Capital Stock                      # Капитал
-         - Hours Worked                       # Отработанные часы
-         - Money Stock                        # Денежная масса
-         - Price Level                        # Уровень цен
-         - Growth Rate Of Money Stock         # Темп роста денежной массы
-         - Total Factor Productivity          # Совокупная факторная производительность
-         - Real Output                        # Реальный выпуск
+         - Real Wage                          # Реальная заработная плата (long_name='Real Wage')
+         - Real Return On Capital             # Реальная доходность капитала (long_name='Real Return On Capital')
+         - Real Consumption                   # Реальное потребление (long_name='Real Consumption')
+         - Capital                            # Капитал (long_name='Capital Stock' -> canonicalized to 'Capital')
+         - HoursWorked                       # Отработанные часы (long_name='Hours Worked' -> canonicalized to 'HoursWorked')
+         - Money Stock                        # Денежная масса (long_name='Money Stock')
+         - Price Level                        # Уровень цен (long_name='Price Level')
+         - Growth Rate Of Money Stock         # Темп роста денежной массы (long_name='Growth Rate Of Money Stock')
+         - LoggedProductivity                 # Совокупная факторная производительность (long_name='Total Factor Productivity' -> canonicalized to 'LoggedProductivity')
+         - Real Output                        # Реальный выпуск (long_name='Real Output')
        action_columns:
          - Real Consumption  # Управляемая переменная (реальное потребление)
      output:
@@ -685,13 +685,13 @@ models:
          - Real Wage
          - Real Return On Capital
          - Real Consumption
-         - Capital Stock
-         - Hours Worked
+         - Capital                            # long_name='Capital Stock' -> canonicalized to 'Capital'
+         - HoursWorked                       # long_name='Hours Worked' -> canonicalized to 'HoursWorked'
          - Money Stock
          - Price Level
          - Foreign Price Level
          - Growth Rate Of Money Stock
-         - Total Factor Productivity
+         - LoggedProductivity                 # long_name='Total Factor Productivity' -> canonicalized to 'LoggedProductivity'
          - Foreign Bonds
          - Foreign Interest Rate
          - Exchange Rate
@@ -717,8 +717,8 @@ models:
          - Output                  # y
          - Consumption             # c
          - Capital                 # k
-         - Hours Worked            # l
-         - Total Factor Productivity  # z
+         - HoursWorked            # l (long_name='Hours Worked' -> canonicalized to 'HoursWorked')
+         - LoggedProductivity  # z (long_name='Total Factor Productivity' -> canonicalized to 'LoggedProductivity')
          - Annualized Interest Rate  # r
          - Real Wage               # w
          - Investment              # invest
@@ -743,14 +743,14 @@ models:
          - Output                  # y
          - Consumption             # c
          - Capital                 # k
-         - Hours Worked            # l
-         - Total Factor Productivity  # z
-         - Government Spending     # ghat
-         - Annualized Interest Rate  # r
-         - Real Wage               # w
-         - Investment              # invest
+         - HoursWorked            # l (long_name='Hours Worked' -> canonicalized to 'HoursWorked')
+         - LoggedProductivity  # z (long_name='Total Factor Productivity' -> canonicalized to 'LoggedProductivity')
+         - GovSpending     # ghat (long_name='Government Spending' -> canonicalized to 'GovSpending')
+         - Annualized Interest Rate  # r (long_name='Annualized Interest Rate' -> should stay as-is)
+         - Real Wage               # w (long_name='Real Wage' -> should stay as-is)
+         - Investment              # invest (long_name='Investment' -> should stay as-is)
        action_columns:
-         - 'Government Spending'   # ghat (управляемая переменная)
+         - 'GovSpending'   # ghat (long_name='Government Spending' -> canonicalized to 'GovSpending')
      output:
        data_path: ./data/interim/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 

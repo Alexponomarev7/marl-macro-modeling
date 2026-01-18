@@ -21,7 +21,6 @@ model:
   num_layers: 2
   nhead: 4
   max_seq_len: ${train.max_seq_len}
-  num_tasks: 12
   model_params_dim: ${train.max_model_params_dim}
   has_pinn: true
 optimizer:

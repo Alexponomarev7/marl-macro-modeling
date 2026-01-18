@@ -1,5 +1,5 @@
 import math
-from lib.dataset import ACTION_MAPPING, STATE_MAPPING, action_token_id, state_token_id
+from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 import torch
 import torch.nn as nn
@@ -76,8 +76,9 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.has_pinn = has_pinn
         self.model_params_dim = model_params_dim
 
-        self.state_embedding = nn.Embedding(len(STATE_MAPPING), d_model - 1)
-        self.action_embedding = nn.Embedding(len(ACTION_MAPPING), d_model - 1)
+        self.tokenizer = Tokenizer()
+        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - 1)
+        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 1)
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
 
@@ -201,20 +202,22 @@ class AlgorithmDistillationTransformer(nn.Module):
     def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
         state_values, state_ids = [], []
         for state_name, state_value in state.items():
-            state_ids.append(state_token_id(state_name))
+            state_ids.append(self.tokenizer.state_token_id(state_name))
             state_values.append(state_value)
 
         state_values += [0] * (self.state_dim - len(state_values))
-        state_ids += [STATE_MAPPING["Empty"]] * (self.state_dim - len(state_ids))
+        empty_token_id = self.tokenizer.state_mapping["Empty"]
+        state_ids += [empty_token_id] * (self.state_dim - len(state_ids))
         return torch.tensor(state_values, dtype=torch.float32), torch.tensor(state_ids, dtype=torch.long)
 
     def _get_action_info(self, action: dict) -> tuple[torch.Tensor, torch.Tensor]:
         action_values, action_ids = [], []
         for action_name, action_value in action.items():
-            action_ids.append(action_token_id(action_name))
+            action_ids.append(self.tokenizer.action_token_id(action_name))
             action_values.append(action_value)
         action_values += [0] * (self.action_dim - len(action_values))
-        action_ids += [ACTION_MAPPING["Empty"]] * (self.action_dim - len(action_ids))
+        empty_token_id = self.tokenizer.action_mapping["Empty"]
+        action_ids += [empty_token_id] * (self.action_dim - len(action_ids))
         return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
 
     def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:

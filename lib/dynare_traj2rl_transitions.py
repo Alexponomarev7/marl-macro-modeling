@@ -22,10 +22,11 @@ import pyarrow.parquet as pq
 import traceback
 
 from research.utils import PathStorage
-from lib.dataset import _STATE_ALIASES_GLOBAL, canonical_state_name
+from lib.dataset import Tokenizer
 
 # Use the shared state aliases for column renaming
-_COLUMN_ALIASES = _STATE_ALIASES_GLOBAL
+_tokenizer = Tokenizer()
+_COLUMN_ALIASES = Tokenizer.STATE_ALIASES
 
 
 class StateAccessor:
@@ -538,7 +539,7 @@ def dynare_trajectories2rl_transitions(
         if requested in data_cols:
             return requested
 
-        canon = canonical_state_name(requested)
+        canon = _tokenizer.canonical_state_name(requested)
         if canon in data_cols:
             return canon
 
@@ -798,12 +799,20 @@ def process_model_data(
         mod_path = PathStorage().dynare_configs_root / f"{model_name}.mod"
         if mod_path.exists():
             sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_path.read_text(errors="ignore"))
-            # Build set of all canonical names (values in _COLUMN_ALIASES)
-            canonical_names = set(_COLUMN_ALIASES.values())
+            # Build set of all canonical names: all STATE_TOKENS (not just alias values)
+            # This ensures long_names that are already in STATE_TOKENS are preserved
+            canonical_names = set(Tokenizer.STATE_TOKENS)
 
             # Helper to resolve to canonical name, applying full alias chain
             def resolve_canonical(name: str) -> str:
-                """Resolve to canonical name, applying full alias chain."""
+                """Resolve to canonical name, applying full alias chain.
+
+                If the name is already a canonical name (in canonical_names set),
+                return it as-is without applying aliases.
+                """
+                # If name is already canonical, don't apply aliases
+                if name in canonical_names:
+                    return name
                 seen = set()
                 current = name
                 while current in _COLUMN_ALIASES and current not in seen:
@@ -852,37 +861,64 @@ def process_model_data(
                     if tex_stripped in tex_to_vars and suffix_num < len(tex_to_vars[tex_stripped]):
                         # Use the variable at index suffix_num (0-indexed, so .1 -> index 1)
                         sym, long_name = tex_to_vars[tex_stripped][suffix_num]
+                        # Prefer long_name directly (most precise from model)
                         canonical_name = resolve_canonical(long_name)
-                        if c != canonical_name:
+                        if long_name in canonical_names:
+                            target_name = long_name
+                        elif canonical_name != long_name and canonical_name in canonical_names:
+                            target_name = canonical_name
+                        else:
+                            target_name = long_name
+                        if c != target_name:
                             # Only skip if c is already a canonical name (don't rename canonical -> something else)
                             is_current_canonical = c in canonical_names
                             if not is_current_canonical:
-                                renames[c] = canonical_name
+                                renames[c] = target_name
                 elif base_col in sym_tex_to_long:
                     # Handle regular columns (no suffix)
                     long_name = sym_tex_to_long[base_col]
-                    # Map long_name to canonical name, applying full alias chain
+                    # Use long_name directly - it's the most precise name from the model definition
+                    # Only apply alias resolution if long_name itself needs canonicalization
+                    # (e.g., "Total Factor Productivity" -> "LoggedProductivity")
+                    # But prefer the exact long_name if it's already precise
                     canonical_name = resolve_canonical(long_name)
 
+                    # IMPORTANT: Prefer long_name if it's already a canonical name
+                    # This preserves the precise meaning from the model definition
+                    # Only apply alias resolution if long_name is NOT canonical
+                    if long_name in canonical_names:
+                        # long_name is already canonical, use it directly (most precise)
+                        target_name = long_name
+                    elif canonical_name in canonical_names:
+                        # long_name resolved to a canonical name via aliases, use it
+                        target_name = canonical_name
+                    else:
+                        # Neither is canonical, use long_name as-is (most precise from model)
+                        target_name = long_name
+
                     # Only rename if:
-                    # 1. Column name differs from canonical name
-                    # 2. Current column is NOT already a canonical name (prevent canonical -> lowercase)
-                    if c != canonical_name:
+                    # 1. Column name differs from target name
+                    # 2. Current column is NOT already a canonical name (prevent canonical -> something else)
+                    if c != target_name:
                         # Check if current column is already canonical
                         is_current_canonical = c in canonical_names or c not in _COLUMN_ALIASES
 
                         # Never rename a canonical name to something else
                         # Only rename non-canonical aliases to their canonical form
                         if not is_current_canonical:
-                            renames[c] = canonical_name
+                            renames[c] = target_name
 
         # 2) long_name variants -> canonical names
         # Only add aliases for columns that actually exist in the CSV header
         # This prevents adding renames that would rename canonical names to non-canonical ones
+        # IMPORTANT: Don't override renames we already set from .mod file parsing (step 1)
         header_set = set(header)
         for alias_key, canonical_value in _COLUMN_ALIASES.items():
-            # Only add rename if the alias key exists in the header and it's not already canonical
-            if alias_key in header_set and alias_key != canonical_value:
+            # Only add rename if:
+            # - The alias key exists in the header
+            # - It's not already canonical
+            # - We haven't already set a rename for this column (from .mod file parsing)
+            if alias_key in header_set and alias_key != canonical_value and alias_key not in renames:
                 renames[alias_key] = canonical_value
         return renames
 
@@ -973,9 +1009,72 @@ def process_model_data(
 
     transitions["info"] = transitions["info"].apply(_add_env_group)
 
-    transitions["action_description"] = pd.Series([list(rl_env_conf["input"]["action_columns"])] * len(transitions))
-    transitions["state_description"] = pd.Series([list(state_accessor.get_columns())] * len(transitions))
-    transitions["endogenous_description"] = pd.Series([list(endogenous_accessor.get_columns())] * len(transitions))
+    # Map column names to long_names from .mod file for precise descriptions
+    def _map_columns_to_long_names(columns: list[str]) -> list[str]:
+        """Map column names to their long_name from .mod file, falling back to column name if not found."""
+        if not mod_file_path.exists():
+            return columns  # Fallback to column names if .mod file not available
+
+        mod_text = mod_file_path.read_text(errors="ignore")
+        sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_text)
+
+        # Create reverse mapping: long_name -> symbol (to find which symbol has this long_name)
+        long_name_to_symbol: dict[str, str] = {}
+        var_section_pattern = re.compile(
+            r"\b(?:var|varexo)\b.*?(?=\b(?:varexo|parameters|model|steady_state_model)\b|$)",
+            re.DOTALL
+        )
+        var_sections = var_section_pattern.findall(mod_text)
+        var_text = "\n".join(var_sections)
+        pat = re.compile(
+            r"\b(?P<sym>[A-Za-z_][A-Za-z0-9_]*)\s+(?P<tex>\$[^$]+\$)\s*\(long_name='(?P<long>[^']+)'\)"
+        )
+        for m in pat.finditer(var_text):
+            sym = m.group("sym")
+            long_name = m.group("long")
+            # Store first occurrence (prefer lowercase symbol)
+            if long_name not in long_name_to_symbol or sym.islower():
+                long_name_to_symbol[long_name] = sym
+
+        # Collect all long_names from .mod file for direct matching
+        all_long_names = set(sym_tex_to_long.values())
+
+        long_names = []
+        for col in columns:
+            # Strategy 1: Column is already a long_name from .mod file
+            if col in all_long_names:
+                long_names.append(col)
+            # Strategy 2: Column name (as symbol/TeX) maps directly to a long_name
+            elif col in sym_tex_to_long:
+                long_names.append(sym_tex_to_long[col])
+            # Strategy 3: Resolve through alias chain and check if canonical name is a long_name
+            else:
+                canonical = col
+                seen = set()
+                while canonical in _COLUMN_ALIASES and canonical not in seen:
+                    seen.add(canonical)
+                    canonical = _COLUMN_ALIASES[canonical]
+
+                # Check if canonical name is already a long_name
+                if canonical in all_long_names:
+                    long_names.append(canonical)
+                # Check if canonical name maps to a long_name via symbol lookup
+                elif canonical in sym_tex_to_long:
+                    long_names.append(sym_tex_to_long[canonical])
+                else:
+                    # Fallback: use column name as-is (might be a canonical name not in .mod)
+                    long_names.append(col)
+
+        return long_names
+
+    # Use long_names from .mod files for descriptions
+    state_columns = state_accessor.get_columns()
+    action_columns = rl_env_conf["input"]["action_columns"]
+    endogenous_columns = endogenous_accessor.get_columns()
+
+    transitions["action_description"] = pd.Series([_map_columns_to_long_names(action_columns)] * len(transitions))
+    transitions["state_description"] = pd.Series([_map_columns_to_long_names(state_columns)] * len(transitions))
+    transitions["endogenous_description"] = pd.Series([_map_columns_to_long_names(endogenous_columns)] * len(transitions))
 
     transitions.to_parquet(output_path)
 
