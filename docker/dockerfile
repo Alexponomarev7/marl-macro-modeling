@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Научный стек часто требует компиляции/системных либ
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 1) Копируем проект
+COPY . /app
+
+# 2) Ставим build backend (flit) и сам проект из pyproject.toml
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir flit_core && \
+    pip install --no-cache-dir .
+
+# 3) Ставим зависимости, которые у вас описаны в [tool.pixi.dependencies]
+# (в идеале позже перенести их в [project.optional-dependencies], но сейчас делаем минимально)
+RUN pip install --no-cache-dir \
+    gymnasium numpy pandas pyarrow scikit-learn scipy hydra-core tqdm clearml \
+    ipykernel notebook plotly matplotlib seaborn typer loguru python-dotenv
+
+CMD ["python", "-c", "import lib; print('Installed lib:', lib.__name__)"]

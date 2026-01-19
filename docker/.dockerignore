@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.git/
+.idea/
+.vscode/
+dist/
+build/
+*.egg-info/
+marl-exp/
+checkpoints/
+models/
+lightning_logs/
