@@ -1,4 +1,5 @@
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -638,6 +639,8 @@ class EnvReport:
     shared_state_frac: float | None  # |S_i ∩ S_j| / |S_i|
     intersection_over_union: float | None  # |S_i ∩ S_j| / |S_i ∪ S_j|
     intra_over_inter: float | None   # (avg intra kNN dist) / (avg inter-cluster kNN dist)
+    intra: float | None  # avg intra-cluster kNN distance
+    inter: float | None  # avg inter-cluster kNN distance
 
 
 class DatasetDiversityScorer:
@@ -695,6 +698,21 @@ class DatasetDiversityScorer:
             raw_env_name = str(item.get("env_name", "unknown"))
             env_group = str(item["env_group"])
             p = Path(item["output_dir"])
+            # Resolve relative paths relative to dataset_path
+            if not p.is_absolute():
+                # Paths in metadata may be relative to project root (e.g., "data/processed/train/file.parquet")
+                # If the path contains the dataset_path name, extract just the filename
+                p_str = str(p)
+                if self.dataset_path.name in p_str:
+                    # Extract just the filename (last component after the dataset_path name)
+                    # This handles cases like "data/processed/train/file.parquet" -> "file.parquet"
+                    parts = p_str.split(self.dataset_path.name)
+                    if len(parts) > 1:
+                        # Take everything after dataset_path name and remove leading slashes
+                        filename_part = parts[-1].lstrip("/")
+                        p = Path(filename_part) if filename_part else Path(p.name)
+                # Resolve relative to dataset_path
+                p = (self.dataset_path / p).resolve()
             env_to_paths.setdefault(env_group, []).append(p)
             env_group_to_env_names.setdefault(env_group, set()).add(raw_env_name)
 
@@ -892,7 +910,9 @@ class DatasetDiversityScorer:
               "nearest_env": str|None,
               "shared_state_frac": float|None,
               "intersection_over_union": float|None,
-              "intra_over_inter": float|None
+              "intra_over_inter": float|None,
+              "intra": float|None,
+              "inter": float|None
             }
         """
         base_states = set(self._env_state_names.get(env_name, []))
@@ -902,6 +922,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": None,
                 "intersection_over_union": None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         best_env = None
@@ -928,6 +950,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": None,
                 "intersection_over_union": None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         shared_vars = sorted(list(base_states & set(self._env_state_names.get(best_env, []))))
@@ -937,6 +961,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": float(best_shared),
                 "intersection_over_union": float(best_iou) if best_iou is not None else None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         X1 = self._build_embeddings_for_shared_states(env_name, shared_vars)
@@ -948,6 +974,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": float(best_shared),
                 "intersection_over_union": float(best_iou) if best_iou is not None else None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         X = np.vstack([X1, X2])
@@ -955,15 +983,41 @@ class DatasetDiversityScorer:
         X1s = Xs[: X1.shape[0]]
         X2s = Xs[X1.shape[0] :]
 
+        # Check if embeddings have any variance (all points identical would cause issues)
+        eps = 1e-10
+        if Xs.shape[0] > 1:
+            # Check if all points are identical (within numerical precision)
+            point_std = np.std(Xs, axis=0)
+            if np.all(point_std < eps):
+                # All embeddings are identical - cannot compute meaningful ratio
+                return {
+                    "nearest_env": best_env,
+                    "shared_state_frac": float(best_shared),
+                    "intersection_over_union": float(best_iou) if best_iou is not None else None,
+                    "intra_over_inter": None,
+                    "intra": None,
+                    "inter": None,
+                }
+
         intra = 0.5 * (self._avg_intra_knn(X1s) + self._avg_intra_knn(X2s))
         inter = self._avg_inter_knn(X1s, X2s)
-        ratio = float(intra / inter) if inter > 0 else None
+
+        # Add small epsilon to avoid division by zero and handle numerical precision issues
+        # If inter is exactly 0 or too small, it means embeddings are too similar
+        # If intra is 0, it means episodes within a model are identical
+        if inter <= eps:
+            # If inter is too small, models are too similar - return None to indicate invalid comparison
+            ratio = None
+        else:
+            ratio = float(intra / inter)
 
         return {
             "nearest_env": best_env,
             "shared_state_frac": float(best_shared),
             "intersection_over_union": float(best_iou) if best_iou is not None else None,
             "intra_over_inter": ratio,
+            "intra": float(intra),
+            "inter": float(inter),
         }
 
     def generate_report(self) -> dict[str, Any]:
@@ -1000,6 +1054,8 @@ class DatasetDiversityScorer:
                     shared_state_frac=imp["shared_state_frac"],
                     intersection_over_union=imp["intersection_over_union"],
                     intra_over_inter=imp["intra_over_inter"],
+                    intra=imp["intra"],
+                    inter=imp["inter"],
                 )
             )
 
@@ -1154,6 +1210,21 @@ class DatasetDiversityScorer:
             t = np.arange(x.size, dtype=float)
             slope = float(np.polyfit(t, x, 1)[0])
 
+        # Check variance before computing skew/kurtosis to avoid precision warnings
+        # If data has no variance (nearly identical values), these statistics are not meaningful
+        x_std = np.std(x)
+        skew_val = 0.0
+        if x.size >= 3 and x_std > 1e-10:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Precision loss.*")
+                skew_val = float(skew(x, bias=False))
+
+        kurt_val = 0.0
+        if x.size >= 4 and x_std > 1e-10:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Precision loss.*")
+                kurt_val = float(kurtosis(x, fisher=True, bias=False))
+
         feats = np.array(
             [
                 float(np.mean(x)),
@@ -1163,8 +1234,8 @@ class DatasetDiversityScorer:
                 float(med),
                 float(q75),
                 float(np.max(x)),
-                float(skew(x, bias=False)) if x.size >= 3 else 0.0,
-                float(kurtosis(x, fisher=True, bias=False)) if x.size >= 4 else 0.0,
+                skew_val,
+                kurt_val,
                 float(ac1),
                 float(slope),
                 float(np.mean(x * x)),
