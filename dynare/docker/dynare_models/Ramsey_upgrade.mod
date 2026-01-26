@@ -25,7 +25,6 @@ var ConsumptionPerCapita            $ConsumptionPerCapita$ (long_name='consumpti
     Labor                           $Labor$ (long_name='labor/population')
     Technology                      $Technology$ (long_name='technology level')
     InterestRate                    $InterestRate$ (long_name='real interest rate')
-    GrossReturn                     $GrossReturn$ (long_name='gross return on capital')
     MarginalProductCapital          $MarginalProductCapital$ (long_name='marginal product of capital')
     WagePerEffectiveLabor           $WagePerEffectiveLabor$ (long_name='wage per effective labor unit')
     Consumption                     $Consumption$ (long_name='aggregate consumption')
@@ -112,14 +111,11 @@ MarginalProductCapital = alpha * CapitalPerEffectiveLabor(-1)^(alpha - 1);
 [name='Interest rate (net return)']
 InterestRate = MarginalProductCapital - delta;
 
-[name='Gross return on capital']
-GrossReturn = 1 + InterestRate;
-
 [name='Wage per effective labor unit']
 WagePerEffectiveLabor = (1 - alpha) * CapitalPerEffectiveLabor(-1)^alpha;
 
 [name='Euler equation CRRA (per effective labor)']
-ConsumptionPerEffectiveLabor^(-sigma) = beta * ConsumptionPerEffectiveLabor(+1)^(-sigma) * (1 + g)^(-sigma) * GrossReturn(+1);
+ConsumptionPerEffectiveLabor^(-sigma) = beta * ConsumptionPerEffectiveLabor(+1)^(-sigma) * (1 + g)^(-sigma) * (1 + InterestRate(+1));
 
 [name='Per capita from per effective labor']
 ConsumptionPerCapita = ConsumptionPerEffectiveLabor * Technology;
@@ -141,7 +137,6 @@ initval;
     OutputPerEffectiveLabor = start_capital^alpha;
     MarginalProductCapital = alpha * start_capital^(alpha - 1);
     InterestRate = MarginalProductCapital - delta;
-    GrossReturn = 1 + InterestRate;
     WagePerEffectiveLabor = (1 - alpha) * start_capital^alpha;
     InvestmentPerEffectiveLabor = (delta + n + g + n*g) * start_capital;
     ConsumptionPerEffectiveLabor = OutputPerEffectiveLabor - InvestmentPerEffectiveLabor;
@@ -163,7 +158,6 @@ endval;
   InvestmentPerEffectiveLabor = i_tilde_ss;
   MarginalProductCapital = alpha * k_tilde_ss^(alpha - 1);
   InterestRate = r_ss;
-  GrossReturn = 1 + r_ss;
   WagePerEffectiveLabor = (1 - alpha) * k_tilde_ss^alpha;
   ConsumptionPerCapita = c_tilde_ss * Technology;
   CapitalPerCapita = k_tilde_ss * Technology;

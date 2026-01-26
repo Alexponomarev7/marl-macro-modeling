@@ -4,14 +4,14 @@
 % Timing convention:
 %   - Capital_t is end-of-period t capital (chosen at t, used for production at t+1)
 %   - Production at t: Y_t = A_t * K_{t-1}^alpha
-%   - Euler: u'(C_t) = β * u'(C_{t+1}) * [α * A_{t+1} * K_t^{α-1} + 1 - δ]
+%   - Euler: u'(C_t) = beta * u'(C_{t+1}) * [alpha * A_{t+1} * K_t^{alpha-1} + 1 - delta]
 
 var Consumption         $Consumption$ (long_name='consumption')
     Capital             $Capital$ (long_name='capital')
     Output              $Output$ (long_name='output')
     Investment          $Investment$ (long_name='investment')
-    LoggedProductivity  $LoggedProductivity$ (long_name='logged TFP')
     Productivity        $Productivity$ (long_name='TFP level')
+    LoggedProductivity  $LoggedProductivity$ (long_name='logged TFP')
     InterestRate        $InterestRate$ (long_name='real interest rate');
 
 varexo LoggedProductivityInnovation $LoggedProductivityInnovation$ (long_name='TFP shock');
@@ -98,4 +98,4 @@ shocks;
   stderr @{productivity_shock_stderr};
 end;
 
-stoch_simul(order=1, periods=@{periods}, irf=0, nomoments, nofunctions, nograph, nocorr, noprint);
+stoch_simul(order=1, periods=@{periods}, drop=100, irf=0, nomoments, nofunctions, nograph, nocorr, noprint);
