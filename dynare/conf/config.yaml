@@ -1,6 +1,6 @@
 metadata:
   data_folder: data
-  periods: 100
+  periods: 1000
   num_samples: 2000
 
 models:
@@ -82,7 +82,7 @@ models:
         - OutputPerCapita
         - InvestmentPerCapita
       parameter_ranges:
-        start_capital: [0.5, 1.5]
+        start_capital: [0.5, 3.0]
         start_labor: [1.0, 1.0]
         alpha: [0.33, 0.66]
         beta: [0.95, 0.99]
@@ -112,16 +112,19 @@ models:
     dynare_model_settings:
       periods: ${metadata.periods}
       num_samples: ${metadata.num_samples}
+      column_names:
+        - ConsumptionPerCapita
+        - CapitalPerCapita
+        - OutputPerCapita
+        - InvestmentPerCapita
       parameter_ranges:
-        start_capital: [0.5, 3.0]
+        start_capital: [0.5, 1.5]
         start_labor: [1.0, 1.0]
-        start_technology: [1.0, 1.0]
-        alpha: [0.25, 0.45]
-        beta: [0.94, 0.98]
-        delta: [0.05, 0.15]
+        alpha: [0.33, 0.66]
+        beta: [0.95, 0.99]
+        delta: [0.02, 0.15]
         sigma: [0.5, 3.0]
         n: [0.0, 0.02]
-        g: [0.01, 0.03]
 
     rl_env_settings:
       reward: lib.rewards.crra_reward

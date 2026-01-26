@@ -61,7 +61,7 @@ def _generate_shock_params(
     periods: int,
     prefix: str,
     shock_count_name: str,
-    max_shocks: int = 6
+    max_shocks: int = 5
 ) -> dict:
     """
     Generate shock parameters for a single shock type.
@@ -115,7 +115,7 @@ def _generate_shock_params(
 def _generate_all_shocks(
     shocks_config: dict,
     periods: int,
-    max_shocks_per_type: int = 6
+    max_shocks_per_type: int = 5
 ) -> dict:
     """
     Generate parameters for all shock types.
