@@ -31,11 +31,11 @@ parameters beta $\beta$                (long_name='Discount Factor')
            sigma_bar ${\bar \sigma}$   (long_name='Steady State Volatility')
            eta $\eta$                  (long_name='Volatility Shock Scale');
 
-beta = 0.991;
-nu = 0.362184314170512;  % typo in paper; fixed nu so that l=1/3 (according to their Fortran codes)
-zeta = 0.3;
-delta = 0.0196;
-lambda = 0.95;
+beta = @{beta};
+nu = @{nu};
+zeta = @{zeta};
+delta = @{delta};
+lambda = @{delta};
 
 @#if extreme_calibration
     psi = 0.5;

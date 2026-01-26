@@ -4,248 +4,254 @@ metadata:
   num_samples: 100
 
 models:
-  Ramsey_base:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      column_names:
-        - Consumption
-        - Capital
-        - Output
-        - Investment
-      parameter_ranges:
-        start_capital: [0.5, 3.0]
-        alpha: [0.33, 0.66]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.15]
 
-    rl_env_settings:
-      reward: lib.rewards.log_reward
-      reward_kwargs:
-        target_column: Consumption
-      input:
-        state_columns:
-          - [Capital, -1]
-          - Output
-        action_columns:
-          - Consumption
-        endogenous_columns:
-          - Investment
-      output:
-        data_path: ./data/processed/Ramsey_base
-  
+  # Ramsey_base:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     column_names:
+  #       - Consumption
+  #       - Capital
+  #       - Output
+  #       - Investment
+  #     parameter_ranges:
+  #       start_capital: [0.5, 3.0]
+  #       alpha: [0.33, 0.66]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.15]
 
-  Ramsey_crra:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      column_names:
-        - ConsumptionPerCapita
-        - CapitalPerCapita
-        - OutputPerCapita
-        - InvestmentPerCapita
-      parameter_ranges:
-        start_capital: [0.5, 3.0]
-        start_labor: [1.0, 1.0]
-        alpha: [0.33, 0.66]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.15]
-        sigma: [0.5, 3.0]
-        n: [0.0, 0.02]
-
-    rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: ConsumptionPerCapita
-        sigma_column: sigma
-      input:
-        state_columns:
-          - [CapitalPerCapita, -1]
-          - OutputPerCapita
-          - Labor
-        action_columns:
-          - ConsumptionPerCapita
-        endogenous_columns:
-          - InvestmentPerCapita
-      output:
-        data_path: ./data/processed/Ramsey_cara
+  #   rl_env_settings:
+  #     reward: lib.rewards.log_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - Output
+  #       action_columns:
+  #         - Consumption
+  #       endogenous_columns:
+  #         - Investment
+  #     output:
+  #       data_path: ./data/processed/Ramsey_base
 
 
-  Ramsey_cara:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      column_names:
-        - ConsumptionPerCapita
-        - CapitalPerCapita
-        - OutputPerCapita
-        - InvestmentPerCapita
-      parameter_ranges:
-        start_capital: [0.5, 1.5]
-        start_labor: [1.0, 1.0]
-        alpha: [0.33, 0.66]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.15]
-        sigma: [0.5, 3.0]
-        n: [0.0, 0.02]
+  # Ramsey_crra:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     column_names:
+  #       - ConsumptionPerCapita
+  #       - CapitalPerCapita
+  #       - OutputPerCapita
+  #       - InvestmentPerCapita
+  #     parameter_ranges:
+  #       start_capital: [0.5, 3.0]
+  #       start_labor: [1.0, 1.0]
+  #       alpha: [0.33, 0.66]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.15]
+  #       sigma: [0.5, 3.0]
+  #       n: [0.0, 0.02]
 
-    rl_env_settings:
-      reward: lib.rewards.cara_reward
-      reward_kwargs:
-        target_column: ConsumptionPerCapita
-        sigma_column: sigma
-      input:
-        state_columns:
-          - [CapitalPerCapita, -1]
-          - OutputPerCapita
-          - Labor
-        action_columns:
-          - ConsumptionPerCapita
-        endogenous_columns:
-          - InvestmentPerCapita
-      output:
-        data_path: ./data/processed/Ramsey_cara
-
-
-  Ramsey_upgrade:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      parameter_ranges:
-        start_capital: [0.5, 3.0]
-        start_labor: [1.0, 1.0]
-        start_technology: [1.0, 1.0]
-        alpha: [0.25, 0.45]
-        beta: [0.94, 0.98]
-        delta: [0.05, 0.15]
-        sigma: [0.5, 3.0]
-        n: [0.0, 0.02]
-        g: [0.01, 0.03]
-
-    rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: ConsumptionPerCapita
-        sigma_column: sigma
-      input:
-        state_columns:
-          - [CapitalPerEffectiveLabor, -1]
-          - Technology
-          - Labor
-          - InterestRate
-        action_columns:
-          - ConsumptionPerEffectiveLabor
-        endogenous_columns:
-          - OutputPerEffectiveLabor
-          - InvestmentPerEffectiveLabor
-          - GrossReturn
-          - MarginalProductCapital
-          - WagePerEffectiveLabor
-      output:
-        data_path: ./data/processed/Ramsey_upgrade
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: ConsumptionPerCapita
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [CapitalPerCapita, -1]
+  #         - OutputPerCapita
+  #         - Labor
+  #       action_columns:
+  #         - ConsumptionPerCapita
+  #       endogenous_columns:
+  #         - InvestmentPerCapita
+  #     output:
+  #       data_path: ./data/processed/Ramsey_crra
 
 
-  OLG:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      parameter_ranges:
-        start_capital: [0.5, 1.5]
-        alpha: [0.3, 0.4]
-        beta: [0.4, 0.6]
-        delta: [0.8, 0.9]
-        n: [0.05, 0.1]
-        g: [0.2, 0.3]
+  # Ramsey_cara:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     column_names:
+  #       - ConsumptionPerCapita
+  #       - CapitalPerCapita
+  #       - OutputPerCapita
+  #       - InvestmentPerCapita
+  #     parameter_ranges:
+  #       start_capital: [0.5, 1.5]
+  #       start_labor: [1.0, 1.0]
+  #       alpha: [0.33, 0.66]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.15]
+  #       sigma: [0.5, 3.0]
+  #       n: [0.0, 0.02]
 
-    rl_env_settings:
-      reward: lib.rewards.olg_log_utility_reward
-      reward_kwargs:
-        consumption_young_column: ConsYoung
-        consumption_old_column: ConsOld
-        beta_column: beta
-      input:
-        state_columns:
-          - [Capital, -1]
-          - Output
-          - Wage
-          - InterestRate
-          - Savings
-        action_columns:
-          - Savings
-        endogenous_columns:
-          - ConsYoung
-          - ConsOld
-      output:
-        data_path: ./data/processed/OLG
+  #   rl_env_settings:
+  #     reward: lib.rewards.cara_reward
+  #     reward_kwargs:
+  #       target_column: ConsumptionPerCapita
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [CapitalPerCapita, -1]
+  #         - OutputPerCapita
+  #         - Labor
+  #       action_columns:
+  #         - ConsumptionPerCapita
+  #       endogenous_columns:
+  #         - InvestmentPerCapita
+  #     output:
+  #       data_path: ./data/processed/Ramsey_cara
 
 
-  RBC_baseline_pf:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-      parameter_ranges:
-        alpha: [0.33, 0.66]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.05]
-        rho: [0.7, 0.9]
-        sigma: [1.0, 1.0]
-      shocks:
-        productivity:
-          num_shocks: 4
-          period_range: [20, 80]
-          value_range: [-0.1, 0.1]
-
-    rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: Consumption
-        sigma_column: sigma
-      input:
-        state_columns:
-          - [Capital, -1]
-          - LoggedProductivity
-        action_columns:
-          - Consumption
-        endogenous_columns: []
-      output:
-        data_path: ./data/processed/RBC_baseline_pf
-  
-  RBC_baseline_stoch:
-    dynare_model_settings:
-      periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
-
-      parameter_ranges:
-        alpha: [0.33, 0.33]
-        beta: [0.95, 0.99]
-        delta: [0.02, 0.05]
-        rho: [0.7, 0.9]
-        sigma: [1.0, 1.0]
-        productivity_shock_stderr: [0.005, 0.03]
-
-    rl_env_settings:
-      reward: lib.rewards.crra_reward
-      reward_kwargs:
-        target_column: Consumption
-        sigma_column: sigma
-
-      input:
-        state_columns:
-          - [Capital, -1]
-          - LoggedProductivity
-        action_columns:
-          - Consumption
-        endogenous_columns: []
-
-      output:
-        data_path: ./data/processed/RBC_baseline_stoch
-
-  # RBC_capital_stock_shock:
+  # Ramsey_upgrade:
   #   dynare_model_settings:
   #     periods: ${metadata.periods}
   #     num_samples: ${metadata.num_samples}
   #     parameter_ranges:
-  #       alpha: [0.3, 0.34]
+  #       start_capital: [0.5, 3.0]
+  #       start_labor: [1.0, 1.0]
+  #       start_technology: [1.0, 1.0]
+  #       alpha: [0.25, 0.45]
+  #       beta: [0.94, 0.98]
+  #       delta: [0.05, 0.15]
+  #       sigma: [0.5, 3.0]
+  #       n: [0.0, 0.02]
+  #       g: [0.01, 0.03]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: ConsumptionPerCapita
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [CapitalPerEffectiveLabor, -1]
+  #         - Technology
+  #         - Labor
+  #         - InterestRate
+  #       action_columns:
+  #         - ConsumptionPerEffectiveLabor
+  #       endogenous_columns:
+  #         - OutputPerEffectiveLabor
+  #         - InvestmentPerEffectiveLabor
+  #         - MarginalProductCapital
+  #         - WagePerEffectiveLabor
+  #     output:
+  #       data_path: ./data/processed/Ramsey_upgrade
+
+
+  # OLG:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       start_capital: [0.5, 1.5]
+  #       alpha: [0.3, 0.4]
+  #       beta: [0.4, 0.6]
+  #       delta: [0.8, 0.9]
+  #       n: [0.05, 0.1]
+  #       g: [0.2, 0.3]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.olg_log_utility_reward
+  #     reward_kwargs:
+  #       consumption_young_column: ConsYoung
+  #       consumption_old_column: ConsOld
+  #       beta_column: beta
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - Output
+  #         - Wage
+  #         - InterestRate
+  #         - Savings
+  #       action_columns:
+  #         - Savings
+  #       endogenous_columns:
+  #         - ConsYoung
+  #         - ConsOld
+  #     output:
+  #       data_path: ./data/processed/OLG
+
+  # RBC_baseline_pf:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       start_capital: [0.5, 1.5]
+  #       alpha: [0.33, 0.66]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.05]
+  #       rho: [0.7, 0.9]
+  #       sigma: [0.5, 3.0]
+  #     shocks:
+  #       productivity:
+  #         num_shocks: 4
+  #         period_range: [10, 90]
+  #         value_range: [-0.1, 0.1]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #         - Productivity
+  #       action_columns:
+  #         - Consumption
+  #       endogenous_columns:
+  #         - Output
+  #         - Investment
+  #         - InterestRate
+  #     output:
+  #       data_path: ./data/processed/RBC_baseline_pf
+  
+  # RBC_baseline_stoch:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       alpha: [0.33, 0.66]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.05]
+  #       rho: [0.7, 0.9]
+  #       sigma: [0.5, 3.0]
+  #       productivity_shock_stderr: [0.005, 0.03]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #         - Productivity
+  #       action_columns:
+  #         - Consumption
+  #       endogenous_columns:
+  #         - Output
+  #         - Investment
+  #         - InterestRate
+  #     output:
+  #       data_path: ./data/interim/RBC_baseline_stoch
+
+  # RBC_capital_stock_shock_pf:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       start_capital: [0.05, 3.0]
+  #       alpha: [0.3, 0.66]
   #       beta: [0.95, 0.99]
   #       delta: [0.02, 0.05]
   #       rho: [0.7, 0.9]
@@ -269,201 +275,376 @@ models:
   #       sigma_column: sigma
   #       A_column: psi
   #       eta_default: 1.0
-
+  #       sigma_default: 1.0
   #     input:
   #       state_columns:
   #         - [Capital, -1]
-  #         - Labor
   #         - LoggedProductivity
+  #         - Productivity
   #       action_columns:
   #         - Consumption
+  #         - Labor
   #       endogenous_columns:
   #         - Investment
   #         - Output
   #         - Wage
   #         - InterestRate
   #     output:
-  #       data_path: ./data/processed/RBC_capital_stock_shock
+  #       data_path: ./data/processed/RBC_capital_stock_shock_pf
 
-
-  # GarciaCicco_et_al_2010:
+  # RBC_capital_stock_shock_stoch:
   #   dynare_model_settings:
   #     periods: ${metadata.periods}
   #     num_samples: ${metadata.num_samples}
   #     parameter_ranges:
-  #       start_capital: [0.1, 0.5]
-  #       beta: [0.9, 0.99]
-  #       gamma_a: [2.0, 2.0]
-  #       delta: [0.05, 0.15]
-  #       alpha: [0.3, 0.3]
-  #       psi: [2.5, 3.0]
-  #       omega: [1.5, 1.7]
-  #       theta: [2.2, 2.4] # unready to uncomment, see model file
-  #       phi: [4.5, 5.0]
-  #       dbar: [0.005, 0.01]
-  #       gbar: [1.0, 1.01]
-  #       rho_a: [0.8, 0.9]
-  #       rho_g: [0.2, 0.3]
-  #       rho_nu: [0.8, 0.9]
-  #       rho_mu: [0.8, 0.9]
-  #       rho_s: [0.1, 0.2]
+  #       alpha: [0.3, 0.34]
+  #       beta: [0.95, 0.99]
+  #       delta: [0.02, 0.05]
+  #       rho: [0.7, 0.9]
+  #       sigma: [1.0, 2.0]
+  #       l_ss_target: [0.30, 0.40]
+  #       productivity_shock_stderr: [0.005, 0.03]
+
   #   rl_env_settings:
-  #     reward: lib.rewards.GarciaCicco
-  #     reward_kwargs: {}
+  #     reward: lib.rewards.ces_utility_reward
+  #     reward_kwargs:
+  #       consumption_column: Consumption
+  #       labor_column: Labor
+  #       sigma_column: sigma
+  #       A_column: psi
+  #       eta_default: 1.0
+  #       sigma_default: 1.0
   #     input:
   #       state_columns:
   #         - [Capital, -1]
-  #         - [Debt, -1]
-  #         - [Output, -1]
-  #         - [InterestRate, -1]
-  #         # variables with shocks
   #         - LoggedProductivity
-  #         - PreferenceShock
-  #         - CountryPremiumShock
-  #         - TechGrowthRate
+  #         - Productivity
   #       action_columns:
-  #         - Investment
   #         - Consumption
-  #         - HoursWorked
+  #         - Labor
   #       endogenous_columns:
-  #         - [MUConsumption, -1]
-
-# Aguiar_Gopinath_2007:
-#   dynare_model_settings:
-#     periods: 50
-#     num_samples: 10
-#     column_names:
-#       - Consumption
-#       - Capital
-#       - Output
-#       - Debt
-#       - Bond Price
-#       - Government Spending
-#       - Labor
-#       - Utility
-#       - Productivity
-#       - Marginal Utility of Consumption
-#       - Marginal Utility of Labor
-#       - Consumption to GDP Ratio
-#       - Investment to GDP Ratio
-#       - Net Exports
-#       - Investment
-#       - Log Output
-#       - Log Consumption
-#       - Log Investment
-#       - Output Growth
-#     parameter_ranges:
-#       beta: [0.95, 0.99]                         # Discount rate (beta)
-#       risk_aversion: [1.5, 2.0]                  # Risk aversion (sigma)
-#       persistence_gov_spending: [0.7, 0.95]      # Persistence of gov spending (rho_G)
-#       persistence_productivity: [0.7, 0.95]      # Persistence of productivity (rho_A)
-#       capital_share: [0.3, 0.4]                  # Capital share (alpha_K)
-#       labor_share: [0.3, 0.4]                    # Labor share (alpha_N)
-#       depreciation: [0.02, 0.05]                 # Depreciation rate (delta)
-#       capital_adjustment_cost: [2.0, 6.0]        # Capital adjustment cost (phi_K)
-#       elasticity_substitution: [0.0005, 0.002]   # Elasticity of substitution (eta)
-#       debt_share: [0.05, 0.15]                   # Debt share (alpha_D)
-#       shock_gov_spending_std: [0.02, 0.04]       # Std dev of gov spending shock
-#       shock_productivity_std: [0.003, 0.006]     # Std dev of productivity shock
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_column: Utility
-#     input:
-#       state_columns:
-#         - Capital
-#         - Debt
-#         - Productivity
-#         - Government Spending
-#       action_columns:
-#         - Consumption
-#         - Labor
-#     output:
-#       data_path: ./data/processed/Aguiar_Gopinath_2007
+  #         - Investment
+  #         - Output
+  #         - Wage
+  #         - InterestRate
+  #     output:
+  #       data_path: ./data/processed/RBC_capital_stock_shock_stoch
 
 
-#     RBC: [0, 1]  # Флаг для выбора модели: 0 — Financial Frictions, 1 — RBC
+  # RBC_news_shock_model_pf:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       alpha: [0.30, 0.40]
+  #       sigma: [0.5, 2.0]
+  #       n: [0.001, 0.004]
+  #       x: [0.003, 0.008]
+  #       i_y: [0.18, 0.28]
+  #       k_y: [8.0, 12.0]
+  #       rhoz: [0.90, 0.99]
+  #       l_ss_target: [0.28, 0.38]
+  #       start_capital_ratio: [0.7, 1.3]
+  #     shocks:
+  #       news:
+  #         num_shocks: 3
+  #         period_range: [10, 70]
+  #         value_range: [-0.03, 0.03]
+  #       surprise:
+  #         num_shocks: 2
+  #         period_range: [20, 80]
+  #         value_range: [-0.05, 0.05]
 
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [7]  # Индекс колонки 'Trade Balance'
-#       weights: [1.0]       # Вес для стабильности торгового баланса
-#     input:
-#       data_path: ./data/raw/GarciaCicco_et_al_2010_raw.csv  # Путь к CSV-файлу с данными
-#       state_columns:
-#         - Consumption                        # Потребление (c)
-#         - Capital                            # Капитал (k)
-#         - Total Factor Productivity          # Совокупная факторная производительность (a)
-#         - Hours Worked                       # Отработанные часы (h)
-#         - Debt                               # Долг (d)
-#         - Output                             # Выпуск (y)
-#         - Investment                         # Инвестиции (invest)
-#         - Trade Balance                      # Торговый баланс (tb)
-#         - Marginal Utility of Consumption    # Предельная полезность потребления (mu_c)
-#         - Trade Balance to Output Ratio      # Отношение торгового баланса к выпуску (tb_y)
-#         - Output Growth Rate                 # Рост выпуска (g_y)
-#         - Consumption Growth Rate            # Рост потребления (g_c)
-#         - Investment Growth Rate             # Рост инвестиций (g_invest)
-#         - Technology Growth Rate             # Темп роста технологий (g)
-#         - Interest Rate                      # Процентная ставка (r)
-#         - Preference Shock                   # Шок предпочтений (nu)
-#         - Country Premium Shock              # Шок премии за риск (mu)
-#       action_columns:
-#         - Investment  # Управляемая переменная (инвестиции)
-#     output:
-#       data_path: ./data/processed/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
+  #   rl_env_settings:
+  #     reward: lib.rewards.ces_utility_reward
+  #     reward_kwargs:
+  #       consumption_column: Consumption
+  #       labor_column: Labor
+  #       sigma_column: sigma
+  #       A_column: psi
+  #       eta_default: 1.0
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #       action_columns:
+  #         - Consumption
+  #         - Labor
+  #       endogenous_columns:
+  #         - Output
+  #         - Investment
+  #         - Wage
+  #         - AnnualInterestRate
+  #     output:
+  #       data_path: ./data/processed/RBC_news_shock_pf
+
+  # RBC_news_shock_model_stoch:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       alpha: [0.30, 0.40]
+  #       sigma: [0.5, 2.0]
+  #       n: [0.001, 0.004]
+  #       x: [0.003, 0.008]
+  #       i_y: [0.18, 0.28]
+  #       k_y: [8.0, 12.0]
+  #       rhoz: [0.90, 0.99]
+  #       l_ss_target: [0.28, 0.38]
+  #       news_shock_stderr: [0.005, 0.02]
+  #       surprise_shock_stderr: [0.005, 0.02]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.crra_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #       action_columns:
+  #         - Consumption
+  #         - Labor
+  #       endogenous_columns:
+  #         - Output
+  #         - Investment
+  #         - Wage
+  #         - AnnualInterestRate
+  #     output:
+  #       data_path: ./data/processed/RBC_news_shock_stoch
+
+  # RBC_state_dependent_GIRF_household:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       alpha: [0.30, 0.40]
+  #       sigma: [0.5, 2.0]
+  #       n: [0.001, 0.004]
+  #       x: [0.003, 0.008]
+  #       i_y: [0.18, 0.28]
+  #       k_y: [8.0, 12.0]
+  #       rho: [0.7, 0.9]
+  #       rho_g: [0.90, 0.99]
+  #       gshare: [0.15, 0.30]
+  #       productivity_shock_stderr: [0.005, 0.010]
+  #       gov_spending_shock_stderr: [0.008, 0.015]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.stability_reward
+  #     reward_kwargs:
+  #       target_column: Consumption
+  #       sigma_column: sigma
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #         - LoggedGovSpending
+  #         - Labor
+  #       action_columns:
+  #         - Consumption
+  #       endogenous_columns:
+  #         - Output
+  #         - Investment
+  #         - GovSpending
+  #         - Wage
+  #         - InterestRate
+  #     output:
+  #       data_path: ./data/processed/RBC_state_dependent_GIRF_household
+
+  # RBC_state_dependent_GIRF_government:
+  #   dynare_model_settings:
+  #     periods: ${metadata.periods}
+  #     num_samples: ${metadata.num_samples}
+  #     parameter_ranges:
+  #       alpha: [0.30, 0.40]
+  #       sigma: [0.5, 2.0]
+  #       n: [0.001, 0.004]
+  #       x: [0.003, 0.008]
+  #       i_y: [0.18, 0.28]
+  #       k_y: [8.0, 12.0]
+  #       rho: [0.7, 0.9]
+  #       rho_g: [0.90, 0.99]
+  #       gshare: [0.15, 0.30]
+  #       productivity_shock_stderr: [0.005, 0.010]
+  #       gov_spending_shock_stderr: [0.008, 0.015]
+
+  #   rl_env_settings:
+  #     reward: lib.rewards.government_welfare
+  #     reward_kwargs:
+  #       consumption_column: Consumption
+  #       labor_column: Labor
+  #       output_column: Output
+  #       gov_spending_column: GovSpending
+  #       sigma_column: sigma
+  #       lambda_utility: 1.0
+  #       lambda_output_gap: 0.1
+  #       lambda_smoothing: 0.05
+  #     input:
+  #       state_columns:
+  #         - [Capital, -1]
+  #         - LoggedProductivity
+  #         - Output
+  #         - Consumption
+  #         - Labor
+  #       action_columns:
+  #         - GovSpending
+  #       endogenous_columns:
+  #         - LoggedGovSpending
+  #         - Investment
+  #         - Wage
+  #         - InterestRate
+  #     output:
+        # data_path: ./data/processed/RBC_state_dependent_GIRF_government
+
+  Aguiar_Gopinath_2007:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      parameter_ranges:
+        beta: [0.95, 0.99]                            # Discount rate (beta)
+        sigma: [1.5, 2.0]                             # Risk aversion (sigma)
+        persistence_gov_spending: [0.7, 0.95]         # Persistence of gov spending (rho_G)
+        persistence_productivity: [0.7, 0.95]         # Persistence of productivity (rho_A)
+        capital_share: [0.3, 0.4]                     # Capital share (alpha_K)
+        labor_share: [0.3, 0.4]                       # Labor share (alpha_N)
+        depreciation: [0.02, 0.05]                    # Depreciation rate (delta)
+        capital_adjustment_cost: [2.0, 6.0]           # Capital adjustment cost (phi_K)
+        elasticity_substitution: [0.0005, 0.002]      # Elasticity of substitution (eta)
+        debt_share: [0.05, 0.15]                      # Debt share (alpha_D)
+        shock_gov_spending_stderr: [0.02, 0.04]       # Std dev of gov spending shock
+        shock_productivity_stderr: [0.003, 0.006]     # Std dev of productivity shock
+
+    rl_env_settings:
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: Utility
+      input:
+        state_columns:
+          - [Capital, -1]
+          - [Debt, -1]
+          - Productivity
+          - GovSpending
+        action_columns:
+          - Consumption
+          - Labor
+        endogenous_columns:
+          - Output
+          - Investment
+          - BondPrice
+          - NetExports
+          - Utility
+      output:
+        data_path: ./data/processed/Aguiar_Gopinath_2007
+
+  GarciaCicco_2010:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      parameter_ranges:
+        alpha: [0.30, 0.35]
+        beta: [0.90, 0.95]
+        gamma_c: [1.5, 2.5]
+        delta: [0.10, 0.15]
+        psi: [0.0005, 0.002]
+        omega: [1.4, 1.8]
+        phi: [2.5, 4.0]
+        d_ss: [0.005, 0.01]
+        g_ss: [1.003, 1.007]
+        rho_a: [0.70, 0.85]
+        rho_g: [0.75, 0.90]
+        rho_nu: [0.80, 0.90]
+        rho_mu: [0.85, 0.95]
+        productivity_shock_stderr: [0.020, 0.035]
+        tech_growth_shock_stderr: [0.020, 0.040]
+        preference_shock_stderr: [0.0, 0.0]
+        country_premium_shock_stderr: [0.0, 0.0]
+
+    rl_env_settings:
+      reward: lib.rewards.GarciaCicco
+      reward_kwargs:
+        consumption_column: Consumption
+        labor_column: Labor
+        preference_shock_column: PreferenceShock
+        gamma_column: gamma_c
+        theta_column: theta
+        omega_column: omega
+      input:
+        state_columns:
+          - Capital
+          - Debt
+          - LoggedProductivity
+          - TechGrowthRate
+          - PreferenceShock
+          - CountryPremiumShock
+        action_columns:
+          - Consumption
+          - Labor
+        endogenous_columns:
+          - Output
+          - Investment
+          - TradeBalance
+          - InterestRate
+          - MUConsumption
+          - TradeBalanceToOutput
+          - OutputGrowth
+          - ConsumptionGrowth
+          - InvestmentGrowth
+      output:
+        data_path: ./data/processed/GarciaCicco_2010
 
 
-# Born_Pfeifer_2018_MP:
-#   dynare_model_settings:
-#     periods: 1000
-#     fixed_WPC_slope: [0, 1]
-#     SGU_framework: [0, 1]
-#     Calvo: [0, 1]
-#     taxes: [0, 1]
+  Born_Pfeifer_2018_MP:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
+      parameter_ranges:
+        alpha: [0.20, 0.35]
+        beta: [0.98, 0.995]
+        inverse_eis: [0.5, 2.0]
+        inverse_frisch: [2.0, 8.0]
+        taylor_inflation: [1.2, 2.0]
+        taylor_output: [0.05, 0.25]
+        calvo_prices: [0.60, 0.85]
+        calvo_wages: [0.60, 0.85]
+        rho_technology: [0.85, 0.95]
+        rho_monetary: [0.3, 0.7]
+        rho_preference: [0.3, 0.7]
+        goods_elasticity: [6.0, 12.0]
+        labor_elasticity: [3.0, 6.0]
+        money_demand_elasticity: [2.0, 5.0]
+        technology_shock_stderr: [0.5, 1.5]
+        monetary_shock_stderr: [0.15, 0.35]
+        preference_shock_stderr: [0.5, 1.5]
 
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [0]  # Индекс колонки 'Price Inflation'
-#       weights: [1.0]       # Вес для стабильности инфляции
-#     input:
-#       data_path: ./data/raw/Born_Pfeifer_2018_MP_raw.csv
-#       state_columns:
-#         - Price Inflation               # Инфляция цен
-#         - Output Gap                    # Разрыв выпуска
-#         - Natural Output                # Естественный выпуск
-#         - Output                        # Выпуск
-#         - Output Deviation From Steady State  # Отклонение выпуска от устойчивого состояния
-#         - Natural Interest Rate         # Естественная процентная ставка
-#         - Real Interest Rate            # Реальная процентная ставка
-#         - Nominal Interest Rate         # Номинальная процентная ставка
-#         - Hours Worked                  # Отработанные часы
-#         - Real Money Stock              # Реальный запас денег
-#         - Money Growth Annualized       # Годовой рост денежной массы
-#         - Nominal Money Stock           # Номинальный запас денег
-#         - AR(1) Monetary Policy Shock Process  # Шок монетарной политики
-#         - AR(1) Technology Shock Process  # Технологический шок
-#         - Annualized Real Interest Rate  # Годовая реальная процентная ставка
-#         - Annualized Nominal Interest Rate  # Годовая номинальная процентная ставка
-#         - Annualized Natural Interest Rate  # Годовая естественная процентная ставка
-#         - Annualized Inflation Rate     # Годовая инфляция
-#         - AR(1) Preference Shock Process  # Шок предпочтений
-#         - Price Level                   # Уровень цен
-#         - Nominal Wage                  # Номинальная заработная плата
-#         - Consumption                   # Потребление
-#         - Real Wage                     # Реальная заработная плата
-#         - Real Wage Gap                 # Разрыв реальной заработной платы
-#         - Wage Inflation                # Инфляция заработной платы
-#         - Natural Real Wage             # Естественная реальная заработная плата
-#         - Markup                        # Наценка
-#         - Annualized Wage Inflation Rate  # Годовая инфляция заработной платы
-#       action_columns:
-#         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
-#     output:
-#       data_path: ./data/processed/Born_Pfeifer_2018_MP
+    rl_env_settings:
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputGap
+        lambda_y: 0.5
+      input:
+        state_columns:
+          - PriceInflation
+          - OutputGap
+          - RealWageGap
+          - TechnologyShock
+          - MonetaryShock
+          - PreferenceShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - Output
+          - Consumption
+          - HoursWorked
+          - WageInflation
+          - RealInterestRate
+          - NaturalInterestRate
+          - AnnualInflation
+          - AnnualNominalRate
+          - PriceMarkup
+      output:
+        data_path: ./data/processed/Born_Pfeifer_2018_MP
 
 
 # Caldara_et_al_2012_raw:
@@ -697,57 +878,6 @@ models:
 #         - 'Growth Rate Of Money Stock'
 #     output:
 #       data_path: ./data/processed/McCandless_2008_Chapter_13
-
-# RBC_news_shock_model:
-#   dynare_model_settings:
-#     periods: 1000
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [0]  # Индекс колонки 'Output'
-#       weights: [1.0]       # Вес для стабильности выпуска
-#     input:
-#       data_path: ./data/raw/RBC_news_shock_model_raw.csv  # Путь к исходным данным
-#       state_columns:
-#         - Output                  # y
-#         - Consumption             # c
-#         - Capital                 # k
-#         - Hours Worked            # l
-#         - Total Factor Productivity  # z
-#         - Annualized Interest Rate  # r
-#         - Real Wage               # w
-#         - Investment              # invest
-#       action_columns:
-#         - 'Investment'            # invest (управляемая переменная)
-#     output:
-#       data_path: ./data/processed/RBC_news_shock_model  # Путь для сохранения обработанных данных
-
-# RBC_state_dependent_GIRF:
-#   dynare_model_settings:
-#     periods: 1000
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [1]  # Индекс колонки 'Consumption'
-#       weights: [1.0]       # Вес для стабильности потребления
-#     input:
-#       data_path: ./data/raw/RBC_state_dependent_GIRF_raw.csv  # Путь к исходным данным
-#       state_columns:
-#         - Output                  # y
-#         - Consumption             # c
-#         - Capital                 # k
-#         - Hours Worked            # l
-#         - Total Factor Productivity  # z
-#         - Government Spending     # ghat
-#         - Annualized Interest Rate  # r
-#         - Real Wage               # w
-#         - Investment              # invest
-#       action_columns:
-#         - 'Government Spending'   # ghat (управляемая переменная)
-#     output:
-#       data_path: ./data/processed/RBC_state_dependent_GIRF  # Путь для сохранения обработанных данных
 
 # SGU_2003:
 #   dynare_model_settings:
