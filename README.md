@@ -13,7 +13,7 @@
 ├── Makefile           <- Makefile with convenience commands like `make setup`.
 ├── README.md          <- The top-level README for developers using this project.
 ├── data
-│   ├── processed      <- Proccessed tracks; ready for RL experiment.
+│   ├── processed      <- Processed datasets ready for RL experiment (contains train/ and val/ subdirectories).
 │   ├── interim        <- Those tracks that were matched with Dynare and the logs
 │   │                     for those that were not matched.
 │   └── raw            <- Raw generated tracks.

@@ -1,4 +1,5 @@
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,157 +12,428 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset
 
-STATE_MAPPING = {
-    "Empty": 0,
-    "Output": 1,
-    "Consumption": 2,
-    "Capital": 3,
-    "LoggedProductivity": 4,
-    "Debt": 5,
-    "InterestRate": 6,
-    "PreferenceShock": 7,
-    "CountryPremiumShock": 8,
-    "TechGrowthRate": 9,
-    "MUConsumption": 10,
-    # "Hours Worked": 4,
-    # "Total Factor Productivity": 5,
-    # "Annualized Interest Rate": 6,
-    # "Real Wage": 7,
-    # "Investment": 8,
-    # "Technology Shock": 9,
-    # "Labor": 10,
-    # "Preference Shock": 11,
-    # "Marginal Utility": 12,
-    # "Utility": 13,
-    # "Price Inflation": 14,
-    # "Debt": 15,
-    # "Trade Balance To Output Ratio": 16,
-    # "Trade Balance to Output Ratio": 16,
-    # "Output Gap": 17,
-    # "Current Account To Output Ratio": 18,
-    # "Natural Output": 19,
-    # "Output Deviation From Steady State": 20,
-    # "Bond Price": 21,
-    # "Government Spending": 22,
-    # "Marginal Utility of Consumption": 23,
-    # "Marginal Utility of Labor": 24,
-    # "Consumption to GDP Ratio": 25,
-    # "Investment to GDP Ratio": 26,
-    # "Net Exports": 27,
-    # "Log Output": 28,
-    # "Log Consumption": 29,
-    # "Log Investment": 30,
-    # "Output Growth": 31,
-    # "Natural Interest Rate": 32,
-    # "Real Interest Rate": 33,
-    # "Nominal Interest Rate": 34,
-    # "Real Money Stock": 35,
-    # "Money Growth Annualized": 36,
-    # "Nominal Money Stock": 37,
-    # "AR(1) Monetary Policy Shock Process": 38,
-    # "AR(1) Technology Shock Process": 39,
-    # "AR(1) Preference Shock Process": 40,
-    # "Price Level": 41,
-    # "Nominal Wage": 42,
-    # "Real Wage Gap": 43,
-    # "Wage Inflation": 44,
-    # "Natural Real Wage": 45,
-    # "Markup": 46,
-    # "Annualized Wage Inflation Rate": 47,
-    # "Value Function": 48,
-    # "Auxiliary Variable For Value Function": 49,
-    # "Expected Stochastic Discount Factor": 50,
-    # "Volatility": 51,
-    # "Expected Return On Capital": 52,
-    # "Risk-Free Rate": 53,
-    # "Money Growth": 54,
-    # "Output Growth Rate": 55,
-    # "Consumption Growth Rate": 56,
-    # "Investment Growth Rate": 57,
-    # "Technology Growth Rate": 58,
-    # "Interest Rate": 59,
-    # "Country Premium Shock": 60,
-    # "Productivity": 61,
-    # "Real Return On Capital": 62,
-    # "Real Consumption": 63,
-    # "Money Stock": 64,
-    # "Growth Rate Of Money Stock": 65,
-    # "Foreign Price Level": 66,
-    # "Foreign Bonds": 67,
-    # "Foreign Interest Rate": 68,
-    # "Exchange Rate": 69,
-    # "Log Capital Stock": 70,
-    # "Log Labor": 71,
-    # "Log Real Wage": 72,
-    # "Annualized Real Interest Rate": 73,
-    # "Annualized Nominal Interest Rate": 74,
-    # "Annualized Natural Interest Rate": 75,
-    # "Annualized Inflation Rate": 76,
-    # "Trade Balance": 77,
-    # "Capital Stock": 78,
-    # "Real Output": 79,
-    # "Output Minus Consumption": 80,
-    # "Lagrange Multiplier A": 81,
-    # "Lagrange Multiplier B": 82,
-    # "Inflation Rate": 83,
-    # "Inflation": 83,
-    # "Marginal Costs": 84,
-    # "Market Tightness": 85,
-    # "Log TFP": 86,
-    # "Log Vacancies": 87,
-    # "Log Wages": 88,
-    # "Log Unemployment": 89,
-    # "Log Tightness A": 90,
-    # "Log Tightness B": 91,
-    # "Vacancies": 92,
-    # "Unemployment Rate": 93,
-    # "Matches": 94,
-    # "Meeting Rate Between Firms And Workers": 95,
-    # "Employment": 96,
-    # "Gross Output A": 97,
-    # "Gross Output B": 98,
-    # "Government Spending Shock": 99,
-    # "AR(1) Technology Process": 100,
-}
+class Tokenizer:
+    """
+    Centralized tokenizer for state variables, actions, and environments.
 
-ACTION_MAPPING = {
-    "Empty": 0,
-    "Investment": 1,
-    "Consumption": 2,
-    "HoursWorked": 3,
-}
+    Handles token-to-ID mappings, canonicalization of state names via aliases,
+    and encoding/decoding operations for use in neural network embeddings.
+    """
 
-ENV_MAPPING = {
-    "Born_Pfeifer_2018_MP": 0,
-    "Aguiar_Gopinath_2007": 1,
-    "RBC_news_shock_model": 2,
-    "Hansen_1985": 3,
-    "GarciaCicco_et_al_2010": 4,
-    "Caldara_et_al_2012": 5,
-    "RBC_capitalstock_shock": 6,
-    "SGU_2003": 7,
-    "Gali_2008_chapter_2": 8,
-    "Collard_2001_example1": 9,
-    "McCandless_2008_Chapter_13": 10,
-    "FV_et_al_2007_ABCD": 11,
-    "RBC_baseline": 12,
-    "RBC_state_dependent_GIRF": 13,
-    "SGU_2004": 14,
-    "Faia_2008": 15,
-    "McCandless_2008_Chapter_9": 16,
-}
+    # State vocabulary used for variable embeddings.
+    STATE_TOKENS: tuple[str, ...] = (
+        "Empty",
+        "Output",
+        "Consumption",
+        "Capital",
+        "LoggedProductivity",
+        "Debt",
+        "InterestRate",
+        "PreferenceShock",
+        "CountryPremiumShock",
+        "TechGrowthRate",
+        "MUConsumption",
+        "AR(1) Monetary Policy Shock Process",
+        "AR(1) Preference Shock Process",
+        "AR(1) Technology Process",
+        "AR(1) Technology Shock Process",
+        "Annualized Inflation Rate",
+        "Annualized Interest Rate",
+        "Annualized Natural Interest Rate",
+        "Annualized Nominal Interest Rate",
+        "Annualized Real Interest Rate",
+        "Annualized Wage Inflation Rate",
+        "Auxiliary Variable For Value Function",
+        "Consumption Growth Rate",
+        "Consumption to GDP Ratio",
+        "ConsumptionPerCapita",
+        "CapitalPerCapita",
+        "OutputPerCapita",
+        "InvestmentPerCapita",
+        "ConsumptionPerEffectiveLabor",
+        "CapitalPerEffectiveLabor",
+        "OutputPerEffectiveLabor",
+        "InvestmentPerEffectiveLabor",
+        "ConsYoung",
+        "ConsOld",
+        "Current Account To Output Ratio",
+        "Employment",
+        "Exchange Rate",
+        "Expected Return On Capital",
+        "Expected Stochastic Discount Factor",
+        "Foreign Bonds",
+        "Foreign Interest Rate",
+        "Foreign Price Level",
+        "GovSpending",
+        "Government Spending Shock",
+        "Gross Output A",
+        "Gross Output B",
+        "GrossReturn",
+        "Growth Rate Of Money Stock",
+        "HoursWorked",
+        "Inflation",
+        "Inflation Rate",
+        "Investment",
+        "Investment Growth Rate",
+        "Investment to GDP Ratio",
+        "Labor",
+        "Lagrange Multiplier A",
+        "Lagrange Multiplier B",
+        "Log Output",
+        "Log Tightness A",
+        "Log Tightness B",
+        "Log Unemployment",
+        "Log Vacancies",
+        "Log Wages",
+        "Marginal Costs",
+        "MarginalProductCapital",
+        "Market Tightness",
+        "Markup",
+        "Matches",
+        "Meeting Rate Between Firms And Workers",
+        "Money Growth",
+        "Money Growth Annualized",
+        "Money Stock",
+        "MoneySupply",
+        "Natural Interest Rate",
+        "Natural Output",
+        "Natural Real Wage",
+        "Net Exports",
+        "Nominal Interest Rate",
+        "Nominal Money Stock",
+        "Nominal Wage",
+        "Output Deviation From Steady State",
+        "Output Gap",
+        "Output Growth",
+        "Output Growth Rate",
+        "Output Minus Consumption",
+        "Price Inflation",
+        "Price Level",
+        "Productivity",
+        "Real Consumption",
+        "Real Interest Rate",
+        "Real Money Stock",
+        "Real Output",
+        "Real Return On Capital",
+        "Real Wage",
+        "Real Wage Gap",
+        "Wage",
+        "WagePerEffectiveLabor",
+        "Savings",
+        "Risk-Free Rate",
+        "TaxRate",
+        "Technology Shock",
+        "Trade Balance to Output Ratio",
+        "TradeBalance",
+        "Unemployment Rate",
+        "Utility",
+        "Vacancies",
+        "Value Function",
+        "Volatility",
+        "Wage Inflation",
+    )
 
-def decode_env_name(env_name: str) -> int:
-    prefix = env_name.rsplit('_', 1)[0]
-    if prefix.endswith('_config'):
-        prefix = prefix.removesuffix('_config')
-    return 0
-    return ENV_MAPPING[prefix]
+    # State aliases for canonicalization across environments
+    STATE_ALIASES: dict[str, str] = {
+        # High-confidence spelling variants (same meaning, different formatting)
+        "Capital Stock": "Capital",
+        "Country Premium Shock": "CountryPremiumShock",
+        "Hours Worked": "HoursWorked",
+        "Interest Rate": "InterestRate",
+        "Log TFP": "LoggedProductivity",
+        "Marginal Utility": "MUConsumption",
+        "Marginal Utility of Consumption": "MUConsumption",
+        "Preference Shock": "PreferenceShock",
+        "Technology": "LoggedProductivity",
+        "Technology Growth Rate": "TechGrowthRate",
+        "Trade Balance": "TradeBalance",
+        "Trade Balance To Output Ratio": "Trade Balance to Output Ratio",
+        "Government Spending": "GovSpending",
+        # Some models use long_name='Total Factor Productivity' for a state that is
+        # actually logged productivity in our pipeline/configs.
+        "Total Factor Productivity": "LoggedProductivity",
+        # Some `.mod` files use lower-case long_name values even when the TeX/header is title-cased
+        # (e.g. `Ramsey.mod`: long_name='consumption'). Canonicalize those back to our column names.
+        "consumption": "Consumption",
+        "capital": "Capital",
+        "output": "Output",
+        "investment": "Investment",
+        # Per-capita variables (from Dynare long_name format)
+        "consumption per capita": "ConsumptionPerCapita",
+        "capital per capita": "CapitalPerCapita",
+        "output per capita": "OutputPerCapita",
+        "investment per capita": "InvestmentPerCapita",
+        # Per-effective-labor variables
+        "consumption per effective labor": "ConsumptionPerEffectiveLabor",
+        "capital per effective labor": "CapitalPerEffectiveLabor",
+        "output per effective labor": "OutputPerEffectiveLabor",
+        "investment per effective labor": "InvestmentPerEffectiveLabor",
+        "wage per effective labor unit": "WagePerEffectiveLabor",
+        "wage per effective labor": "WagePerEffectiveLabor",
+        # OLG model variables
+        "consumption young": "ConsYoung",
+        "consumption old": "ConsOld",
+        "savings per effective worker": "Savings",
+        "capital stock (end of period)": "Capital",
+        "output per effective worker": "Output",
+        "wage rate": "Wage",
+        "rental rate of capital": "InterestRate",
+        # Other common lowercase long_name variants
+        "labor/population": "Labor",
+        "technology level": "Productivity",
+        "real interest rate": "InterestRate",
+        "gross return on capital": "GrossReturn",
+        "marginal product of capital": "MarginalProductCapital",
+        "logged tfp": "LoggedProductivity",
+        "tfp level": "Productivity",
+        "aggregate consumption": "Consumption",
+        "aggregate capital": "Capital",
+        "aggregate output": "Output",
+    }
 
-def state_encoder(x):
-    return x
-def action_encoder(x):
-    return x
+    ACTION_TOKENS: tuple[str, ...] = (
+        "Empty",
+        "Investment",
+        "Savings",
+        "savings per effective worker",
+        "Consumption",
+        "ConsumptionPerEffectiveLabor",
+        "ConsumptionPerCapita",
+        "consumption_fraction",
+        "consumption_rate",
+        "HoursWorked",
+        "Consumers",  # from marl_rbc_with_irrational_behavior.py
+        "Firms",  # from marl_rbc_with_irrational_behavior.py
+        "Government",  # from marl_rbc_with_irrational_behavior.py
+        "Labor",  # from marl_rbc_with_irrational_behavior.py
+        "Nominal Interest Rate",
+        "GovSpending",  # from RBC_state_dependent_GIRF
+        "Growth Rate Of Money Stock",  # from McCandless_2008_Chapter_13
+        "gov_spending_change",
+        "investment_rate",
+        "leisure",
+        "money_supply_change",
+        "tax_rate_change",
+    )
+
+    ACTION_ALIASES: dict[str, str] = {
+        "Real Consumption": "Consumption",
+        "Capital": "Savings",  # In OLG models: (1 + n) * (1 + g) * Capital = Savings
+    }
+
+    ENV_MAPPING: dict[str, int] = {
+        "Born_Pfeifer_2018_MP": 0,
+        "Aguiar_Gopinath_2007": 1,
+        "RBC_news_shock_model": 2,
+        "Hansen_1985": 3,
+        "GarciaCicco_et_al_2010": 4,
+        "Caldara_et_al_2012": 5,
+        "RBC_capitalstock_shock": 6,
+        "SGU_2003": 7,
+        "Gali_2008_chapter_2": 8,
+        "Collard_2001_example1": 9,
+        "McCandless_2008_Chapter_13": 10,
+        "FV_et_al_2007_ABCD": 11,
+        "RBC_baseline": 12,
+        "RBC_state_dependent_GIRF": 13,
+        "SGU_2004": 14,
+        "Faia_2008": 15,
+        "McCandless_2008_Chapter_9": 16,
+        "Ramsey_base": 17,
+        "Ramsey_crra": 18,
+        "Ramsey_cara": 19,
+        "Ramsey_upgrade": 20,
+        "OLG": 21,
+        "RBC_baseline_pf": 22,
+        "RBC_baseline_stoch": 23,
+    }
+
+    def __init__(self):
+        """Initialize tokenizer with validated mappings."""
+        self._state_mapping = {name: i for i, name in enumerate(self.STATE_TOKENS)}
+        self._action_mapping = {name: i for i, name in enumerate(self.ACTION_TOKENS)}
+
+        # Create normalized lookup dictionaries for case-insensitive, space-ignoring matching
+        self._normalized_state_mapping = {
+            self._normalize_key(key): value
+            for key, value in self._state_mapping.items()
+        }
+        self._normalized_action_mapping = {
+            self._normalize_key(key): value
+            for key, value in self._action_mapping.items()
+        }
+        self._normalized_state_aliases = {
+            self._normalize_key(key): value
+            for key, value in self.STATE_ALIASES.items()
+        }
+        self._normalized_action_aliases = {
+            self._normalize_key(key): value
+            for key, value in self.ACTION_ALIASES.items()
+        }
+
+        self._validate_token_mapping(self._state_mapping, mapping_name="STATE_MAPPING")
+        self._validate_token_mapping(self._action_mapping, mapping_name="ACTION_MAPPING")
+
+    @staticmethod
+    def _normalize_key(key: str) -> str:
+        """Normalize a key for matching: lowercase and remove spaces."""
+        return key.lower().replace(" ", "")
+
+    @staticmethod
+    def _validate_token_mapping(mapping: dict[str, int], *, mapping_name: str) -> None:
+        """Ensure token->id mapping is safe for nn.Embedding and stable to use as IDs."""
+        if "Empty" not in mapping or mapping["Empty"] != 0:
+            raise ValueError(f"{mapping_name} must include 'Empty': 0")
+        ids = list(mapping.values())
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"{mapping_name} has duplicate IDs: {mapping}")
+        if min(ids) != 0 or max(ids) != len(mapping) - 1:
+            raise ValueError(
+                f"{mapping_name} IDs must be contiguous 0..{len(mapping)-1}, got {sorted(ids)}"
+            )
+
+    def canonical_state_name(self, name: str) -> str:
+        """Canonicalize a state variable name across environments (case-insensitive, ignores spaces)."""
+        # First try exact match in state tokens
+        if name in self._state_mapping:
+            return name
+
+        # Try exact match in aliases
+        if name in self.STATE_ALIASES:
+            return self.STATE_ALIASES[name]
+
+        # Try normalized match in state tokens
+        normalized_name = self._normalize_key(name)
+        for orig_token in self._state_mapping.keys():
+            if self._normalize_key(orig_token) == normalized_name:
+                return orig_token
+
+        # Try normalized match in aliases
+        for orig_key, orig_value in self.STATE_ALIASES.items():
+            if self._normalize_key(orig_key) == normalized_name:
+                return orig_value
+
+        # If no match found, return the name as-is
+        return name
+
+    def canonical_action_name(self, name: str) -> str:
+        """Canonicalize an action variable name across environments (case-insensitive, ignores spaces)."""
+        # First try exact match in action tokens
+        if name in self._action_mapping:
+            return name
+
+        # Try exact match in aliases
+        if name in self.ACTION_ALIASES:
+            return self.ACTION_ALIASES[name]
+
+        # Try normalized match in action tokens
+        normalized_name = self._normalize_key(name)
+        for orig_token in self._action_mapping.keys():
+            if self._normalize_key(orig_token) == normalized_name:
+                return orig_token
+
+        # Try normalized match in aliases
+        for orig_key, orig_value in self.ACTION_ALIASES.items():
+            if self._normalize_key(orig_key) == normalized_name:
+                return orig_value
+
+        # If no match found, return the name as-is
+        return name
+
+    def state_token_id(self, name: str) -> int:
+        """Map a state variable name (possibly an alias) to a stable token id (case-insensitive, ignores spaces)."""
+        canon = self.canonical_state_name(name)
+
+        # Try exact match first
+        if canon in self._state_mapping:
+            return self._state_mapping[canon]
+
+        # Try normalized match
+        normalized_canon = self._normalize_key(canon)
+        if normalized_canon in self._normalized_state_mapping:
+            return self._normalized_state_mapping[normalized_canon]
+
+        # Try finding by normalized match in original tokens
+        for orig_token, token_id in self._state_mapping.items():
+            if self._normalize_key(orig_token) == normalized_canon:
+                return token_id
+
+        raise KeyError(
+            f"Unknown state token '{name}' (canonical '{canon}'). "
+            f"Known tokens: {list(self._state_mapping.keys())}"
+        )
+
+    def action_token_id(self, name: str) -> int:
+        """
+        Map an action variable name (possibly an alias) to a stable token id (case-insensitive, ignores spaces).
+        """
+        canon = self.canonical_action_name(name)
+
+        # Try exact match first
+        if canon in self._action_mapping:
+            return self._action_mapping[canon]
+
+        # Try normalized match
+        normalized_canon = self._normalize_key(canon)
+        if normalized_canon in self._normalized_action_mapping:
+            return self._normalized_action_mapping[normalized_canon]
+
+        # Try finding by normalized match in original tokens
+        for orig_token, token_id in self._action_mapping.items():
+            if self._normalize_key(orig_token) == normalized_canon:
+                return token_id
+
+        raise KeyError(
+            f"Unknown action token '{name}' (canonical '{canon}'). "
+            f"Known tokens: {list(self._action_mapping.keys())}"
+        )
+
+    def decode_env_name(self, env_name: str) -> int:
+        """Decode an environment name to its ID."""
+        prefix = env_name.rsplit('_', 1)[0]
+        if prefix.endswith('_config'):
+            prefix = prefix.removesuffix('_config')
+        if prefix not in self.ENV_MAPPING:
+            return 0  # Default to 0 if not found
+        return self.ENV_MAPPING[prefix]
+
+    def state_encoder(self, x):
+        """Encode state values (placeholder for future implementation)."""
+        return x
+
+    def action_encoder(self, x):
+        """Encode action values (placeholder for future implementation)."""
+        return x
+
+    @property
+    def state_mapping(self) -> dict[str, int]:
+        """Get the state token-to-ID mapping."""
+        return self._state_mapping.copy()
+
+    @property
+    def action_mapping(self) -> dict[str, int]:
+        """Get the action token-to-ID mapping."""
+        return self._action_mapping.copy()
+
+    @property
+    def num_state_tokens(self) -> int:
+        """Get the number of state tokens."""
+        return len(self._state_mapping)
+
+    @property
+    def num_action_tokens(self) -> int:
+        """Get the number of action tokens."""
+        return len(self._action_mapping)
+
+    @property
+    def num_tasks(self) -> int:
+        """Get the number of tasks (environments)."""
+        # num_tasks = max task ID + 1 (since IDs are 0-indexed)
+        return max(self.ENV_MAPPING.values()) + 1 if self.ENV_MAPPING else 1
+
+
+# Create a default tokenizer instance for use across the module
+_default_tokenizer = Tokenizer()
 
 class EconomicsDataset(Dataset):
     """
@@ -199,11 +471,12 @@ class EconomicsDataset(Dataset):
 
         # todo: encode with llm
         # todo: get from dataset task id
-        self.task_ids = [decode_env_name(item['env_name']) for item in self.metadata]
+        self.tokenizer = _default_tokenizer
+        self.task_ids = [self.tokenizer.decode_env_name(item['env_name']) for item in self.metadata]
 
         # todo: Encoders of environment state and action
-        self.state_encoder = state_encoder
-        self.action_encoder = action_encoder
+        self.state_encoder = self.tokenizer.state_encoder
+        self.action_encoder = self.tokenizer.action_encoder
 
         # todo: special words embeddings
         self.sw_state_embed = [...]
@@ -309,9 +582,9 @@ x
         state_description = data.iloc[0]["info"]["state_description"]
         action_description = data.iloc[0]["info"]["action_description"]
         endogenous_description = data.iloc[0]["info"]["endogenous_description"]
-        states_info = torch.tensor([STATE_MAPPING[state] for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
-        actions_info = torch.tensor([ACTION_MAPPING[action] for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
-        endogenous_info = torch.tensor([STATE_MAPPING[endogenous] for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
+        states_info = torch.tensor([self.tokenizer.state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
+        actions_info = torch.tensor([self.tokenizer.action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
+        endogenous_info = torch.tensor([self.tokenizer.state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"
         assert len(actions_info) == self.max_action_dim, f"actions_info length is {len(actions_info)} but max_action_dim is {self.max_action_dim}"
         # Pad actions to max_actions_dim
@@ -366,6 +639,8 @@ class EnvReport:
     shared_state_frac: float | None  # |S_i ∩ S_j| / |S_i|
     intersection_over_union: float | None  # |S_i ∩ S_j| / |S_i ∪ S_j|
     intra_over_inter: float | None   # (avg intra kNN dist) / (avg inter-cluster kNN dist)
+    intra: float | None  # avg intra-cluster kNN distance
+    inter: float | None  # avg inter-cluster kNN distance
 
 
 class DatasetDiversityScorer:
@@ -423,6 +698,21 @@ class DatasetDiversityScorer:
             raw_env_name = str(item.get("env_name", "unknown"))
             env_group = str(item["env_group"])
             p = Path(item["output_dir"])
+            # Resolve relative paths relative to dataset_path
+            if not p.is_absolute():
+                # Paths in metadata may be relative to project root (e.g., "data/processed/train/file.parquet")
+                # If the path contains the dataset_path name, extract just the filename
+                p_str = str(p)
+                if self.dataset_path.name in p_str:
+                    # Extract just the filename (last component after the dataset_path name)
+                    # This handles cases like "data/processed/train/file.parquet" -> "file.parquet"
+                    parts = p_str.split(self.dataset_path.name)
+                    if len(parts) > 1:
+                        # Take everything after dataset_path name and remove leading slashes
+                        filename_part = parts[-1].lstrip("/")
+                        p = Path(filename_part) if filename_part else Path(p.name)
+                # Resolve relative to dataset_path
+                p = (self.dataset_path / p).resolve()
             env_to_paths.setdefault(env_group, []).append(p)
             env_group_to_env_names.setdefault(env_group, set()).add(raw_env_name)
 
@@ -620,7 +910,9 @@ class DatasetDiversityScorer:
               "nearest_env": str|None,
               "shared_state_frac": float|None,
               "intersection_over_union": float|None,
-              "intra_over_inter": float|None
+              "intra_over_inter": float|None,
+              "intra": float|None,
+              "inter": float|None
             }
         """
         base_states = set(self._env_state_names.get(env_name, []))
@@ -630,6 +922,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": None,
                 "intersection_over_union": None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         best_env = None
@@ -656,6 +950,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": None,
                 "intersection_over_union": None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         shared_vars = sorted(list(base_states & set(self._env_state_names.get(best_env, []))))
@@ -665,6 +961,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": float(best_shared),
                 "intersection_over_union": float(best_iou) if best_iou is not None else None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         X1 = self._build_embeddings_for_shared_states(env_name, shared_vars)
@@ -676,6 +974,8 @@ class DatasetDiversityScorer:
                 "shared_state_frac": float(best_shared),
                 "intersection_over_union": float(best_iou) if best_iou is not None else None,
                 "intra_over_inter": None,
+                "intra": None,
+                "inter": None,
             }
 
         X = np.vstack([X1, X2])
@@ -683,15 +983,41 @@ class DatasetDiversityScorer:
         X1s = Xs[: X1.shape[0]]
         X2s = Xs[X1.shape[0] :]
 
+        # Check if embeddings have any variance (all points identical would cause issues)
+        eps = 1e-10
+        if Xs.shape[0] > 1:
+            # Check if all points are identical (within numerical precision)
+            point_std = np.std(Xs, axis=0)
+            if np.all(point_std < eps):
+                # All embeddings are identical - cannot compute meaningful ratio
+                return {
+                    "nearest_env": best_env,
+                    "shared_state_frac": float(best_shared),
+                    "intersection_over_union": float(best_iou) if best_iou is not None else None,
+                    "intra_over_inter": None,
+                    "intra": None,
+                    "inter": None,
+                }
+
         intra = 0.5 * (self._avg_intra_knn(X1s) + self._avg_intra_knn(X2s))
         inter = self._avg_inter_knn(X1s, X2s)
-        ratio = float(intra / inter) if inter > 0 else None
+
+        # Add small epsilon to avoid division by zero and handle numerical precision issues
+        # If inter is exactly 0 or too small, it means embeddings are too similar
+        # If intra is 0, it means episodes within a model are identical
+        if inter <= eps:
+            # If inter is too small, models are too similar - return None to indicate invalid comparison
+            ratio = None
+        else:
+            ratio = float(intra / inter)
 
         return {
             "nearest_env": best_env,
             "shared_state_frac": float(best_shared),
             "intersection_over_union": float(best_iou) if best_iou is not None else None,
             "intra_over_inter": ratio,
+            "intra": float(intra),
+            "inter": float(inter),
         }
 
     def generate_report(self) -> dict[str, Any]:
@@ -728,6 +1054,8 @@ class DatasetDiversityScorer:
                     shared_state_frac=imp["shared_state_frac"],
                     intersection_over_union=imp["intersection_over_union"],
                     intra_over_inter=imp["intra_over_inter"],
+                    intra=imp["intra"],
+                    inter=imp["inter"],
                 )
             )
 
@@ -882,6 +1210,21 @@ class DatasetDiversityScorer:
             t = np.arange(x.size, dtype=float)
             slope = float(np.polyfit(t, x, 1)[0])
 
+        # Check variance before computing skew/kurtosis to avoid precision warnings
+        # If data has no variance (nearly identical values), these statistics are not meaningful
+        x_std = np.std(x)
+        skew_val = 0.0
+        if x.size >= 3 and x_std > 1e-10:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Precision loss.*")
+                skew_val = float(skew(x, bias=False))
+
+        kurt_val = 0.0
+        if x.size >= 4 and x_std > 1e-10:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Precision loss.*")
+                kurt_val = float(kurtosis(x, fisher=True, bias=False))
+
         feats = np.array(
             [
                 float(np.mean(x)),
@@ -891,8 +1234,8 @@ class DatasetDiversityScorer:
                 float(med),
                 float(q75),
                 float(np.max(x)),
-                float(skew(x, bias=False)) if x.size >= 3 else 0.0,
-                float(kurtosis(x, fisher=True, bias=False)) if x.size >= 4 else 0.0,
+                skew_val,
+                kurt_val,
                 float(ac1),
                 float(slope),
                 float(np.mean(x * x)),
