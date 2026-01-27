@@ -1,14 +1,14 @@
 metadata:
   data_folder: data
   periods: 200
-  num_samples: 100
+  num_samples: 2000
 
 models:
 
   Ramsey_base:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 2000 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       column_names:
         - Consumption
         - Capital
@@ -33,17 +33,13 @@ models:
         endogenous_columns:
           - Investment
       output:
-<<<<<<< HEAD
-        data_path: ./data/processed/Ramsey_base
-=======
         data_path: ./data/interim/Ramsey_base
->>>>>>> main
 
 
   Ramsey_crra:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 1000 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       column_names:
         - ConsumptionPerCapita
         - CapitalPerCapita
@@ -73,17 +69,13 @@ models:
         endogenous_columns:
           - InvestmentPerCapita
       output:
-<<<<<<< HEAD
-        data_path: ./data/processed/Ramsey_crra
-=======
         data_path: ./data/interim/Ramsey_cara
->>>>>>> main
 
 
   Ramsey_cara:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 1000 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       column_names:
         - ConsumptionPerCapita
         - CapitalPerCapita
@@ -119,7 +111,7 @@ models:
   Ramsey_upgrade:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 700 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.5, 3.0]
         start_labor: [1.0, 1.0]
@@ -139,7 +131,7 @@ models:
       input:
         state_columns:
           - [CapitalPerEffectiveLabor, -1]
-          - Productivity                    # Technology (long_name='technology level' -> canonicalized to 'Productivity')
+          - Productivity
           - Labor
           - InterestRate
         action_columns:
@@ -156,7 +148,7 @@ models:
   OLG:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 3000 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.5, 1.5]
         alpha: [0.3, 0.4]
@@ -186,10 +178,11 @@ models:
       output:
         data_path: ./data/interim/OLG
 
+
   RBC_baseline_pf:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 1500 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.5, 1.5]
         alpha: [0.33, 0.66]
@@ -222,15 +215,43 @@ models:
       output:
         data_path: ./data/interim/RBC_baseline_pf
 
+
   RBC_baseline_stoch:
     dynare_model_settings:
       periods: ${metadata.periods}
-<<<<<<< HEAD
       num_samples: ${metadata.num_samples}
-=======
-      num_samples: 1500 # ${metadata.num_samples}
+      parameter_ranges:
+        alpha: [0.33, 0.66]
+        beta: [0.95, 0.99]
+        delta: [0.02, 0.05]
+        rho: [0.7, 0.9]
+        sigma: [0.5, 3.0]
+        productivity_shock_stderr: [0.005, 0.03]
 
->>>>>>> main
+    rl_env_settings:
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: Consumption
+        sigma_column: sigma
+      input:
+        state_columns:
+          - [Capital, -1]
+          - LoggedProductivity
+          - Productivity
+        action_columns:
+          - Consumption
+        endogenous_columns:
+          - Output
+          - Investment
+          - InterestRate
+      output:
+        data_path: ./data/interim/RBC_baseline_pf
+
+
+  RBC_baseline_stoch:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples: ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.33, 0.66]
         beta: [0.95, 0.99]
@@ -257,6 +278,7 @@ models:
           - InterestRate
       output:
         data_path: ./data/interim/RBC_baseline_stoch
+
 
   RBC_capital_stock_shock_pf:
     dynare_model_settings:
@@ -303,7 +325,8 @@ models:
           - Wage
           - InterestRate
       output:
-        data_path: ./data/processed/RBC_capital_stock_shock_pf
+        data_path: ./data/interim/RBC_capital_stock_shock_pf
+
 
   RBC_capital_stock_shock_stoch:
     dynare_model_settings:
@@ -341,7 +364,7 @@ models:
           - Wage
           - InterestRate
       output:
-        data_path: ./data/processed/RBC_capital_stock_shock_stoch
+        data_path: ./data/interim/RBC_capital_stock_shock_stoch
 
 
   RBC_news_shock_model_pf:
@@ -382,7 +405,6 @@ models:
           - LoggedProductivity
         action_columns:
           - Consumption
-<<<<<<< HEAD
           - Labor
         endogenous_columns:
           - Output
@@ -390,7 +412,8 @@ models:
           - Wage
           - AnnualInterestRate
       output:
-        data_path: ./data/processed/RBC_news_shock_pf
+        data_path: ./data/interim/RBC_news_shock_pf
+
 
   RBC_news_shock_model_stoch:
     dynare_model_settings:
@@ -425,7 +448,8 @@ models:
           - Wage
           - AnnualInterestRate
       output:
-        data_path: ./data/processed/RBC_news_shock_stoch
+        data_path: ./data/interim/RBC_news_shock_stoch
+
 
   RBC_state_dependent_GIRF_household:
     dynare_model_settings:
@@ -464,7 +488,8 @@ models:
           - Wage
           - InterestRate
       output:
-        data_path: ./data/processed/RBC_state_dependent_GIRF_household
+        data_path: ./data/interim/RBC_state_dependent_GIRF_household
+
 
   RBC_state_dependent_GIRF_government:
     dynare_model_settings:
@@ -509,7 +534,8 @@ models:
           - Wage
           - InterestRate
       output:
-        data_path: ./data/processed/RBC_state_dependent_GIRF_government
+        data_path: ./data/interim/RBC_state_dependent_GIRF_government
+
 
   Aguiar_Gopinath_2007:
     dynare_model_settings:
@@ -549,7 +575,8 @@ models:
           - NetExports
           - Utility
       output:
-        data_path: ./data/processed/Aguiar_Gopinath_2007
+        data_path: ./data/interim/Aguiar_Gopinath_2007
+
 
   GarciaCicco_2010:
     dynare_model_settings:
@@ -605,7 +632,7 @@ models:
           - ConsumptionGrowth
           - InvestmentGrowth
       output:
-        data_path: ./data/processed/GarciaCicco_2010
+        data_path: ./data/interim/GarciaCicco_2010
 
 
   Born_Pfeifer_2018_MP:
@@ -658,187 +685,48 @@ models:
           - AnnualNominalRate
           - PriceMarkup
       output:
-        data_path: ./data/processed/Born_Pfeifer_2018_MP
+        data_path: ./data/interim/Born_Pfeifer_2018_MP
 
 
-# Caldara_et_al_2012_raw:
-#   dynare_model_settings:
-#     periods: 1000
-#     extreme_calibration: [0, 1]
-=======
-        endogenous_columns: []
-      output:
-        data_path: ./data/interim/RBC_baseline_stoch
-
-#  RBC_capital_stock_shock:
-#    dynare_model_settings:
-#      periods: ${metadata.periods}
-#      num_samples: ${metadata.num_samples}
-#      parameter_ranges:
-#        alpha: [0.3, 0.34]
-#        beta: [0.95, 0.99]
-#        delta: [0.02, 0.05]
-#        rho: [0.7, 0.9]
-#        sigma: [1.0, 2.0]
-#        l_ss_target: [0.30, 0.40]
-#      shocks:
-#        productivity:
-#          num_shocks: 4
-#          period_range: [20, 80]
-#          value_range: [-0.1, 0.1]
-#        capital:
-#          num_shocks: 2
-#          period_range: [20, 80]
-#          value_range: [0.01, 0.15]
-#
-#    rl_env_settings:
-#      reward: lib.rewards.ces_utility_reward
-#      reward_kwargs:
-#        consumption_column: Consumption
-#        labor_column: Labor
-#        sigma_column: sigma
-#        A_column: psi
-#        eta_default: 1.0
-#      input:
-#        state_columns:
-#          - [Capital, -1]
-#          - Labor
-#          - LoggedProductivity
-#        action_columns:
-#          - Consumption
-#        endogenous_columns:
-#          - Investment
-#          - Output
-#          - Wage
-#          - InterestRate
-#      output:
-#        data_path: ./data/interim/RBC_capital_stock_shock
-
-
-  GarciaCicco_et_al_2010:
+  Caldara_et_al_2012:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: 3000 # ${metadata.num_samples}
+      num_samples: ${metadata.num_samples}
       parameter_ranges:
-        start_capital: [0.1, 0.5]
-        beta: [0.9, 0.99]
-        gamma_a: [2.0, 2.0]
-        delta: [0.05, 0.15]
-        alpha: [0.3, 0.3]
-        psi: [2.5, 3.0]
-        omega: [1.5, 1.7]
-        theta: [2.2, 2.4] # unready to uncomment, see model file
-        phi: [4.5, 5.0]
-        dbar: [0.005, 0.01]
-        gbar: [1.0, 1.01]
-        rho_a: [0.8, 0.9]
-        rho_g: [0.2, 0.3]
-        rho_nu: [0.8, 0.9]
-        rho_mu: [0.8, 0.9]
-        rho_s: [0.1, 0.2]
+        beta: [0.985, 0.995]
+        zeta_capital: [0.25, 0.35]
+        delta_depreciation: [0.015, 0.025]
+        rho_technology: [0.90, 0.98]
+        eis: [0.3, 0.7]
+        gamma_risk: [3.0, 15.0]
+        rho_volatility: [0.85, 0.95]
+        sigma_bar: [-4.5, -3.5]
+        eta_volatility: [0.04, 0.10]
+        technology_shock_stderr: [0.8, 1.2]
+        volatility_shock_stderr: [0.8, 1.2]
+
     rl_env_settings:
-      reward: lib.rewards.GarciaCicco
-      reward_kwargs: {}
+      reward: lib.rewards.epstein_zin_utility
+      reward_kwargs:
+        consumption_column: Consumption
+        labor_column: Labor
       input:
         state_columns:
           - [Capital, -1]
-          - [Debt, -1]
-          - [Output, -1]
-          - [InterestRate, -1]
-          # variables with shocks
           - LoggedProductivity
-          - PreferenceShock
-          - CountryPremiumShock
-          - TechGrowthRate
+          - LoggedVolatility
         action_columns:
-          - Investment
           - Consumption
-          - HoursWorked
+          - Labor
         endogenous_columns:
-          - [MUConsumption, -1]
+          - Output
+          - Investment
+          - ValueFunction
+          - ExpectedSDF
+          - ExpectedReturnCapital
+          - RiskFreeRate
       output:
-        data_path: ./data/interim/GarciaCicco_et_al_2010
-
-  Aguiar_Gopinath_2007:
-    dynare_model_settings:
-      periods: 50
-      num_samples: 0  # ${metadata.num_samples}
-      column_names:
-         - Consumption
-         - Capital
-         - Output
-         - Debt
-         - Bond Price
-         - Government Spending
-         - Labor
-         - Utility
-         - Productivity
-         - Marginal Utility of Consumption
-         - Marginal Utility of Labor
-         - Consumption to GDP Ratio
-         - Investment to GDP Ratio
-         - Net Exports
-         - Investment
-         - Log Output
-         - Log Consumption
-         - Log Investment
-         - Output Growth
-      parameter_ranges:
-         beta: [0.95, 0.99]                         # Discount rate (beta)
-         risk_aversion: [1.5, 2.0]                  # Risk aversion (sigma)
-         persistence_gov_spending: [0.7, 0.95]      # Persistence of gov spending (rho_G)
-         persistence_productivity: [0.7, 0.95]      # Persistence of productivity (rho_A)
-         capital_share: [0.3, 0.4]                  # Capital share (alpha_K)
-         labor_share: [0.3, 0.4]                    # Labor share (alpha_N)
-         depreciation: [0.02, 0.05]                 # Depreciation rate (delta)
-         capital_adjustment_cost: [2.0, 6.0]        # Capital adjustment cost (phi_K)
-         elasticity_substitution: [0.0005, 0.002]   # Elasticity of substitution (eta)
-         debt_share: [0.05, 0.15]                   # Debt share (alpha_D)
-         shock_gov_spending_std: [0.02, 0.04]       # Std dev of gov spending shock
-         shock_productivity_std: [0.003, 0.006]     # Std dev of productivity shock
-
-    rl_env_settings:
-       reward: lib.rewards.stability_reward
-       reward_kwargs:
-         target_column: Utility
-       input:
-         state_columns:
-           - Capital
-           - Debt
-           - Productivity
-           - Government Spending
-         action_columns:
-           - Consumption
-           - Labor
-       output:
-         data_path: ./data/interim/Aguiar_Gopinath_2007
->>>>>>> main
-
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-<<<<<<< HEAD
-#       target_indices: [1]  # Индекс колонки 'Output'
-#       weights: [1.0]       # Вес для стабильности выпуска
-#     input:
-#       data_path: ./data/raw/Caldara_et_al_2012_raw.csv
-#       state_columns:
-#         - Value Function                     # Функция полезности
-#         - Output                             # Выпуск
-#         - Consumption                        # Потребление
-#         - Capital                            # Капитал
-#         - Investment                         # Инвестиции
-#         - Labor                              # Труд
-#         - Technology Shock                   # Технологический шок
-#         - Auxiliary Variable For Value Function  # Вспомогательная переменная для функции полезности
-#         - Expected Stochastic Discount Factor  # Ожидаемый стохастический дисконтный фактор
-#         - Volatility                         # Волатильность
-#         - Expected Return On Capital          # Ожидаемая доходность капитала
-#         - Risk-Free Rate                     # Безрисковая ставка
-#       action_columns:
-#         - Investment  # Управляемая переменная (инвестиции)
-#     output:
-#       data_path: ./data/processed/Caldara_et_al_2012
+        data_path: ./data/interim/Caldara_et_al_2012
 
 
 # Collard_2001_example1:
@@ -861,7 +749,7 @@ models:
 #       action_columns:
 #         - Consumption  # Управляемая переменная (потребление)
 #     output:
-#       data_path: ./data/processed/Collard_2001_example1  # Путь для сохранения обработанных данных
+#       data_path: ./data//Collard_2001_example1  # Путь для сохранения обработанных данных
 
 
 # Faia_2008:
@@ -904,7 +792,7 @@ models:
 #       action_columns:
 #         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
 #     output:
-#       data_path: ./data/processed/Faia_2008  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/Faia_2008  # Путь для сохранения обработанных данных
 
 
 # FV_et_al_2007_ABCD:
@@ -925,7 +813,7 @@ models:
 #       action_columns:
 #         - Consumption  # Управляемая переменная (потребление)
 #     output:
-#       data_path: ./data/processed/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/FV_et_al_2007_ABCD  # Путь для сохранения обработанных данных
 
 
 # Gali_2008_chapter_2:
@@ -952,7 +840,7 @@ models:
 #       action_columns:
 #         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
 #     output:
-#       data_path: ./data/processed/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/Gali_2008_chapter_2  # Путь для сохранения обработанных данных
 
 
 # Hansen_1985:
@@ -980,7 +868,7 @@ models:
 #       action_columns:
 #         - Investment  # Управляемая переменная (инвестиции)
 #     output:
-#       data_path: ./data/processed/Hansen_1985  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/Hansen_1985  # Путь для сохранения обработанных данных
 
 
 # McCandless_2008_Chapter_9:
@@ -1008,7 +896,7 @@ models:
 #       action_columns:
 #         - Real Consumption  # Управляемая переменная (реальное потребление)
 #     output:
-#       data_path: ./data/processed/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
+#       data_path: ./data/interim/McCandless_2008_Chapter_9  # Путь для сохранения обработанных данных
 
 
 # McCandless_2008_Chapter_13:
@@ -1040,7 +928,7 @@ models:
 #       action_columns:
 #         - 'Growth Rate Of Money Stock'
 #     output:
-#       data_path: ./data/processed/McCandless_2008_Chapter_13
+#       data_path: ./data/interim/McCandless_2008_Chapter_13
 
 # SGU_2003:
 =======

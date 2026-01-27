@@ -489,3 +489,32 @@ def central_bank_loss(
     reward = reward.fillna(-1e6)
     
     return reward
+
+def epstein_zin_utility(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str = 'Consumption',
+    labor_column: str = 'Labor',
+) -> pd.Series:
+    """
+    Period utility for Epstein-Zin preferences.
+
+    u(C, L) = C^nu * (1-L)^(1-nu)
+
+    This is the flow utility component before Epstein-Zin aggregation.
+    """
+    C = data[consumption_column]
+    L = data[labor_column]
+
+    nu = parameters.get('nu_consumption', 0.35)
+
+    leisure = np.maximum(1 - L, 1e-10)
+    utility = (C ** nu) * (leisure ** (1 - nu))
+
+    utility = np.log(np.maximum(utility, 1e-10))
+
+    utility = pd.Series(utility, index=data.index)
+    utility = utility.replace([np.inf, -np.inf], np.nan)
+    utility = utility.fillna(-1e6)
+
+    return utility
