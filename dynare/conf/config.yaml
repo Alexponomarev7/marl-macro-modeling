@@ -8,7 +8,7 @@ models:
   Ramsey_base:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 2000 # ${metadata.num_samples}
       column_names:
         - Consumption
         - Capital
@@ -39,7 +39,7 @@ models:
   Ramsey_crra:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       column_names:
         - ConsumptionPerCapita
         - CapitalPerCapita
@@ -75,7 +75,7 @@ models:
   Ramsey_cara:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       column_names:
         - ConsumptionPerCapita
         - CapitalPerCapita
@@ -111,7 +111,7 @@ models:
   Ramsey_upgrade:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 700 # ${metadata.num_samples}
       column_names:
         - ConsumptionPerCapita
         - CapitalPerCapita
@@ -151,7 +151,7 @@ models:
   OLG:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 3000 # ${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.5, 1.5]
         alpha: [0.3, 0.4]
@@ -185,7 +185,7 @@ models:
   RBC_baseline_pf:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1500 # ${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.5, 1.5]
         alpha: [0.33, 0.66]
@@ -222,7 +222,7 @@ models:
   RBC_baseline_stoch:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1500 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.33, 0.66]
         beta: [0.95, 0.99]
@@ -254,7 +254,7 @@ models:
   RBC_capital_stock_shock_pf:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 #${metadata.num_samples}
       parameter_ranges:
         start_capital: [0.05, 3.0]
         alpha: [0.3, 0.66]
@@ -302,7 +302,7 @@ models:
   RBC_capital_stock_shock_stoch:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.3, 0.34]
         beta: [0.95, 0.99]
@@ -341,7 +341,7 @@ models:
   RBC_news_shock_model_pf:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.30, 0.40]
         sigma: [0.5, 2.0]
@@ -389,7 +389,7 @@ models:
   RBC_news_shock_model_stoch:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.30, 0.40]
         sigma: [0.5, 2.0]
@@ -425,7 +425,7 @@ models:
   RBC_state_dependent_GIRF_household:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.30, 0.40]
         sigma: [0.5, 2.0]
@@ -465,7 +465,7 @@ models:
   RBC_state_dependent_GIRF_government:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 1000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.30, 0.40]
         sigma: [0.5, 2.0]
@@ -552,7 +552,7 @@ models:
   GarciaCicco_2010:
     dynare_model_settings:
       periods: ${metadata.periods}
-      num_samples: ${metadata.num_samples}
+      num_samples: 3000 # ${metadata.num_samples}
       parameter_ranges:
         alpha: [0.30, 0.35]
         beta: [0.90, 0.95]
@@ -1187,7 +1187,7 @@ models:
   #        - 'Growth Rate Of Money Stock'
   #    output:
   #      data_path: ./data/interim/McCandless_2008_Chapter_13
-  
+
 
 #  SGU_2003:
 #   dynare_model_settings:
