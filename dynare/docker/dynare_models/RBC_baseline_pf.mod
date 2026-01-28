@@ -4,19 +4,21 @@
 % Timing convention:
 %   - Capital_t is end-of-period t capital (chosen at t, used for production at t+1)
 %   - Production at t: Y_t = A_t * K_{t-1}^alpha
-%   - Euler: u'(C_t) = β * u'(C_{t+1}) * [α * A_{t+1} * K_t^{α-1} + 1 - δ]
+%   - Euler: u'(C_t) = beta * u'(C_{t+1}) * [alpha * A_{t+1} * K_t^{alpha-1} + 1 - delta]
 
 var Consumption         $Consumption$ (long_name='consumption')
     Capital             $Capital$ (long_name='capital')
     Output              $Output$ (long_name='output')
     Investment          $Investment$ (long_name='investment')
+    InterestRate        $InterestRate$ (long_name='real interest rate')
     LoggedProductivity  $LoggedProductivity$ (long_name='logged TFP')
-    Productivity        $Productivity$ (long_name='TFP level')
-    InterestRate        $InterestRate$ (long_name='real interest rate');
+    Productivity        $Productivity$ (long_name='TFP level');
 
 varexo LoggedProductivityInnovation $LoggedProductivityInnovation$ (long_name='TFP shock');
 
-parameters alpha beta delta rho sigma k_ss c_ss y_ss r_ss;
+parameters alpha beta delta rho sigma
+           start_capital
+           k_ss c_ss y_ss r_ss;
 
 @#if !defined(alpha)
   @#define alpha = 0.33
@@ -36,6 +38,10 @@ parameters alpha beta delta rho sigma k_ss c_ss y_ss r_ss;
 
 @#if !defined(sigma)
   @#define sigma = 1.0
+@#endif
+
+@#if !defined(start_capital)
+  @#define start_capital = 1.0
 @#endif
 
 @#if !defined(num_productivity_shocks)
@@ -77,11 +83,8 @@ parameters alpha beta delta rho sigma k_ss c_ss y_ss r_ss;
   @#define productivity_shock_value_5 = 0.0
 @#endif
 
-@#if !defined(productivity_shock_period_6)
-  @#define productivity_shock_period_6 = 1
-@#endif
-@#if !defined(productivity_shock_value_6)
-  @#define productivity_shock_value_6 = 0.0
+@#ifndef periods
+    @#define periods = 100
 @#endif
 
 alpha = @{alpha};
@@ -89,6 +92,7 @@ beta = @{beta};
 delta = @{delta};
 rho = @{rho};
 sigma = @{sigma};
+start_capital = @{start_capital};
 
 k_ss = ((1 / beta - (1 - delta)) / alpha) ^ (1 / (alpha - 1));
 y_ss = k_ss^alpha;  % A = 1 in steady state
@@ -114,7 +118,7 @@ Output = Consumption + Investment;
 Capital = (1 - delta) * Capital(-1) + Investment;
 
 [name='Interest rate (MPK - delta)']
-InterestRate = alpha * Productivity(+1) * Capital^(alpha - 1) - delta;
+InterestRate = alpha * Productivity * Capital(-1)^(alpha - 1) - delta;
 
 [name='Euler equation (CRRA)']
 Consumption^(-sigma) = beta * Consumption(+1)^(-sigma) * (1 + InterestRate);
@@ -125,11 +129,11 @@ initval;
   LoggedProductivityInnovation = 0;
   LoggedProductivity = 0;
   Productivity = 1;
-  Capital = k_ss;
-  Output = y_ss;
-  Consumption = c_ss;
-  Investment = delta * k_ss;
-  InterestRate = r_ss;
+  Capital = start_capital;
+  Output = Capital^alpha;
+  Investment = delta * Capital;
+  Consumption = Output - Investment;
+  InterestRate = alpha * Capital ^ (alpha - 1) - delta;
 end;
 
 endval;
@@ -139,43 +143,14 @@ endval;
   Capital = k_ss;
   Output = y_ss;
   Consumption = c_ss;
-  Investment = delta * k_ss;
+  Investment = i_ss;
   InterestRate = r_ss;
 end;
 
 shocks;
   var LoggedProductivityInnovation;
-
-@#if num_productivity_shocks == 1
-  periods @{productivity_shock_period_1};
-  values @{productivity_shock_value_1};
-@#endif
-
-@#if num_productivity_shocks == 2
-  periods @{productivity_shock_period_1} @{productivity_shock_period_2};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2};
-@#endif
-
-@#if num_productivity_shocks == 3
-  periods @{shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3};
-@#endif
-
-@#if num_productivity_shocks == 4
-  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4};
-@#endif
-
-@#if num_productivity_shocks == 5
   periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5};
   values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5};
-@#endif
-
-@#if num_productivity_shocks == 6
-  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5} @{productivity_shock_period_6};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5} @{productivity_shock_value_6};
-@#endif
-
 end;
 
 perfect_foresight_setup(periods=@{periods});

@@ -22,3 +22,6 @@ outputs
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+checkpoints/
+lightning_logs/
+research/validation.ipynb
