@@ -126,6 +126,15 @@ parameters alpha        $alpha$ (long_name='capital share in production')
   @#define news_shock_value_5 = 0.0
 @#endif
 
+@#for i in 6:50
+@#if !defined(news_shock_period_@{i})
+  @#define news_shock_period_@{i} = 1
+@#endif
+@#if !defined(news_shock_value_@{i})
+  @#define news_shock_value_@{i} = 0.0
+@#endif
+@#endfor
+
 @#if !defined(num_surprise_shocks)
   @#define num_surprise_shocks = 0
 @#endif
@@ -165,6 +174,15 @@ parameters alpha        $alpha$ (long_name='capital share in production')
   @#define surprise_shock_value_5 = 0.0
 @#endif
 
+@#for i in 6:50
+@#if !defined(surprise_shock_period_@{i})
+  @#define surprise_shock_period_@{i} = 1
+@#endif
+@#if !defined(surprise_shock_value_@{i})
+  @#define surprise_shock_value_@{i} = 0.0
+@#endif
+@#endfor
+
 % Assign parameters
 alpha = @{alpha};
 sigma = @{sigma};
@@ -193,7 +211,7 @@ psi = (1 - alpha) * (k_ss / l_ss)^alpha * (1 - l_ss) / c_ss^sigma;
 model;
 
 [name='Euler equation (with growth)']
-exp(Consumption)^(-sigma) = beta / gammax * exp(Consumption(+1))^(-sigma) * 
+exp(Consumption)^(-sigma) = beta / gammax * exp(Consumption(+1))^(-sigma) *
     (alpha * exp(LoggedProductivity(+1)) * (exp(Capital) / exp(Labor(+1)))^(alpha - 1) + (1 - delta));
 
 [name='Labor supply FOC']
@@ -247,12 +265,48 @@ end;
 
 shocks;
   var NewsShock;
-  periods @{news_shock_period_1} @{news_shock_period_2} @{news_shock_period_3} @{news_shock_period_4} @{news_shock_period_5};
-  values @{news_shock_value_1} @{news_shock_value_2} @{news_shock_value_3} @{news_shock_value_4} @{news_shock_value_5};
+  periods @{news_shock_period_1} @{news_shock_period_2} @{news_shock_period_3} @{news_shock_period_4} @{news_shock_period_5}
+          @{news_shock_period_6} @{news_shock_period_7} @{news_shock_period_8} @{news_shock_period_9} @{news_shock_period_10}
+          @{news_shock_period_11} @{news_shock_period_12} @{news_shock_period_13} @{news_shock_period_14} @{news_shock_period_15}
+          @{news_shock_period_16} @{news_shock_period_17} @{news_shock_period_18} @{news_shock_period_19} @{news_shock_period_20}
+          @{news_shock_period_21} @{news_shock_period_22} @{news_shock_period_23} @{news_shock_period_24} @{news_shock_period_25}
+          @{news_shock_period_26} @{news_shock_period_27} @{news_shock_period_28} @{news_shock_period_29} @{news_shock_period_30}
+          @{news_shock_period_31} @{news_shock_period_32} @{news_shock_period_33} @{news_shock_period_34} @{news_shock_period_35}
+          @{news_shock_period_36} @{news_shock_period_37} @{news_shock_period_38} @{news_shock_period_39} @{news_shock_period_40}
+          @{news_shock_period_41} @{news_shock_period_42} @{news_shock_period_43} @{news_shock_period_44} @{news_shock_period_45}
+          @{news_shock_period_46} @{news_shock_period_47} @{news_shock_period_48} @{news_shock_period_49} @{news_shock_period_50};
+  values @{news_shock_value_1} @{news_shock_value_2} @{news_shock_value_3} @{news_shock_value_4} @{news_shock_value_5}
+         @{news_shock_value_6} @{news_shock_value_7} @{news_shock_value_8} @{news_shock_value_9} @{news_shock_value_10}
+         @{news_shock_value_11} @{news_shock_value_12} @{news_shock_value_13} @{news_shock_value_14} @{news_shock_value_15}
+         @{news_shock_value_16} @{news_shock_value_17} @{news_shock_value_18} @{news_shock_value_19} @{news_shock_value_20}
+         @{news_shock_value_21} @{news_shock_value_22} @{news_shock_value_23} @{news_shock_value_24} @{news_shock_value_25}
+         @{news_shock_value_26} @{news_shock_value_27} @{news_shock_value_28} @{news_shock_value_29} @{news_shock_value_30}
+         @{news_shock_value_31} @{news_shock_value_32} @{news_shock_value_33} @{news_shock_value_34} @{news_shock_value_35}
+         @{news_shock_value_36} @{news_shock_value_37} @{news_shock_value_38} @{news_shock_value_39} @{news_shock_value_40}
+         @{news_shock_value_41} @{news_shock_value_42} @{news_shock_value_43} @{news_shock_value_44} @{news_shock_value_45}
+         @{news_shock_value_46} @{news_shock_value_47} @{news_shock_value_48} @{news_shock_value_49} @{news_shock_value_50};
 
   var SurpriseShock;
-  periods @{surprise_shock_period_1} @{surprise_shock_period_2} @{surprise_shock_period_3} @{surprise_shock_period_4} @{surprise_shock_period_5};
-  values @{surprise_shock_value_1} @{surprise_shock_value_2} @{surprise_shock_value_3} @{surprise_shock_value_4} @{surprise_shock_value_5};
+  periods @{surprise_shock_period_1} @{surprise_shock_period_2} @{surprise_shock_period_3} @{surprise_shock_period_4} @{surprise_shock_period_5}
+          @{surprise_shock_period_6} @{surprise_shock_period_7} @{surprise_shock_period_8} @{surprise_shock_period_9} @{surprise_shock_period_10}
+          @{surprise_shock_period_11} @{surprise_shock_period_12} @{surprise_shock_period_13} @{surprise_shock_period_14} @{surprise_shock_period_15}
+          @{surprise_shock_period_16} @{surprise_shock_period_17} @{surprise_shock_period_18} @{surprise_shock_period_19} @{surprise_shock_period_20}
+          @{surprise_shock_period_21} @{surprise_shock_period_22} @{surprise_shock_period_23} @{surprise_shock_period_24} @{surprise_shock_period_25}
+          @{surprise_shock_period_26} @{surprise_shock_period_27} @{surprise_shock_period_28} @{surprise_shock_period_29} @{surprise_shock_period_30}
+          @{surprise_shock_period_31} @{surprise_shock_period_32} @{surprise_shock_period_33} @{surprise_shock_period_34} @{surprise_shock_period_35}
+          @{surprise_shock_period_36} @{surprise_shock_period_37} @{surprise_shock_period_38} @{surprise_shock_period_39} @{surprise_shock_period_40}
+          @{surprise_shock_period_41} @{surprise_shock_period_42} @{surprise_shock_period_43} @{surprise_shock_period_44} @{surprise_shock_period_45}
+          @{surprise_shock_period_46} @{surprise_shock_period_47} @{surprise_shock_period_48} @{surprise_shock_period_49} @{surprise_shock_period_50};
+  values @{surprise_shock_value_1} @{surprise_shock_value_2} @{surprise_shock_value_3} @{surprise_shock_value_4} @{surprise_shock_value_5}
+         @{surprise_shock_value_6} @{surprise_shock_value_7} @{surprise_shock_value_8} @{surprise_shock_value_9} @{surprise_shock_value_10}
+         @{surprise_shock_value_11} @{surprise_shock_value_12} @{surprise_shock_value_13} @{surprise_shock_value_14} @{surprise_shock_value_15}
+         @{surprise_shock_value_16} @{surprise_shock_value_17} @{surprise_shock_value_18} @{surprise_shock_value_19} @{surprise_shock_value_20}
+         @{surprise_shock_value_21} @{surprise_shock_value_22} @{surprise_shock_value_23} @{surprise_shock_value_24} @{surprise_shock_value_25}
+         @{surprise_shock_value_26} @{surprise_shock_value_27} @{surprise_shock_value_28} @{surprise_shock_value_29} @{surprise_shock_value_30}
+         @{surprise_shock_value_31} @{surprise_shock_value_32} @{surprise_shock_value_33} @{surprise_shock_value_34} @{surprise_shock_value_35}
+         @{surprise_shock_value_36} @{surprise_shock_value_37} @{surprise_shock_value_38} @{surprise_shock_value_39} @{surprise_shock_value_40}
+         @{surprise_shock_value_41} @{surprise_shock_value_42} @{surprise_shock_value_43} @{surprise_shock_value_44} @{surprise_shock_value_45}
+         @{surprise_shock_value_46} @{surprise_shock_value_47} @{surprise_shock_value_48} @{surprise_shock_value_49} @{surprise_shock_value_50};
 end;
 
 perfect_foresight_setup(periods=@{periods});

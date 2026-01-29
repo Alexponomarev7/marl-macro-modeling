@@ -83,6 +83,15 @@ parameters alpha beta delta rho sigma
   @#define productivity_shock_value_5 = 0.0
 @#endif
 
+@#for i in 6:50
+@#if !defined(productivity_shock_period_@{i})
+  @#define productivity_shock_period_@{i} = 1
+@#endif
+@#if !defined(productivity_shock_value_@{i})
+  @#define productivity_shock_value_@{i} = 0.0
+@#endif
+@#endfor
+
 @#ifndef periods
     @#define periods = 100
 @#endif
@@ -149,8 +158,26 @@ end;
 
 shocks;
   var LoggedProductivityInnovation;
-  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5};
+  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5}
+          @{productivity_shock_period_6} @{productivity_shock_period_7} @{productivity_shock_period_8} @{productivity_shock_period_9} @{productivity_shock_period_10}
+          @{productivity_shock_period_11} @{productivity_shock_period_12} @{productivity_shock_period_13} @{productivity_shock_period_14} @{productivity_shock_period_15}
+          @{productivity_shock_period_16} @{productivity_shock_period_17} @{productivity_shock_period_18} @{productivity_shock_period_19} @{productivity_shock_period_20}
+          @{productivity_shock_period_21} @{productivity_shock_period_22} @{productivity_shock_period_23} @{productivity_shock_period_24} @{productivity_shock_period_25}
+          @{productivity_shock_period_26} @{productivity_shock_period_27} @{productivity_shock_period_28} @{productivity_shock_period_29} @{productivity_shock_period_30}
+          @{productivity_shock_period_31} @{productivity_shock_period_32} @{productivity_shock_period_33} @{productivity_shock_period_34} @{productivity_shock_period_35}
+          @{productivity_shock_period_36} @{productivity_shock_period_37} @{productivity_shock_period_38} @{productivity_shock_period_39} @{productivity_shock_period_40}
+          @{productivity_shock_period_41} @{productivity_shock_period_42} @{productivity_shock_period_43} @{productivity_shock_period_44} @{productivity_shock_period_45}
+          @{productivity_shock_period_46} @{productivity_shock_period_47} @{productivity_shock_period_48} @{productivity_shock_period_49} @{productivity_shock_period_50};
+  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5}
+         @{productivity_shock_value_6} @{productivity_shock_value_7} @{productivity_shock_value_8} @{productivity_shock_value_9} @{productivity_shock_value_10}
+         @{productivity_shock_value_11} @{productivity_shock_value_12} @{productivity_shock_value_13} @{productivity_shock_value_14} @{productivity_shock_value_15}
+         @{productivity_shock_value_16} @{productivity_shock_value_17} @{productivity_shock_value_18} @{productivity_shock_value_19} @{productivity_shock_value_20}
+         @{productivity_shock_value_21} @{productivity_shock_value_22} @{productivity_shock_value_23} @{productivity_shock_value_24} @{productivity_shock_value_25}
+         @{productivity_shock_value_26} @{productivity_shock_value_27} @{productivity_shock_value_28} @{productivity_shock_value_29} @{productivity_shock_value_30}
+         @{productivity_shock_value_31} @{productivity_shock_value_32} @{productivity_shock_value_33} @{productivity_shock_value_34} @{productivity_shock_value_35}
+         @{productivity_shock_value_36} @{productivity_shock_value_37} @{productivity_shock_value_38} @{productivity_shock_value_39} @{productivity_shock_value_40}
+         @{productivity_shock_value_41} @{productivity_shock_value_42} @{productivity_shock_value_43} @{productivity_shock_value_44} @{productivity_shock_value_45}
+         @{productivity_shock_value_46} @{productivity_shock_value_47} @{productivity_shock_value_48} @{productivity_shock_value_49} @{productivity_shock_value_50};
 end;
 
 perfect_foresight_setup(periods=@{periods});
