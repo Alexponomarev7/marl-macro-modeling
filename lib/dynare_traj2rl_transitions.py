@@ -82,8 +82,11 @@ def _generate_shock_params(
     params[shock_count_name] = num_shocks
 
     period_range = shock_settings.get("period_range", [1, periods])
-    period_start = max(1, period_range[0])
-    period_end = min(periods, period_range[1])
+    # Support negative values as offset from periods (e.g., -50 means periods-50)
+    period_start = period_range[0] if period_range[0] >= 0 else periods + period_range[0]
+    period_end = period_range[1] if period_range[1] >= 0 else periods + period_range[1]
+    period_start = max(1, period_start)
+    period_end = min(periods, period_end)
     periods_available = list(range(period_start, period_end + 1))
 
     actual_num_shocks = min(num_shocks, len(periods_available))
@@ -115,7 +118,7 @@ def _generate_shock_params(
 def _generate_all_shocks(
     shocks_config: dict,
     periods: int,
-    max_shocks_per_type: int = 5
+    max_shocks_per_type: int = 50
 ) -> dict:
     """
     Generate parameters for all shock types.
@@ -335,7 +338,13 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
 
     for model_name, model_config in config.items():
         model_settings = model_config["dynare_model_settings"]
-        num_samples = model_settings["num_samples"]
+        num_samples_config = model_settings["num_samples"]
+        if isinstance(num_samples_config, dict):
+            base = num_samples_config["base"]
+            coefficient = num_samples_config.get("coefficient", 1.0)
+            num_samples = int(base * coefficient)
+        else:
+            num_samples = num_samples_config
         parameter_combinations, parameter_values = generate_parameter_combinations(model_settings, num_samples)
 
         for i, (combination, values) in enumerate(zip(parameter_combinations, parameter_values)):
