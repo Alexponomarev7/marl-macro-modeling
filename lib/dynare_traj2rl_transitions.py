@@ -77,6 +77,8 @@ def _generate_shock_params(
         Dictionary with shock parameters.
     """
     params = {}
+    # Ensure periods is an integer (may come as string from YAML/Hydra)
+    periods = int(periods)
 
     num_shocks = shock_settings.get("num_shocks", 0)
     params[shock_count_name] = num_shocks
@@ -85,8 +87,11 @@ def _generate_shock_params(
     # Support negative values as offset from periods (e.g., -50 means periods-50)
     period_start = period_range[0] if period_range[0] >= 0 else periods + period_range[0]
     period_end = period_range[1] if period_range[1] >= 0 else periods + period_range[1]
-    period_start = max(1, period_start)
-    period_end = min(periods, period_end)
+    period_start = max(1, min(period_start, periods))
+    period_end = max(1, min(periods, period_end))
+    # Ensure valid range (swap if needed, or use all periods if range is invalid)
+    if period_start > period_end:
+        period_start, period_end = 1, periods
     periods_available = list(range(period_start, period_end + 1))
 
     actual_num_shocks = min(num_shocks, len(periods_available))
@@ -132,6 +137,8 @@ def _generate_all_shocks(
         Dictionary with all shock parameters for Dynare.
     """
     all_params = {}
+    # Ensure periods is an integer (may come as string from YAML/Hydra)
+    periods = int(periods)
 
     for shock_name, shock_settings in shocks_config.items():
         shock_params = _generate_shock_params(
@@ -242,6 +249,14 @@ def run_model(
         parameters: List of parameter strings to pass to Dynare
         max_retries: Maximum number of retry attempts
     """
+    if "DYNARE_PATH" not in os.environ:
+        raise RuntimeError(
+            "DYNARE_PATH environment variable is not set. "
+            "Please set it to the path of your Dynare installation, e.g.:\n"
+            "  export DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab\n"
+            "Or run the script with:\n"
+            "  DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab python lib/dynare_traj2rl_transitions.py"
+        )
     retries = 0
     while retries < max_retries:
         print(f"Running model: {input_file} (attempt {retries + 1})")

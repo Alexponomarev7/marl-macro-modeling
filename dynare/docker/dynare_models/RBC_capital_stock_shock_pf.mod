@@ -93,14 +93,8 @@ parameters alpha beta delta rho sigma psi
   @#define productivity_shock_value_5 = 0.0
 @#endif
 
-@#for i in 6:50
-@#if !defined(productivity_shock_period_@{i})
-  @#define productivity_shock_period_@{i} = 1
-@#endif
-@#if !defined(productivity_shock_value_@{i})
-  @#define productivity_shock_value_@{i} = 0.0
-@#endif
-@#endfor
+// Parameters for productivity shocks 6-50 must be passed via -D flags from command line
+// Python code always provides all 50 shock parameters
 
 @#if !defined(num_capital_shocks)
   @#define num_capital_shocks = 0
@@ -141,14 +135,8 @@ parameters alpha beta delta rho sigma psi
   @#define capital_shock_value_5 = 0.0
 @#endif
 
-@#for i in 6:50
-@#if !defined(capital_shock_period_@{i})
-  @#define capital_shock_period_@{i} = 1
-@#endif
-@#if !defined(capital_shock_value_@{i})
-  @#define capital_shock_value_@{i} = 0.0
-@#endif
-@#endfor
+// Parameters for capital shocks 6-50 must be passed via -D flags from command line
+// Python code always provides all 50 shock parameters
 
 alpha = @{alpha};
 beta = @{beta};

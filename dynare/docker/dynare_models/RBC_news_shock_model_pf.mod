@@ -126,14 +126,8 @@ parameters alpha        $alpha$ (long_name='capital share in production')
   @#define news_shock_value_5 = 0.0
 @#endif
 
-@#for i in 6:50
-@#if !defined(news_shock_period_@{i})
-  @#define news_shock_period_@{i} = 1
-@#endif
-@#if !defined(news_shock_value_@{i})
-  @#define news_shock_value_@{i} = 0.0
-@#endif
-@#endfor
+// Parameters for news shocks 6-50 must be passed via -D flags from command line
+// Python code always provides all 50 shock parameters
 
 @#if !defined(num_surprise_shocks)
   @#define num_surprise_shocks = 0
@@ -174,14 +168,8 @@ parameters alpha        $alpha$ (long_name='capital share in production')
   @#define surprise_shock_value_5 = 0.0
 @#endif
 
-@#for i in 6:50
-@#if !defined(surprise_shock_period_@{i})
-  @#define surprise_shock_period_@{i} = 1
-@#endif
-@#if !defined(surprise_shock_value_@{i})
-  @#define surprise_shock_value_@{i} = 0.0
-@#endif
-@#endfor
+// Parameters for surprise shocks 6-50 must be passed via -D flags from command line
+// Python code always provides all 50 shock parameters
 
 % Assign parameters
 alpha = @{alpha};
