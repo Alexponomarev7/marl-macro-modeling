@@ -37,7 +37,7 @@ platforms = ["osx-arm64"]
 lib = { path = ".", editable = true }
 
 [tool.pixi.tasks]
-dynare = "DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab python lib/dynare_traj2rl_transitions.py metadata.num_samples=1000"
+dynare = "DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab python lib/dynare_traj2rl_transitions.py"
 dataset = """DYNARE_PATH=/opt/homebrew/opt/dynare/lib/dynare/matlab python lib/generate_dataset.py train.dynare_output_path=data val.dynare_output_path=data workdir=data/processed"""
 dataset-variety = "python scripts/dataset_variety_report.py data/processed/train"
 pipeline = { cmd = [
