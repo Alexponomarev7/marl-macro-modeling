@@ -292,7 +292,7 @@ def run_model(
                     """
                 ]
 
-                process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             logger.info(f"Running command: {subprocess.list2cmdline(cmd)}")
             print(f"Command: {subprocess.list2cmdline(cmd)}")
             print(f"Parameters: {' '.join(parameters)}")
@@ -336,20 +336,32 @@ def run_model(
 
 
 def process_model_combination(args):
+    """Process a single model combination, returning success status instead of raising on failure."""
     _, input_file, base_name, combination, values, raw_data_dir = args
     output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
     output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
     config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
 
-    run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
-    print(f"Output saved to {output_file}")
-    print(f"Config saved to {config_file}")
-    print(f"Params saved to {output_params_file}")
+    try:
+        run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
+        print(f"Output saved to {output_file}")
+        print(f"Config saved to {config_file}")
+        print(f"Params saved to {output_params_file}")
+        return {"success": True, "model": base_name, "output_file": output_file}
+    except Exception as e:
+        error_msg = f"Failed to process model {base_name}: {str(e)}"
+        print(f"\n{'='*80}")
+        print(f"ERROR: {error_msg}")
+        print(f"Continuing with remaining models...")
+        print(f"{'='*80}\n")
+        logger.error(error_msg)
+        return {"success": False, "model": base_name, "error": str(e)}
 
 
 def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
     output_files = []
     tasks = []
+    task_to_output = {}  # Map base_name to output file paths
 
     for model_name, model_config in config.items():
         model_settings = model_config["dynare_model_settings"]
@@ -367,7 +379,7 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             base_name = "_".join([model_name, f"config_{i}"])
             output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
             output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
-            output_files.append((Path(output_file), Path(output_params_file)))
+            task_to_output[base_name] = (Path(output_file), Path(output_params_file))
             task = (model_name, input_file, base_name, combination, values, raw_data_dir)
             tasks.append(task)
 
@@ -375,7 +387,33 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
 
     with Pool(processes=num_processes) as pool:
-        pool.map(process_model_combination, tasks)
+        results = pool.map(process_model_combination, tasks)
+
+    # Process results and filter out failed tasks
+    successful = []
+    failed = []
+    for result in results:
+        if result["success"]:
+            successful.append(result["model"])
+            output_files.append(task_to_output[result["model"]])
+        else:
+            failed.append(result)
+
+    # Print summary
+    print(f"\n{'='*80}")
+    print(f"DYNARE EXECUTION SUMMARY")
+    print(f"{'='*80}")
+    print(f"Total tasks: {len(tasks)}")
+    print(f"Successful: {len(successful)}")
+    print(f"Failed: {len(failed)}")
+
+    if failed:
+        print(f"\nFailed models:")
+        for f in failed:
+            print(f"  - {f['model']}: {f['error'][:100]}...")
+        logger.warning(f"Pipeline completed with {len(failed)} failed models out of {len(tasks)}")
+
+    print(f"{'='*80}\n")
 
     return output_files
 
