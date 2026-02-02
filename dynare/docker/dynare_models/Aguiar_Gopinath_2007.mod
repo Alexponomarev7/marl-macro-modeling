@@ -36,7 +36,7 @@ varexo ShockProductivity   $ShockProductivity$ (long_name='Productivity Shock')
        ShockGovSpending    $ShockGovSpending$ (long_name='Government Spending Shock');
 
 parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
-           sigma ${\sigma}$            (long_name='Risk Aversion')
+           sigma ${\sigma}$                    (long_name='Risk Aversion')
            debt_share ${\alpha_D}$             (long_name='Debt Share')
            capital_share ${\alpha_K}$          (long_name='Capital Share')
            beta ${\beta}$                      (long_name='Discount Rate')
