@@ -244,31 +244,93 @@ def olg_log_utility_reward(
 def GarciaCicco(
     data: pd.DataFrame,
     parameters: dict[str, float],
-    **kwargs  # Accept any additional kwargs and ignore them
+    consumption_column: str = 'Consumption',
+    labor_column: str = 'Labor',
+    preference_shock_column: str | None = 'PreferenceShock',
+    gamma_column: str | None = None,
+    theta_column: str | None = None,
+    omega_column: str | None = None,
+    gamma_default: float = 2.0,
+    theta_default: float = 2.24,
+    omega_default: float = 1.6,
 ) -> pd.Series:
     """
-    Garcia-Cicco et al. (2010) utility reward function.
+    GHH (Greenwood-Hercowitz-Huffman) utility reward.
+    Used in Garcia-Cicco, Pancrazi, Uribe (2010).
+
+    U(C, H) = nu * [C - theta / omega * H^omega]^(1-gamma) / (1-gamma)
+
+    Key feature: No wealth effect on labor supply (C and H are not separable).
 
     Args:
-        data: DataFrame with Consumption, HoursWorked, PreferenceShock columns
-        parameters: Model parameters (theta, omega, gamma_a)
-        **kwargs: Additional parameters (ignored)
+        data: DataFrame with simulation data
+        parameters: Model parameters from Dynare
+        consumption_column: Column name for consumption
+        labor_column: Column name for hours worked
+        preference_shock_column: Column name for preference shock nu (or None)
+        gamma_column: Parameter name for risk aversion gamma
+        theta_column: Parameter name for labor utility weight theta
+        omega_column: Parameter name for labor disutility curvature omega
+        gamma_default: Default value for gamma
+        theta_default: Default value for theta (typically 1.4 * omega)
+        omega_default: Default value for omega
+    
+    Returns:
+        pd.Series with utility values for each period
     """
-    theta = parameters["theta"]
-    omega = parameters["omega"]
-    gamma = parameters["gamma_a"]
-
-    C = data["Consumption"].values
-    H = data["HoursWorked"].values
-    nu = data["PreferenceShock"].values
-
+    C = data[consumption_column]
+    H = data[labor_column]
+    
+    if preference_shock_column and preference_shock_column in data.columns:
+        nu = data[preference_shock_column]
+    else:
+        nu = 1.0
+    
+    gamma = (
+        data[gamma_column]
+        if gamma_column and gamma_column in data.columns
+        else parameters.get(gamma_column, gamma_default)
+        if gamma_column
+        else parameters.get('gamma_c', gamma_default)
+    )
+    
+    theta = (
+        data[theta_column]
+        if theta_column and theta_column in data.columns
+        else parameters.get(theta_column, theta_default)
+        if theta_column
+        else parameters.get('theta', theta_default)
+    )
+    
+    omega = (
+        data[omega_column]
+        if omega_column and omega_column in data.columns
+        else parameters.get(omega_column, omega_default)
+        if omega_column
+        else parameters.get('omega', omega_default)
+    )
+    
     consumption_equiv = C - (theta / omega) * (H ** omega)
-    consumption_equiv = np.maximum(consumption_equiv, 1e-8)
-    utility = nu * (consumption_equiv ** (1 - gamma))
-
-    utility_series = pd.Series(utility, index=data.index, name='utility')
-
-    return utility_series
+    consumption_equiv = np.maximum(consumption_equiv, 1e-10)
+    
+    if isinstance(gamma, (int, float)):
+        if np.isclose(gamma, 1.0):
+            utility = nu * np.log(consumption_equiv)
+        else:
+            utility = nu * (consumption_equiv ** (1 - gamma)) / (1 - gamma)
+    else:
+        utility = pd.Series(index=data.index, dtype=float)
+        log_mask = np.isclose(gamma, 1.0, atol=1e-6)
+        utility[log_mask] = nu * np.log(consumption_equiv[log_mask])
+        utility[~log_mask] = (
+            nu * (consumption_equiv[~log_mask] ** (1 - gamma[~log_mask])) 
+            / (1 - gamma[~log_mask])
+        )
+    
+    utility = utility.replace([np.inf, -np.inf], np.nan)
+    utility = utility.fillna(-1e6)
+    
+    return utility
 
 
 def log_utility_reward(
@@ -396,6 +458,148 @@ def ces_utility_reward(
         )
 
     utility = consumption_utility + leisure_utility
+    utility = utility.replace([np.inf, -np.inf], np.nan)
+    utility = utility.fillna(-1e6)
+
+    return utility
+
+
+def government_welfare(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str = 'Consumption',
+    labor_column: str = 'Labor',
+    output_column: str = 'Output',
+    gov_spending_column: str = 'GovSpending',
+    sigma_column: str | None = 'sigma',
+    lambda_utility: float = 1.0,
+    lambda_output_gap: float = 0.1,
+    lambda_smoothing: float = 0.05,
+) -> pd.Series:
+    """
+    Calculate government welfare function.
+
+    Welfare = lambda_u * U(C,L) - lambda_y * (Y/Y_ss - 1)² - lambda_g * (ΔG/G_ss)²
+    
+    where:
+    - U(C,L) is household utility from consumption and leisure
+    - (Y/Y_ss - 1)² penalizes deviations from steady-state output
+    - (ΔG/G_ss)² penalizes volatile government spending changes
+    
+    Args:
+        data: DataFrame with simulation data
+        parameters: Model parameters from Dynare
+        consumption_column: Column name for consumption data
+        labor_column: Column name for labor data
+        output_column: Column name for output data
+        gov_spending_column: Column name for government spending data
+        sigma_column: Column name for CRRA parameter (or None for default=1)
+        lambda_utility: Weight for household utility component
+        lambda_output_gap: Weight for output stabilization penalty
+        lambda_smoothing: Weight for government spending smoothing penalty
+    
+    Returns:
+        pd.Series with welfare values for each time period
+    """
+    C = data[consumption_column]
+    L = data[labor_column]
+    Y = data[output_column]
+    G = data[gov_spending_column]
+    
+    if sigma_column and sigma_column in parameters:
+        sigma = parameters[sigma_column]
+    else:
+        sigma = 1.0
+    
+    psi = parameters.get('psi', 1.0)
+    y_ss = parameters.get('y_ss', Y.mean())
+    g_ss = parameters.get('g_ss', G.mean())
+
+    if np.isclose(sigma, 1.0):
+        consumption_utility = np.log(C)
+    else:
+        consumption_utility = (C ** (1 - sigma)) / (1 - sigma)
+    
+    leisure = np.maximum(1 - L, 1e-10)
+    leisure_utility = psi * np.log(leisure)
+    household_utility = consumption_utility + leisure_utility
+
+    output_gap = ((Y - y_ss) / y_ss) ** 2
+
+    g_change = (G.diff().fillna(0) / g_ss) ** 2
+    
+    welfare = (
+        lambda_utility * household_utility 
+        - lambda_output_gap * output_gap 
+        - lambda_smoothing * g_change
+    )
+    
+    welfare = welfare.replace([np.inf, -np.inf], np.nan)
+    welfare = welfare.fillna(-1e6)
+    
+    return welfare
+
+
+def central_bank_loss(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    inflation_column: str = 'price_inflation',
+    output_gap_column: str = 'output_gap',
+    lambda_y: float = 0.5,
+    inflation_target: float = 0.0,
+) -> pd.Series:
+    """
+    Central bank quadratic loss function.
+    
+    L = pi² + lambda_y * y_gap²
+    
+    Returns -L as reward (minimizing loss = maximizing negative loss).
+    
+    Args:
+        data: DataFrame with simulation data
+        parameters: Model parameters
+        inflation_column: Column name for inflation
+        output_gap_column: Column name for output gap
+        lambda_y: Weight on output gap stabilization
+        inflation_target: Target inflation rate (usually 0 in linear models)
+    
+    Returns:
+        pd.Series with reward (negative loss) for each period
+    """
+    pi = data[inflation_column]
+    y_gap = data[output_gap_column]
+
+    loss = (pi - inflation_target)**2 + lambda_y * y_gap**2
+    reward = -loss
+
+    reward = reward.replace([np.inf, -np.inf], np.nan)
+    reward = reward.fillna(-1e6)
+
+    return reward
+
+
+def epstein_zin_utility(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str = 'Consumption',
+    labor_column: str = 'Labor',
+) -> pd.Series:
+    """
+    Period utility for Epstein-Zin preferences.
+    u(C, L) = C^nu * (1-L)^(1-nu)
+    This is the flow utility component before Epstein-Zin aggregation.
+    """
+    C = data[consumption_column]
+    L = data[labor_column]
+
+    nu = parameters.get('nu_consumption', 0.35)
+
+    leisure = np.maximum(1 - L, 1e-10)
+    utility = (C ** nu) * (leisure ** (1 - nu))
+
+    utility = np.log(np.maximum(utility, 1e-10))
+
+    utility = pd.Series(utility, index=data.index)
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
 
