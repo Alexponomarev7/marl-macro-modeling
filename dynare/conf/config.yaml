@@ -23,6 +23,7 @@ models:
         delta: [0.02, 0.15]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.log_reward
       reward_kwargs:
         target_column: Consumption
@@ -59,6 +60,7 @@ models:
         n: [0.0, 0.02]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: ConsumptionPerCapita
@@ -73,7 +75,7 @@ models:
         endogenous_columns:
           - InvestmentPerCapita
       output:
-        data_path: ./data/interim/Ramsey_cara
+        data_path: ./data/interim/Ramsey_crra
 
 
   Ramsey_cara:
@@ -97,6 +99,7 @@ models:
         n: [0.0, 0.02]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.cara_reward
       reward_kwargs:
         target_column: ConsumptionPerCapita
@@ -135,6 +138,7 @@ models:
         n: [0.0, 0.02]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: ConsumptionPerCapita
@@ -171,6 +175,7 @@ models:
         g: [0.2, 0.3]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.olg_log_utility_reward
       reward_kwargs:
         consumption_young_column: ConsYoung
@@ -207,11 +212,12 @@ models:
         sigma: [0.5, 3.0]
       shocks:
         productivity:
-          num_shocks: 50
-          period_range: [10, -50]  # [start, periods-50]
+          num_shocks: 4
+          period_range: [10, 90]
           value_range: [-0.1, 0.1]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: Consumption
@@ -246,6 +252,7 @@ models:
         productivity_shock_stderr: [0.005, 0.03]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: Consumption
@@ -281,15 +288,16 @@ models:
         l_ss_target: [0.30, 0.40]
       shocks:
         productivity:
-          num_shocks: 50
-          period_range: [10, -50]  # [start, periods-50]
+          num_shocks: 4
+          period_range: [20, 80]
           value_range: [-0.1, 0.1]
         capital:
-          num_shocks: 50
-          period_range: [10, -50]  # [start, periods-50]
+          num_shocks: 2
+          period_range: [20, 80]
           value_range: [0.01, 0.15]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.ces_utility_reward
       reward_kwargs:
         consumption_column: Consumption
@@ -329,8 +337,10 @@ models:
         sigma: [1.0, 2.0]
         l_ss_target: [0.30, 0.40]
         productivity_shock_stderr: [0.005, 0.03]
+        capital_shock_stderr: [0.005, 0.02]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.ces_utility_reward
       reward_kwargs:
         consumption_column: Consumption
@@ -374,15 +384,16 @@ models:
         start_capital_ratio: [0.7, 1.3]
       shocks:
         news:
-          num_shocks: 50
-          period_range: [10, -50]  # [start, periods-50]
+          num_shocks: 3
+          period_range: [10, 70]
           value_range: [-0.03, 0.03]
         surprise:
-          num_shocks: 50
-          period_range: [10, -50]  # [start, periods-50]
+          num_shocks: 2
+          period_range: [20, 80]
           value_range: [-0.05, 0.05]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.ces_utility_reward
       reward_kwargs:
         consumption_column: Consumption
@@ -425,6 +436,7 @@ models:
         surprise_shock_stderr: [0.005, 0.02]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: Consumption
@@ -464,6 +476,7 @@ models:
         gov_spending_shock_stderr: [0.008, 0.015]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.stability_reward
       reward_kwargs:
         target_column: Consumption
@@ -506,6 +519,7 @@ models:
         gov_spending_shock_stderr: [0.008, 0.015]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.government_welfare
       reward_kwargs:
         consumption_column: Consumption
@@ -555,6 +569,7 @@ models:
         shock_productivity_stderr: [0.003, 0.006]     # Std dev of productivity shock
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.stability_reward
       reward_kwargs:
         target_column: Utility
@@ -603,6 +618,7 @@ models:
         country_premium_shock_stderr: [0.0, 0.0]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.GarciaCicco
       reward_kwargs:
         consumption_column: Consumption
@@ -662,6 +678,7 @@ models:
         preference_shock_stderr: [0.5, 1.5]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.central_bank_loss
       reward_kwargs:
         inflation_column: PriceInflation
@@ -711,6 +728,7 @@ models:
         volatility_shock_stderr: [0.8, 1.2]
 
     rl_env_settings:
+      discount_factor_param: beta
       reward: lib.rewards.epstein_zin_utility
       reward_kwargs:
         consumption_column: Consumption
@@ -734,70 +752,170 @@ models:
         data_path: ./data/interim/Caldara_et_al_2012
 
 
-# Collard_2001_example1:
-#   dynare_model_settings:
-#     periods: 1000
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [1]  # Индекс колонки 'Consumption'
-#       weights: [1.0]       # Вес для стабильности потребления
-#     input:
-#       data_path: ./data/raw/Collard_2001_example1_raw.csv  # Путь к CSV-файлу с данными
-#       state_columns:
-#         - Output                             # Выпуск
-#         - Consumption                        # Потребление
-#         - Capital                            # Капитал
-#         - Technology Shock                   # Технологический шок
-#         - Labor                              # Труд
-#         - Preference Shock                   # Шок предпочтений
-#       action_columns:
-#         - Consumption  # Управляемая переменная (потребление)
-#     output:
-#       data_path: ./data//Collard_2001_example1  # Путь для сохранения обработанных данных
+  Collard_2001:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0  # actual = int(base * coefficient)
+      parameter_ranges:
+        alpha: [0.30, 0.42]
+        beta: [0.97, 0.995]
+        delta: [0.02, 0.04]
+        psi: [0.0, 1.0]
+        rho: [0.90, 0.98]
+        tau: [0.01, 0.05]
+        phi: [0.05, 0.20]
+        h_ss_target: [0.25, 0.40]
+        technology_shock_stderr: [0.005, 0.015]
+        preference_shock_stderr: [0.005, 0.015]
+    
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.log_reward
+      reward_kwargs:
+        target_column: Consumption
+      input:
+        state_columns:
+          - [Capital, -1]
+          - TechnologyShock
+          - PreferenceShock
+        action_columns:
+          - Consumption
+          - Labor
+        endogenous_columns:
+          - Output
+      output:
+        data_path: ./data/interim/Collard_2001
 
 
-# Faia_2008:
-#   dynare_model_settings:
-#     periods: 1000
-#     Ramsey: [0, 1]
+  Faia_2008:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0  # actual = int(base * coefficient)
+      parameter_ranges:
+        beta: [0.9, 0.995]
+        sigma: [1.5, 3.0]
+        epsilon: [5.0, 11.0]
+        psi_p: [30.0, 80.0]
+        xi: [0.3, 0.5]
+        rho_sep: [0.05, 0.12]
+        varsigma: [0.4, 0.6]
+        b_w_target: [0.4, 0.6]
+        lambda_w: [0.4, 0.8]
+        g_share: [0.1, 0.5]
+        rho_z: [0.90, 0.98]
+        rho_g: [0.85, 0.95]
+        stderr_z: [0.005, 0.02]
+        stderr_g: [0.005, 0.02]
 
-#   rl_env_settings:
-#     reward: lib.rewards.stability_reward
-#     reward_kwargs:
-#       target_indices: [3]  # Индекс колонки 'Inflation Rate'
-#       weights: [1.0]       # Вес для стабильности инфляции
-#     input:
-#       data_path: ./data/raw/Faia_2008_raw.csv  # Путь к CSV-файлу с данными
-#       state_columns:
-#         - Lagrange Multiplier A               # Лагранжиан A
-#         - Consumption                         # Потребление
-#         - Nominal Interest Rate               # Номинальная процентная ставка
-#         - Inflation Rate                      # Инфляция
-#         - Market Tightness                    # Напряженность на рынке труда
-#         - Vacancies                           # Вакансии
-#         - Unemployment Rate                   # Уровень безработицы
-#         - Matches                             # Совпадения на рынке труда
-#         - Meeting Rate Between Firms And Workers  # Вероятность встречи фирм и работников
-#         - Employment                          # Занятость
-#         - Gross Output A                      # Валовой выпуск A
-#         - Gross Output B                      # Валовой выпуск B
-#         - Lagrange Multiplier B               # Лагранжиан B
-#         - Log TFP                             # Лог TFP
-#         - Marginal Costs                      # Предельные издержки
-#         - Real Wage                           # Реальная заработная плата
-#         - Government Spending                 # Государственные расходы
-#         - Government Spending Shock           # Шок государственных расходов
-#         - Log Output                          # Лог выпуска
-#         - Log Vacancies                       # Лог вакансий
-#         - Log Wages                           # Лог заработной платы
-#         - Log Unemployment                    # Лог безработицы
-#         - Log Tightness A                     # Лог напряженности A
-#         - Log Tightness B                     # Лог напряженности B
-#       action_columns:
-#         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
-#     output:
-#       data_path: ./data/interim/Faia_2008  # Путь для сохранения обработанных данных
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: InflationRate
+      input:
+        state_columns:
+          - [Employment, -1]
+          - [Vacancies, -1]
+          - [MeetingRate, -1]
+          - [NominalInterestRate, -1]
+          - LogTFP
+          - GovernmentSpendingShock
+          - Consumption
+          - InflationRate
+          - UnemploymentRate
+          - MarginalCosts
+          - RealWage
+          - GrossOutputB
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - LagrangeMultiplierA
+          - LagrangeMultiplierB
+          - MarketTightness
+          - Matches
+          - GrossOutputA
+          - GovernmentSpending
+          - LogOutput
+          - LogVacancies
+          - LogWages
+          - LogUnemployment
+          - LogTightnessA
+          - LogTightnessB
+      output:
+        data_path: ./data/interim/Faia_2008
+
+
+  Faia_Monacelli_2008:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0  # actual = int(base * coefficient)
+      parameter_ranges:
+        beta: [0.98, 0.995]
+        sigma: [1.0, 3.0]
+        phi: [1.0, 5.0]
+        eta: [0.5, 2.0]
+        gamma_h: [0.5, 0.9]
+        epsilon: [5.0, 11.0]
+        psi_p: [30.0, 100.0]
+        rho_a: [0.8, 0.95]
+        rho_ystar: [0.8, 0.95]
+        rho_pistar: [0.3, 0.7]
+        phi_pi: [1.2, 2.5]
+        phi_y: [0.0, 0.5]
+        stderr_a: [0.005, 0.02]
+        stderr_ystar: [0.005, 0.02]
+        stderr_pistar: [0.002, 0.01]
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.soe_welfare_reward
+      reward_kwargs:
+        consumption_column: Consumption
+        labor_column: Labor
+        sigma_column: sigma
+        phi_column: phi
+        sigma_default: 1.0
+        phi_default: 3.0
+      input:
+        state_columns:
+          - [TermsOfTrade, -1]
+          - [NominalExchangeRate, -1]
+          - [NominalInterestRate, -1]
+          - [PriceRatioH, -1]
+          - LogProductivity
+          - OutputForeign
+          - InflationForeign
+          - Consumption
+          - Output
+          - RealExchangeRate
+          - InflationCPI
+          - MarginalCost
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - InflationH
+          - ConsumptionH
+          - ConsumptionF
+          - Labor
+          - Wage
+          - Lambda
+          - RealInterestRate
+          - DepreciationRate
+          - Productivity
+          - ConsumptionForeign
+          - LogOutput
+          - LogConsumption
+          - LogRealExchangeRate
+          - LogTermsOfTrade
+          - LogInflationH
+      output:
+        data_path: ./data/interim/Faia_Monacelli_2008
 
 
 # FV_et_al_2007_ABCD:
@@ -963,58 +1081,6 @@ models:
 #         - Investment  # Управляемая переменная (инвестиции)
 #     output:
 #       data_path: ./data/interim/GarciaCicco_et_al_2010  # Путь для сохранения обработанных данных
-
-
-##  Born_Pfeifer_2018_MP:
-##   dynare_model_settings:
-##     periods: 1000
-##     num_samples: ${metadata.num_samples}
-##     fixed_WPC_slope: [0, 1]
-##     SGU_framework: [0, 1]
-##     Calvo: 1  # Must be 1 when fixed_WPC_slope=0 to avoid undefined calvo_wages reference
-##     taxes: [0, 1]
-##
-##   rl_env_settings:
-##     reward: lib.rewards.stability_reward
-##     reward_kwargs:
-##       target_indices: [0]  # Индекс колонки 'Price Inflation'
-##       weights: [1.0]       # Вес для стабильности инфляции
-##     input:
-##       data_path: ./data/raw/Born_Pfeifer_2018_MP_raw.csv
-##       state_columns:
-##         - Price Inflation               # Инфляция цен
-##         - Output Gap                    # Разрыв выпуска
-##         - Natural Output                # Естественный выпуск
-##         - Output                        # Выпуск
-##         - Output Deviation From Steady State  # Отклонение выпуска от устойчивого состояния
-##         - Natural Interest Rate         # Естественная процентная ставка
-##         - Real Interest Rate            # Реальная процентная ставка
-##         - Nominal Interest Rate         # Номинальная процентная ставка
-##         - Hours Worked                  # Отработанные часы
-##         - Real Money Stock              # Реальный запас денег
-##         - Money Growth Annualized       # Годовой рост денежной массы
-##         - Nominal Money Stock           # Номинальный запас денег
-##         - AR(1) Monetary Policy Shock Process  # Шок монетарной политики
-##         - AR(1) Technology Shock Process  # Технологический шок
-##         - Annualized Real Interest Rate  # Годовая реальная процентная ставка
-##         - Annualized Nominal Interest Rate  # Годовая номинальная процентная ставка
-##         - Annualized Natural Interest Rate  # Годовая естественная процентная ставка
-##         - Annualized Inflation Rate     # Годовая инфляция
-##         - AR(1) Preference Shock Process  # Шок предпочтений
-##         - Price Level                   # Уровень цен
-##         - Nominal Wage                  # Номинальная заработная плата
-##         - Consumption                   # Потребление
-##         - Real Wage                     # Реальная заработная плата
-##         - Real Wage Gap                 # Разрыв реальной заработной платы
-##         - Wage Inflation                # Инфляция заработной платы
-##         - Natural Real Wage             # Естественная реальная заработная плата
-##         - Markup                        # Наценка
-##         - Annualized Wage Inflation Rate  # Годовая инфляция заработной платы
-##       action_columns:
-##         - Nominal Interest Rate  # Управляемая переменная (номинальная процентная ставка)
-##     output:
-##       data_path: ./data/interim/Born_Pfeifer_2018_MP
-
 
   # Collard_2001_example1:
   #  dynare_model_settings:

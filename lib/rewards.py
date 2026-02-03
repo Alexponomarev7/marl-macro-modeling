@@ -88,10 +88,17 @@ def log_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     target_column: str = "Consumption",
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     Log utility: U(C) = ln(C)
     This is CRRA with sigma = 1.
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters (unused)
+        target_column: Column name for consumption
+        **kwargs: Additional parameters (ignored)
     """
     consumption = data[target_column]
 
@@ -108,8 +115,21 @@ def crra_reward(
     target_column: str | None = None,
     sigma_column: str | None = None,
     sigma_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
-    assert target_column is not None
+    """
+    CRRA (Constant Relative Risk Aversion) utility reward:
+    U(c) = c^(1-sigma)/(1-sigma) for sigma ≠ 1, or U(c) = ln(c) for sigma = 1
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        target_column: Column name for consumption
+        sigma_column: Column name or parameter name for risk aversion coefficient
+        sigma_default: Default value for sigma
+        **kwargs: Additional parameters (ignored)
+    """
+    assert target_column is not None, "target_column must be provided"
 
     consumption = data[target_column]
 
@@ -143,6 +163,7 @@ def cara_reward(
     target_column: str | None = None,
     sigma_column: str | None = None,
     sigma_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CARA (Constant Absolute Risk Aversion) utility reward:
@@ -151,14 +172,15 @@ def cara_reward(
     Or equivalently (monotonic transformation):
     U(c) = 1 - exp(-sigma * c)
 
-    :param data: DataFrame with consumption data
-    :param parameters: model parameters
-    :param target_column: column name for consumption
-    :param sigma_column: column name or parameter name for risk aversion coefficient
-    :param sigma_default: default value for sigma
-    :return: utility series
+    Args:
+        data: DataFrame with consumption data
+        parameters: Model parameters
+        target_column: Column name for consumption
+        sigma_column: Column name or parameter name for risk aversion coefficient
+        sigma_default: Default value for sigma
+        **kwargs: Additional parameters (ignored)
     """
-    assert target_column is not None
+    assert target_column is not None, "target_column must be provided"
 
     consumption = data[target_column]
 
@@ -183,6 +205,7 @@ def olg_log_utility_reward(
     consumption_old_column: str = 'ConsOld',
     beta_column: str | None = None,
     beta_default: float = 0.4,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     OLG (Overlapping Generations) log utility reward:
@@ -191,13 +214,14 @@ def olg_log_utility_reward(
     Note: In OLG models, beta represents discounting between youth and old age,
     not between periods as in Ramsey model.
 
-    :param data: DataFrame with consumption data
-    :param parameters: model parameters including beta
-    :param consumption_young_column: column name for young consumption
-    :param consumption_old_column: column name for old consumption
-    :param beta_column: column name or parameter name for discount factor
-    :param beta_default: default value for beta
-    :return: utility series
+    Args:
+        data: DataFrame with consumption data
+        parameters: Model parameters including beta
+        consumption_young_column: Column name for young consumption
+        consumption_old_column: Column name for old consumption
+        beta_column: Column name or parameter name for discount factor
+        beta_default: Default value for beta
+        **kwargs: Additional parameters (ignored)
     """
 
     c1 = data[consumption_young_column]
@@ -209,7 +233,7 @@ def olg_log_utility_reward(
         beta = parameters[beta_column]
     else:
         beta = beta_default
-    
+
     utility = np.log(c1) + beta * np.log(c2)
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
@@ -233,11 +257,11 @@ def GarciaCicco(
     """
     GHH (Greenwood-Hercowitz-Huffman) utility reward.
     Used in Garcia-Cicco, Pancrazi, Uribe (2010).
-    
+
     U(C, H) = nu * [C - theta / omega * H^omega]^(1-gamma) / (1-gamma)
-    
+
     Key feature: No wealth effect on labor supply (C and H are not separable).
-    
+
     Args:
         data: DataFrame with simulation data
         parameters: Model parameters from Dynare
@@ -316,10 +340,20 @@ def log_utility_reward(
     labor_column: str = 'Population',
     A_column: str | None = None,
     A_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     Log utility reward:
     U(C,L) = ln(C) + A * ln(1-L)
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        consumption_column: Column name for consumption
+        labor_column: Column name for labor
+        A_column: Column name or parameter name for A coefficient
+        A_default: Default value for A
+        **kwargs: Additional parameters (ignored)
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -346,13 +380,27 @@ def ces_utility_reward(
     sigma_column: str | None = None,
     eta_column: str | None = None,
     A_column: str | None = None,
-    sigma_default: float = 1.0,
+    sigma_default: float = 2.0,
     eta_default: float = 1.0,
     A_default: float = 1.0,
+    **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CES utility reward:
-    U(C,L) = C^(1-sigma) / (1-sigma) + A * (1-L)^(1-η) / (1-η)
+    U(C,L) = C^(1-sigma)/(1-sigma) + A * (1-L)^(1-eta)/(1-eta)
+
+    Args:
+        data: DataFrame with state/action variables
+        parameters: Model parameters
+        consumption_column: Column name for consumption
+        labor_column: Column name for labor
+        sigma_column: Column name or parameter name for sigma
+        eta_column: Column name or parameter name for eta
+        A_column: Column name or parameter name for A
+        sigma_default: Default value for sigma
+        eta_default: Default value for eta
+        A_default: Default value for A
+        **kwargs: Additional parameters (ignored)
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -395,7 +443,7 @@ def ces_utility_reward(
         )
 
     leisure = np.maximum(1 - L, 1e-10)
-    
+
     if isinstance(eta, (int, float)):
         if np.isclose(eta, 1.0):
             leisure_utility = A * np.log(leisure)
@@ -429,24 +477,29 @@ def government_welfare(
     lambda_smoothing: float = 0.05,
 ) -> pd.Series:
     """
-    Функция благосостояния правительства.
+    Calculate government welfare function.
 
-    W = lambda_u * U(C,L) - lambda_y * (Y/Y_ss - 1)^2 - lambda_g * (ΔG/G_ss)^2
-
+    Welfare = lambda_u * U(C,L) - lambda_y * (Y/Y_ss - 1)² - lambda_g * (ΔG/G_ss)²
+    
+    where:
+    - U(C,L) is household utility from consumption and leisure
+    - (Y/Y_ss - 1)² penalizes deviations from steady-state output
+    - (ΔG/G_ss)² penalizes volatile government spending changes
+    
     Args:
-        data: DataFrame с данными симуляции
-        parameters: Параметры модели из Dynare
-        consumption_column: Название колонки потребления
-        labor_column: Название колонки труда
-        output_column: Название колонки выпуска
-        gov_spending_column: Название колонки госрасходов
-        sigma_column: Название параметра CRRA (или None для default=1)
-        lambda_utility: Вес полезности домохозяйств
-        lambda_output_gap: Вес стабилизации выпуска
-        lambda_smoothing: Вес сглаживания госрасходов
+        data: DataFrame with simulation data
+        parameters: Model parameters from Dynare
+        consumption_column: Column name for consumption data
+        labor_column: Column name for labor data
+        output_column: Column name for output data
+        gov_spending_column: Column name for government spending data
+        sigma_column: Column name for CRRA parameter (or None for default=1)
+        lambda_utility: Weight for household utility component
+        lambda_output_gap: Weight for output stabilization penalty
+        lambda_smoothing: Weight for government spending smoothing penalty
     
     Returns:
-        pd.Series с значениями welfare для каждого периода
+        pd.Series with welfare values for each time period
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -498,7 +551,7 @@ def central_bank_loss(
     """
     Central bank quadratic loss function.
     
-    L = π² + λ_y * y_gap²
+    L = pi² + lambda_y * y_gap²
     
     Returns -L as reward (minimizing loss = maximizing negative loss).
     
@@ -515,14 +568,15 @@ def central_bank_loss(
     """
     pi = data[inflation_column]
     y_gap = data[output_gap_column]
-    
+
     loss = (pi - inflation_target)**2 + lambda_y * y_gap**2
     reward = -loss
-    
+
     reward = reward.replace([np.inf, -np.inf], np.nan)
     reward = reward.fillna(-1e6)
-    
+
     return reward
+
 
 def epstein_zin_utility(
     data: pd.DataFrame,
@@ -532,9 +586,7 @@ def epstein_zin_utility(
 ) -> pd.Series:
     """
     Period utility for Epstein-Zin preferences.
-
     u(C, L) = C^nu * (1-L)^(1-nu)
-
     This is the flow utility component before Epstein-Zin aggregation.
     """
     C = data[consumption_column]
@@ -552,3 +604,62 @@ def epstein_zin_utility(
     utility = utility.fillna(-1e6)
 
     return utility
+
+
+def soe_welfare_reward(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str = 'Consumption',
+    labor_column: str = 'Labor',
+    sigma_column: str | None = None,
+    phi_column: str | None = None,
+    sigma_default: float = 1.0,
+    phi_default: float = 3.0,
+    **kwargs
+) -> pd.Series:
+    """
+    Small Open Economy welfare reward from Faia & Monacelli (2008).
+    
+    Welfare: W = U(C) - V(L) = C^(1-sigma)/(1-sigma) - L^(1+phi)/(1+phi)
+    For sigma=1: U(C) = log(C)
+    
+    Args:
+        data: DataFrame with Consumption and Labor columns
+        parameters: Model parameters
+        consumption_column: Column name for consumption
+        labor_column: Column name for labor
+        sigma_column: Parameter name for risk aversion
+        phi_column: Parameter name for inverse Frisch elasticity
+        sigma_default: Default value for sigma
+        phi_default: Default value for phi
+        **kwargs: Additional parameters (ignored)
+    
+    Returns:
+        Series of welfare values
+    """
+    C = data[consumption_column]
+    L = data[labor_column]
+    
+    if sigma_column is not None and sigma_column in parameters:
+        sigma = parameters[sigma_column]
+    else:
+        sigma = sigma_default
+    
+    if phi_column is not None and phi_column in parameters:
+        phi = parameters[phi_column]
+    else:
+        phi = phi_default
+    
+    if np.isclose(sigma, 1.0):
+        utility_c = np.log(C)
+    else:
+        utility_c = (C ** (1 - sigma) - 1) / (1 - sigma)
+    
+    disutility_l = L ** (1 + phi) / (1 + phi)
+    
+    welfare = utility_c - disutility_l
+    
+    welfare = welfare.replace([np.inf, -np.inf], np.nan)
+    welfare = welfare.fillna(-1e6)
+    
+    return welfare
