@@ -1,7 +1,7 @@
 metadata:
   data_folder: data
-  periods: 1000
-  num_samples: 2000
+  periods: 10
+  num_samples: 10
 
 models:
 
@@ -769,7 +769,7 @@ models:
         h_ss_target: [0.25, 0.40]
         technology_shock_stderr: [0.005, 0.015]
         preference_shock_stderr: [0.005, 0.015]
-    
+
     rl_env_settings:
       discount_factor_param: beta
       reward: lib.rewards.log_reward

@@ -1014,16 +1014,17 @@ def process_model_data(
 
     transitions["info"] = transitions["info"].apply(_add_env_group)
 
-    # Map column names to long_names from .mod file for precise descriptions
-    def _map_columns_to_long_names(columns: list[str]) -> list[str]:
-        """Map column names to their long_name from .mod file, falling back to column name if not found."""
+    # Map column names to short names (symbols) from .mod file if available, otherwise use long names
+    def _map_columns_to_short_names(columns: list[str]) -> list[str]:
+        """Map column names to their short name (symbol) from .mod file if available, otherwise use long_name, falling back to column name if not found."""
         if not mod_file_path.exists():
             return columns  # Fallback to column names if .mod file not available
 
         mod_text = mod_file_path.read_text(errors="ignore")
         sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_text)
 
-        # Create reverse mapping: long_name -> symbol (to find which symbol has this long_name)
+        # Create mappings: symbol -> long_name and long_name -> symbol
+        symbol_to_long: dict[str, str] = {}
         long_name_to_symbol: dict[str, str] = {}
         var_section_pattern = re.compile(
             r"\b(?:var|varexo)\b.*?(?=\b(?:varexo|parameters|model|steady_state_model)\b|$)",
@@ -1037,22 +1038,37 @@ def process_model_data(
         for m in pat.finditer(var_text):
             sym = m.group("sym")
             long_name = m.group("long")
-            # Store first occurrence (prefer lowercase symbol)
+            # Store symbol -> long_name mapping
+            symbol_to_long[sym] = long_name
+            # Store long_name -> symbol mapping (prefer first occurrence, then prefer lowercase symbol)
             if long_name not in long_name_to_symbol or sym.islower():
                 long_name_to_symbol[long_name] = sym
 
         # Collect all long_names from .mod file for direct matching
         all_long_names = set(sym_tex_to_long.values())
+        all_symbols = set(symbol_to_long.keys())
 
-        long_names = []
+        short_names = []
         for col in columns:
-            # Strategy 1: Column is already a long_name from .mod file
-            if col in all_long_names:
-                long_names.append(col)
-            # Strategy 2: Column name (as symbol/TeX) maps directly to a long_name
+            # Strategy 1: Column is already a symbol from .mod file
+            if col in all_symbols:
+                short_names.append(col)
+            # Strategy 2: Column is already a long_name from .mod file -> map to symbol
+            elif col in all_long_names:
+                # Use symbol if available, otherwise fall back to long_name
+                short_names.append(long_name_to_symbol.get(col, col))
+            # Strategy 3: Column name (as symbol/TeX) maps to a long_name -> get symbol
             elif col in sym_tex_to_long:
-                long_names.append(sym_tex_to_long[col])
-            # Strategy 3: Resolve through alias chain and check if canonical name is a long_name
+                long_name = sym_tex_to_long[col]
+                # Check if col itself is a symbol (even if not in all_symbols due to case/variant)
+                # Extract base symbol from col if it looks like one
+                if col in symbol_to_long:
+                    # col is the symbol itself
+                    short_names.append(col)
+                else:
+                    # col is TeX/variant, map long_name back to symbol
+                    short_names.append(long_name_to_symbol.get(long_name, long_name))
+            # Strategy 4: Resolve through alias chain and check if canonical name is a symbol/long_name
             else:
                 canonical = col
                 seen = set()
@@ -1060,26 +1076,34 @@ def process_model_data(
                     seen.add(canonical)
                     canonical = _COLUMN_ALIASES[canonical]
 
-                # Check if canonical name is already a long_name
-                if canonical in all_long_names:
-                    long_names.append(canonical)
-                # Check if canonical name maps to a long_name via symbol lookup
+                # Check if canonical name is already a symbol
+                if canonical in all_symbols:
+                    short_names.append(canonical)
+                # Check if canonical name is already a long_name -> map to symbol
+                elif canonical in all_long_names:
+                    short_names.append(long_name_to_symbol.get(canonical, canonical))
+                # Check if canonical name maps to a long_name via symbol lookup -> get symbol
                 elif canonical in sym_tex_to_long:
-                    long_names.append(sym_tex_to_long[canonical])
+                    long_name = sym_tex_to_long[canonical]
+                    # Check if canonical itself is a symbol
+                    if canonical in symbol_to_long:
+                        short_names.append(canonical)
+                    else:
+                        short_names.append(long_name_to_symbol.get(long_name, long_name))
                 else:
                     # Fallback: use column name as-is (might be a canonical name not in .mod)
-                    long_names.append(col)
+                    short_names.append(col)
 
-        return long_names
+        return short_names
 
-    # Use long_names from .mod files for descriptions
+    # Use short names (symbols) from .mod files for descriptions if available, otherwise use long names
     state_columns = state_accessor.get_columns()
     action_columns = rl_env_conf["input"]["action_columns"]
     endogenous_columns = endogenous_accessor.get_columns()
 
-    transitions["action_description"] = pd.Series([_map_columns_to_long_names(action_columns)] * len(transitions))
-    transitions["state_description"] = pd.Series([_map_columns_to_long_names(state_columns)] * len(transitions))
-    transitions["endogenous_description"] = pd.Series([_map_columns_to_long_names(endogenous_columns)] * len(transitions))
+    transitions["action_description"] = pd.Series([_map_columns_to_short_names(action_columns)] * len(transitions))
+    transitions["state_description"] = pd.Series([_map_columns_to_short_names(state_columns)] * len(transitions))
+    transitions["endogenous_description"] = pd.Series([_map_columns_to_short_names(endogenous_columns)] * len(transitions))
 
     transitions.to_parquet(output_path)
 

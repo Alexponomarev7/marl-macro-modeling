@@ -65,6 +65,7 @@ class Tokenizer:
         "Foreign Interest Rate",
         "Foreign Price Level",
         "GovSpending",
+        "LoggedGovSpending",
         "Government Spending Shock",
         "Gross Output A",
         "Gross Output B",
@@ -131,6 +132,9 @@ class Tokenizer:
         "Value Function",
         "Volatility",
         "Wage Inflation",
+        "LoggedVolatility",
+        "MeetingRate",
+        "MonetaryShock",
     )
 
     # State aliases for canonicalization across environments
@@ -189,6 +193,9 @@ class Tokenizer:
         "aggregate consumption": "Consumption",
         "aggregate capital": "Capital",
         "aggregate output": "Output",
+        "Logged TFP (transitory)": "LoggedProductivity",
+        "Log Volatility": "LoggedVolatility",
+        "meeting rate firms and workers": "MeetingRate",
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
@@ -576,12 +583,17 @@ x
 
         sorted_model_params = list(sorted(model_params.items()))
         model_params_values = torch.tensor([v for k, v in sorted_model_params] + [0] * (self.max_model_params_dim - len(sorted_model_params)), dtype=torch.float32)
+        model_params_values = model_params_values[:self.max_model_params_dim]
 
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
         state_description = data.iloc[0]["info"]["state_description"]
         action_description = data.iloc[0]["info"]["action_description"]
         endogenous_description = data.iloc[0]["info"]["endogenous_description"]
+        # Truncate descriptions if they exceed max dimensions, then pad to max dimensions
+        state_description = state_description[:self.max_state_dim]
+        action_description = action_description[:self.max_action_dim]
+        endogenous_description = endogenous_description[:self.max_endogenous_dim]
         states_info = torch.tensor([self.tokenizer.state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
         actions_info = torch.tensor([self.tokenizer.action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
         endogenous_info = torch.tensor([self.tokenizer.state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
