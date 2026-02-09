@@ -225,11 +225,17 @@ class Tokenizer:
         "leisure",
         "money_supply_change",
         "tax_rate_change",
+        "consumption (log)",
+        "hours worked (log)",
+        "Government Spending Level",
     )
 
     ACTION_ALIASES: dict[str, str] = {
         "Real Consumption": "Consumption",
         "Capital": "Savings",  # In OLG models: (1 + n) * (1 + g) * Capital = Savings
+        "Government Spending Level": "GovSpending",
+        "hours worked (log)": "HoursWorked",
+        "consumption (log)": "Consumption",
     }
 
     ENV_MAPPING: dict[str, int] = {
@@ -479,6 +485,7 @@ class EconomicsDataset(Dataset):
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
             self.metadata = json.load(f)
+        self.data = [None] * len(self.metadata)
 
         # todo: encode with llm
         # todo: get from dataset task id
@@ -574,7 +581,11 @@ x
                 - task_id (torch.Tensor): Task identifier [scalar]
                 - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
-        data = pd.read_parquet(self.metadata[idx]["output_dir"])
+        if self.data[idx] is None:
+            data = pd.read_parquet(self.metadata[idx]["output_dir"])
+            self.data[idx] = data
+        else:
+            data = self.data[idx]
 
         states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
         endogenous = torch.tensor(data['endogenous'].tolist(), dtype=torch.float32)
@@ -628,8 +639,8 @@ x
             'endogenous': endogenous,  # [max_seq_len, max_endogenous_dim]
             'endogenous_info': endogenous_info,  # [max_endogenous_dim]
             'reward': rewards,  # [max_seq_len, 1]
-            'task_id': task_id,  # scalar
-            'model_params': model_params_values,
+            'task_id': task_id * 0,  # scalar
+            'model_params': model_params_values * 0,
             'attention_mask': attention_mask  # [max_seq_len]
         }
 
