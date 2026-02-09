@@ -26,6 +26,7 @@ class Tokenizer:
         "Output",
         "Consumption",
         "Capital",
+        "LoggedCapital",
         "LoggedProductivity",
         "Debt",
         "InterestRate",
@@ -197,6 +198,7 @@ class Tokenizer:
         "Log Volatility": "LoggedVolatility",
         "meeting rate firms and workers": "MeetingRate",
         "Monetary Policy Shock": "MonetaryShock",
+        "capital (log)": "LoggedCapital",
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
