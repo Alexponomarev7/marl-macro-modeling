@@ -196,6 +196,7 @@ class Tokenizer:
         "Logged TFP (transitory)": "LoggedProductivity",
         "Log Volatility": "LoggedVolatility",
         "meeting rate firms and workers": "MeetingRate",
+        "Monetary Policy Shock": "MonetaryShock",
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
