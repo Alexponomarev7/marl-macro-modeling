@@ -43,7 +43,7 @@ dataset-variety = "python scripts/dataset_variety_report.py data/processed/train
 pipeline = { cmd = [
   "sh",
   "-c",
-  "KMP_DUPLICATE_LIB_OK=TRUE python pipeline/run_pipeline.py metadata.output_dir=experiments metadata.track=False dataset.enabled=True dataset.workdir=data/processed train.epochs=300 dataset.train.dynare_output_path=data dataset.val.dynare_output_path=data 'metadata.comment=experimental run'",
+  "KMP_DUPLICATE_LIB_OK=TRUE python pipeline/run_pipeline.py metadata.output_dir=experiments metadata.track=True dataset.enabled=True dataset.workdir=data/processed train.epochs=300 dataset.train.dynare_output_path=data dataset.val.dynare_output_path=data 'metadata.comment=run'",
 ] }
 
 [tool.pixi.dependencies]
