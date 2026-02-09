@@ -199,6 +199,7 @@ class Tokenizer:
         "meeting rate firms and workers": "MeetingRate",
         "Monetary Policy Shock": "MonetaryShock",
         "capital (log)": "LoggedCapital",
+        "TFP (log)": "LoggedProductivity",
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
