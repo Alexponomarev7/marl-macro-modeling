@@ -3,7 +3,8 @@ import warnings; warnings.filterwarnings("ignore")
 import numpy as np
 import gymnasium as gym
 
-from lib.envs.environment_base import ENV_TO_ID, AbstractEconomicEnv
+from lib.dataset import Tokenizer
+from lib.envs.environment_base import AbstractEconomicEnv
 
 
 class GarciaCiccoEnv(AbstractEconomicEnv):
@@ -168,7 +169,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
 
     @property
     def task_id(self) -> int:
-        return ENV_TO_ID["GarciaCicco"]
+        return Tokenizer.ENV_MAPPING["GarciaCiccoEnv"]
 
     @property
     def params(self) -> dict[str, float]:

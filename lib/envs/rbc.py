@@ -9,7 +9,8 @@ from typing import (
     Union,
 )
 
-from lib.envs.environment_base import ENV_TO_ID, AbstractEconomicEnv
+from lib.dataset import Tokenizer
+from lib.envs.environment_base import AbstractEconomicEnv
 from lib.utility_funcs import (
     log_utility,
     ces_utility,
@@ -88,14 +89,14 @@ class RBCEnv(AbstractEconomicEnv):
         )
 
         self._map_action_to_name = {
-            0: "leisure",
-            1: "consumption",
-            2: "investment",
+            0: "investment",
+            1: "leisure",
+            2: "consumption",
         }
 
     @property
     def task_id(self) -> int:
-        return ENV_TO_ID["RBC_baseline"]
+        return Tokenizer.ENV_MAPPING["RBCEnv"]
 
     def _set_utility_function(self, utility_function: str, utility_params: dict):
         """
@@ -297,8 +298,8 @@ class RBCEnv(AbstractEconomicEnv):
             consumption_rate = consumption_rate / total_rate
             investment_rate = investment_rate / total_rate
 
-        # Create action array matching the action space structure
-        action = [leisure, consumption_rate, investment_rate]
+        # Create action array matching the action space structure (see action_description)
+        action = [investment_rate, leisure, consumption_rate]
 
         # Additional information
         # todo: add pydantic validation
@@ -369,7 +370,7 @@ class RBCEnv(AbstractEconomicEnv):
         :return: Dictionary mapping action variable names to their descriptions
         """
         return {
-            "leisure": "Time allocated to leisure (zeroth element in array)",
-            "consumption_rate": "Fraction of output allocated to consumption (first element in array)",
-            "investment_rate": "Fraction of output allocated to investment (second element in array)",
+            "investment_rate": "Fraction of output allocated to investment (zeroth element in array)",
+            "leisure": "Time allocated to leisure (first element in array)",
+            "consumption_rate": "Fraction of output allocated to consumption (second element in array)",
         }

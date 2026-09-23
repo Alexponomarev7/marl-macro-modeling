@@ -251,12 +251,17 @@ class AlgorithmDistillationTransformer(nn.Module):
                 model_params=model_params.unsqueeze(0).to(self.device)
             )
 
-            action = float(out[0][-1][0])
+            predicted_action = out[0][-1]
+            action = float(predicted_action[0])
             next_state, reward, _, _, _ = env.step(action) # type: ignore
             state_to_plot.append({
                 state_name: next_state[state_name] for state_name in env.state_description.keys()
             })
-            action_to_plot.append({k: next_state[k] for k, _ in env.action_description.items()})
+            # Use the action the model actually predicted (aligned with actions_info order),
+            # not next_state: state keys don't generally match action keys.
+            action_to_plot.append({
+                name: float(predicted_action[i]) for i, name in enumerate(env.action_description.keys())
+            })
 
             state_history.append(self._get_state_info(state_to_plot[-1])[0])
             action_history.append(self._get_action_info(action_to_plot[-1])[0])

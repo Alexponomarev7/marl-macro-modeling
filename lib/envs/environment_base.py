@@ -5,11 +5,6 @@ from abc import (
     abstractmethod,
 )
 
-ENV_TO_ID = {
-    "Ramsey": 0,
-    "RBC_baseline": 1,
-}
-
 class AbstractEconomicEnv(gym.Env, ABC):
     """
     Abstract base class for an economic environment.

@@ -1,6 +1,7 @@
 import json
 import hydra
 import hashlib
+import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
 from tqdm import tqdm
@@ -26,6 +27,12 @@ def generate_hash(params: Dict) -> str:
     return hashlib.md5(params_str.encode()).hexdigest()[:8]
 
 
+def _to_scalar(x: Any) -> float:
+    """Extract a python float from either a raw number or a shape-(1,) array (both
+    conventions are used across lib/envs/*.py state dicts)."""
+    return float(np.asarray(x, dtype=np.float64).reshape(-1)[0])
+
+
 def generate_env_data(env, num_steps: int = 1000) -> Dict:
     """
     Generate data from the given environment using its analytical solution.
@@ -35,33 +42,53 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
     :param seed: Random seed for reproducibility
     :return: A dictionary containing:
         - 'env_params': The parameters of the environment.
-        - 'tracks': A DataFrame containing the generated data with columns:
-            - 'state': The state of the environment at each step.
-            - 'reward': The reward received at each step.
-            - 'done': A boolean indicating if the episode is done.
-            - 'truncated': A boolean indicating if the episode was truncated.
-            - 'info': Additional information from the environment at each step.
+        - 'tracks': A DataFrame with columns matching the dynare data path (generate_env_data_dynare),
+          so both are consumable by lib.dataset.EconomicsDataset: 'state', 'action', 'endogenous',
+          'reward', 'done', 'truncated', 'info' (with state_description/action_description/
+          endogenous_description embedded in 'info', matching each row).
     """
     env.reset()
 
-    data = []
+    state_description = env.state_description
+    action_description = env.action_description
+    state_names = list(state_description.keys())
+    action_names = list(action_description.keys())
+    # EconomicsDataset needs a flat numeric model_params dict; env.params may also carry
+    # non-numeric entries (e.g. utility_function name/params), which don't belong there.
+    model_params = {k: v for k, v in env.params.items() if isinstance(v, (int, float))}
+
+    rows = []
     for _ in tqdm(range(num_steps)):
         state, reward, done, truncated, info = env.analytical_step()
-        data.append({
-            "state": state,
+        if "action" not in info:
+            raise KeyError(
+                f"{env.__class__.__name__}.analytical_step() info is missing 'action'; "
+                "cannot build training data without the action taken at each step."
+            )
+        row_info = dict(info)
+        row_info.update({
+            "state_description": state_names,
+            "action_description": action_names,
+            "endogenous_description": [],
+            "model_params": model_params,
+        })
+        rows.append({
+            "state": np.array([_to_scalar(state[name]) for name in state_names], dtype=np.float32),
+            "action": np.array([_to_scalar(v) for v in info["action"]], dtype=np.float32),
+            "endogenous": np.array([], dtype=np.float32),
             "reward": reward,
             "done": done,
             "truncated": truncated,
-            "info": info
+            "info": row_info,
         })
 
     return {
         'env_name': env.__class__.__name__,
         'env_group': env.__class__.__name__,
         'env_params': env.params,
-        'action_description': env.action_description,
-        'state_description': env.state_description,
-        'tracks': pd.DataFrame(data),
+        'action_description': action_description,
+        'state_description': state_description,
+        'tracks': pd.DataFrame(rows),
     }
 
 def generate_env_data_dynare(dynare_file_path: Path):

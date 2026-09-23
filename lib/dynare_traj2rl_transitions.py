@@ -131,7 +131,16 @@ def _generate_all_shocks(
     Args:
         shocks_config: Dictionary where keys are shock names and values are settings.
         periods: Total simulation periods.
-        max_shocks_per_type: Maximum number of shocks per type.
+        max_shocks_per_type: Maximum number of shocks per type. Must be >= the highest
+            `<prefix>_shock_period_N`/`_value_N` slot each .mod file's `shocks;` block
+            references. RBC_baseline_pf/RBC_capital_stock_shock_pf/RBC_news_shock_model_pf
+            all reference slots up to 50 there, even though their `@#if !defined(...)`
+            sections only default slots 1-5 - passing fewer than 50 leaves slots 6-50
+            genuinely undefined and Dynare's macro preprocessor fails outright ("Unknown
+            variable productivity_shock_period_6"). Verified via an actual end-to-end
+            pipeline run; a previous attempt to lower this to 5 (assuming the extra slots
+            were merely unused/wasteful) broke all three models. Don't lower this without
+            re-running the full pipeline to confirm every shock-using model still succeeds.
 
     Returns:
         Dictionary with all shock parameters for Dynare.
@@ -310,6 +319,21 @@ def run_model(
                 sys.stdout.flush()
                 sys.stderr.flush()
                 logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+            # Dynare exits 0 even when the Blanchard-Kahn/order condition fails for this
+            # parameter draw (too many unstable eigenvalues for the forward-looking variables) -
+            # it just prints a warning and produces an empty oo_.endo_simul, which silently
+            # becomes a near-empty (1-row) CSV and later an empty transitions parquet. Treat it
+            # as a failure so it's logged and skipped like any other bad draw, instead of wasting
+            # a downstream processing pass on a file with no usable data.
+            if "order condition is NOT verified" in process.stdout or "order condition is NOT verified" in process.stderr:
+                error_msg = (
+                    "Dynare succeeded (return code 0) but the Blanchard-Kahn order condition "
+                    "was not verified for this parameter draw - no valid simulation exists, "
+                    f"output would be empty. Parameters: {' '.join(parameters)}"
+                )
+                logger.warning(error_msg)
                 raise RuntimeError(error_msg)
 
             print(f"Model {input_file} completed successfully.")
@@ -501,7 +525,10 @@ def dynare_trajectories2rl_transitions(
         try:
             mod_text = mod_file_path.read_text(errors="ignore")
             sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_text)
-            # Map long_name -> canonical, applying full alias chain
+            # Map long_name -> canonical, applying full alias chain. Deliberately exact-match
+            # only, no Tokenizer fuzzy fallback - see the sibling resolve_canonical() in
+            # process_model_data for why a fallback here is unsafe (verified regression via
+            # a full pipeline run, reverted).
             def resolve_canonical(name: str) -> str:
                 """Resolve to canonical name, applying full alias chain."""
                 seen = set()
@@ -814,6 +841,14 @@ def process_model_data(
 
                 If the name is already a canonical name (in canonical_names set),
                 return it as-is without applying aliases.
+
+                Deliberately case-sensitive/exact-match only (no Tokenizer fallback): this
+                feeds `data.rename()`, actually mutating DataFrame columns. A fuzzy fallback
+                here renamed symbols like 'ExpectedReturnCapital' to a differently-worded
+                canonical token ('Expected Return On Capital'), breaking configs whose
+                state/action/endogenous_columns request the raw symbol name directly (caught
+                via an actual end-to-end pipeline run on Caldara_et_al_2012 - do not re-add
+                without re-running the full pipeline to check for regressions).
                 """
                 # If name is already canonical, don't apply aliases
                 if name in canonical_names:
@@ -905,7 +940,15 @@ def process_model_data(
                     # 1. Column name differs from target name
                     # 2. Current column is NOT already a canonical name (prevent canonical -> something else)
                     if c != target_name:
-                        # Check if current column is already canonical
+                        # Check if current column is already canonical. Deliberately also skips
+                        # the rename when `c` isn't itself a STATE_ALIASES key: dynare/conf/config.yaml
+                        # consistently requests state/action/endogenous_columns by the .mod file's raw
+                        # symbol name (e.g. "ExpectedReturnCapital"), not its long_name/canonical form
+                        # ("Expected Return On Capital") - renaming the raw symbol away breaks that
+                        # config's column resolution even though it looks like a no-op on paper.
+                        # Verified via an actual end-to-end pipeline run on Caldara_et_al_2012: removing
+                        # this `or` clause (looked like a bug in isolation) broke it. Don't remove without
+                        # re-running the full pipeline to check for regressions across all active models.
                         is_current_canonical = c in canonical_names or c not in _COLUMN_ALIASES
 
                         # Never rename a canonical name to something else
@@ -993,6 +1036,14 @@ def process_model_data(
         mod_file_path=mod_file_path,
     )
     logger.info("Transitions successfully generated.")
+
+    if transitions.empty:
+        logger.warning(
+            f"[{model_name}] Produced 0 transitions from {raw_data_path} (raw data had too "
+            "few rows, e.g. a Blanchard-Kahn/order-condition failure); skipping, not writing "
+            "an empty parquet."
+        )
+        return
 
     logger.info("Saving data...")
 

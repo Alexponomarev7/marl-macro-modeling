@@ -69,7 +69,10 @@ models:
         state_columns:
           - [CapitalPerCapita, -1]
           - OutputPerCapita
-          - Labor
+          # Labor here is the raw population level (Labor_t = (1+n)*Labor_{t-1}, .mod's own
+          # equation), not a decision-relevant quantity - deterministic given t and n, and it
+          # explodes to 1e6-1e7+ over periods=1000 while every other state stays O(1-100),
+          # dwarfing them for the model. Dropped; per-capita vars already normalize it out.
         action_columns:
           - ConsumptionPerCapita
         endogenous_columns:
@@ -108,7 +111,8 @@ models:
         state_columns:
           - [CapitalPerCapita, -1]
           - OutputPerCapita
-          - Labor
+          # Labor dropped - see the same note in Ramsey_crra above (raw population level,
+          # explodes to 1e6-1e7+ over periods=1000, not decision-relevant).
         action_columns:
           - ConsumptionPerCapita
         endogenous_columns:
@@ -141,13 +145,19 @@ models:
       discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
-        target_column: ConsumptionPerCapita
+        # Per-effective-labor (stationary), matching action_columns/state_columns below.
+        # ConsumptionPerCapita grows unboundedly with Technology (g=0.02/period compounded
+        # over periods=1000 => ~10^8x by episode end) and would blow up the reward scale.
+        target_column: ConsumptionPerEffectiveLabor
         sigma_column: sigma
       input:
         state_columns:
           - [CapitalPerEffectiveLabor, -1]
-          - Productivity
-          - Labor
+          # Productivity and Labor dropped: Ramsey_upgrade.mod's Technology/Labor are raw
+          # levels (Technology_t=(1+g)*Technology_{t-1}, Labor_t=(1+n)*Labor_{t-1}, no
+          # logged/per-capita variant declared for either), both exploding to 1e5-1e8+ over
+          # periods=1000 - deterministic given t/g/n, not decision-relevant, and swamps the
+          # scale of every genuinely stationary state variable.
           - InterestRate
         action_columns:
           - ConsumptionPerEffectiveLabor
@@ -401,6 +411,9 @@ models:
         sigma_column: sigma
         A_column: psi
         eta_default: 1.0
+        # RBC_news_shock_model_pf.mod stores Consumption/Labor as their (log), not the level -
+        # C**(1-sigma) on a raw log value is negative-base/NaN roughly half the time.
+        log_inputs: true
       input:
         state_columns:
           - [Capital, -1]
@@ -440,6 +453,9 @@ models:
       reward: lib.rewards.crra_reward
       reward_kwargs:
         target_column: Consumption
+        # RBC_news_shock_model_stoch.mod stores Consumption as consumption (log), not the
+        # level - c**(1-sigma) on a raw log value is negative-base/NaN roughly half the time.
+        log_input: true
       input:
         state_columns:
           - [Capital, -1]
@@ -559,8 +575,12 @@ models:
         sigma: [1.5, 2.0]                             # Risk aversion (sigma)
         persistence_gov_spending: [0.7, 0.95]         # Persistence of gov spending (rho_G)
         persistence_productivity: [0.7, 0.95]         # Persistence of productivity (rho_A)
-        capital_share: [0.3, 0.4]                     # Capital share (alpha_K)
-        labor_share: [0.3, 0.4]                       # Labor share (alpha_N)
+        # Aguiar_Gopinath_2007.mod's production function is Capital^(1-capital_share) * Labor^capital_share
+        # (capital_share is applied to LABOR, matching its own default of 0.68 -> capital gets 1-0.68=0.32,
+        # standard). Sampling capital_share directly in [0.3, 0.4] as if it were capital's own exponent
+        # inverted this: capital would get 0.6-0.7 of output and labor 0.3-0.4, backwards from calibration.
+        capital_share: [0.6, 0.7]                     # Applied as labor's exponent; capital gets 1-this ~ [0.3, 0.4]
+        labor_share: [0.3, 0.4]                       # Separate Cobb-Douglas utility weight (consumption vs. leisure), unrelated to production
         depreciation: [0.02, 0.05]                    # Depreciation rate (delta)
         capital_adjustment_cost: [2.0, 6.0]           # Capital adjustment cost (phi_K)
         elasticity_substitution: [0.0005, 0.002]      # Elasticity of substitution (eta)
@@ -813,9 +833,13 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.stability_reward
+      # stability_reward just returns target_column verbatim - applied to InflationRate that
+      # rewards maximizing inflation forever, not stabilizing it. Faia_2008.mod declares no
+      # output-gap variable, so central_bank_loss's y_gap term is disabled (inflation-only loss).
+      reward: lib.rewards.central_bank_loss
       reward_kwargs:
-        target_column: InflationRate
+        inflation_column: InflationRate
+        output_gap_column: null
       input:
         state_columns:
           - [Employment, -1]

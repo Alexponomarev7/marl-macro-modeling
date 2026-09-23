@@ -7,13 +7,13 @@ import numpy as np
 @pytest.mark.parametrize("parameters", [{"start_capital": 1.0, "delta": 0.01, "alpha": 0.33, "beta": 0.95}])
 def test_ramsey_env(parameters):
     df_dynare, params1 = generate_model(
-        "Ramsey", parameters, periods=50, type=GenerationType.DYNARE
+        "Ramsey_base", parameters, periods=50, type=GenerationType.DYNARE
     )
     df_gymnasium, params2 = generate_model(
-        "Ramsey", parameters, periods=50, type=GenerationType.GYMNASIUM
+        "Ramsey_base", parameters, periods=50, type=GenerationType.GYMNASIUM
     )
     df_gymnasium_with_trajectory, params3 = generate_model(
-        "Ramsey", parameters, periods=50, type=GenerationType.GYMNASIUM, trajectory=df_dynare
+        "Ramsey_base", parameters, periods=50, type=GenerationType.GYMNASIUM, trajectory=df_dynare
     )
 
     df_dynare = df_dynare.iloc[:25]
@@ -31,7 +31,7 @@ def test_ramsey_env(parameters):
 
 @pytest.mark.parametrize("parameters", [{
     "alpha": 0.32, "beta": 0.98**4, "delta": 1.03**4-1,
-    "gamma_a": 2.0, "omega": 1.6, "theta": 1.4 * 1.6, 
+    "gamma_a": 2.0, "omega": 1.6, "theta": 1.4 * 1.6,
     "phi": 4.81, "psi": 2.87, "dbar": 0.007, "gbar": 1.01,
     "s_share": 0.10, "rho_a": 0.86, "rho_g": 0.32,
     "rho_nu": 0.85, "rho_mu": 0.91, "rho_s": 0.21,
@@ -56,12 +56,12 @@ def test_garcia_cicco_env(parameters):
         # info
         # "MUConsumption"
     ]
-    
+
     df_dynare, params1 = generate_model(
-        "GarciaCicco_et_al_2010", parameters, periods=50, type=GenerationType.DYNARE
+        "GarciaCicco_2010", parameters, periods=50, type=GenerationType.DYNARE
     )
     df_gymnasium, params2 = generate_model(
-        "GarciaCicco_et_al_2010", params1, periods=50, type=GenerationType.GYMNASIUM, trajectory=df_dynare
+        "GarciaCicco_2010", params1, periods=50, type=GenerationType.GYMNASIUM, trajectory=df_dynare
     )
 
     params1.pop("k_ss")

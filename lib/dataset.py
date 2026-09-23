@@ -137,6 +137,25 @@ class Tokenizer:
         "MeetingRate",
         "MonetaryShock",
         "LoggedConsumption",
+        "TermsOfTrade",
+        "LogTermsOfTrade",
+        # Found missing via an end-to-end pipeline smoke test across all active dynare models
+        # (Faia_Monacelli_2008, Aguiar_Gopinath_2007) - genuinely distinct concepts, not aliases.
+        "BondPrice",
+        "ConsumptionF",
+        "ConsumptionForeign",
+        "ConsumptionH",
+        "DepreciationRate",
+        "InflationCPI",
+        "InflationForeign",
+        "InflationH",
+        "Lambda",
+        "LogInflationH",
+        "LogRealExchangeRate",
+        "NominalExchangeRate",
+        "OutputForeign",
+        "PriceRatioH",
+        "RealExchangeRate",
     )
 
     # State aliases for canonicalization across environments
@@ -201,7 +220,33 @@ class Tokenizer:
         "Monetary Policy Shock": "MonetaryShock",
         "capital (log)": "LoggedCapital",
         "TFP (log)": "LoggedProductivity",
-        "consumption (log)'": "LoggedConsumption",
+        "consumption (log)": "LoggedConsumption",
+    }
+
+    # Aliases from a raw .mod SYMBOL name (not a long_name/header) straight to its canonical
+    # STATE_TOKEN, for cases too far from the token for canonical_state_name's normalized
+    # (case/space-insensitive) matching to bridge (e.g. "AnnualInterestRate" vs "Annualized
+    # Interest Rate"). Deliberately kept OUT of STATE_ALIASES: lib/dynare_traj2rl_transitions.py
+    # aliases `_COLUMN_ALIASES = Tokenizer.STATE_ALIASES` to rename raw CSV columns before
+    # state/action/endogenous extraction, and dynare/conf/config.yaml consistently requests
+    # those columns by their raw symbol name - an alias here would get the symbol renamed out
+    # from under that config lookup. Verified via an actual end-to-end pipeline run: adding
+    # these to STATE_ALIASES broke Born_Pfeifer_2018_MP/RBC_news_shock_model_pf/_stoch this way.
+    # Consulted only by canonical_state_name/state_token_id below, never by dynare_traj2rl_transitions.py.
+    SYMBOL_TO_CANONICAL: dict[str, str] = {
+        "AnnualInflation": "Annualized Inflation Rate",
+        "AnnualInterestRate": "Annualized Interest Rate",
+        "AnnualNominalRate": "Annualized Nominal Interest Rate",
+        "ConsumptionGrowth": "Consumption Growth Rate",
+        "ExpectedReturnCapital": "Expected Return On Capital",
+        "ExpectedSDF": "Expected Stochastic Discount Factor",
+        "InvestmentGrowth": "Investment Growth Rate",
+        "LogConsumption": "LoggedConsumption",
+        "LogProductivity": "LoggedProductivity",
+        "MarginalCost": "Marginal Costs",
+        "PriceMarkup": "Markup",
+        "RiskFreeRate": "Risk-Free Rate",
+        "TradeBalanceToOutput": "Trade Balance to Output Ratio",
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
@@ -234,21 +279,22 @@ class Tokenizer:
         "Capital": "Savings",  # In OLG models: (1 + n) * (1 + g) * Capital = Savings
     }
 
+    # Keys must match the dynare model_name exactly (dynare/docker/dynare_models/*.mod stem).
     ENV_MAPPING: dict[str, int] = {
         "Born_Pfeifer_2018_MP": 0,
         "Aguiar_Gopinath_2007": 1,
-        "RBC_news_shock_model": 2,
+        "RBC_news_shock_model_pf": 2,
         "Hansen_1985": 3,
-        "GarciaCicco_et_al_2010": 4,
+        "GarciaCicco_2010": 4,
         "Caldara_et_al_2012": 5,
-        "RBC_capitalstock_shock": 6,
+        "RBC_capital_stock_shock_pf": 6,
         "SGU_2003": 7,
         "Gali_2008_chapter_2": 8,
-        "Collard_2001_example1": 9,
+        "Collard_2001": 9,
         "McCandless_2008_Chapter_13": 10,
         "FV_et_al_2007_ABCD": 11,
-        "RBC_baseline": 12,
-        "RBC_state_dependent_GIRF": 13,
+        "Faia_Monacelli_2008": 12,
+        "RBC_state_dependent_GIRF_household": 13,
         "SGU_2004": 14,
         "Faia_2008": 15,
         "McCandless_2008_Chapter_9": 16,
@@ -259,6 +305,17 @@ class Tokenizer:
         "OLG": 21,
         "RBC_baseline_pf": 22,
         "RBC_baseline_stoch": 23,
+        "RBC_capital_stock_shock_stoch": 24,
+        "RBC_news_shock_model_stoch": 25,
+        "RBC_state_dependent_GIRF_government": 26,
+        # Python-simulated envs (lib/envs/*.py), keyed by class name — this is also the
+        # single source of truth for AbstractEconomicEnv.task_id (see lib/envs/environment_base.py).
+        "RBCEnv": 27,
+        "RamseyEnv": 28,
+        "GarciaCiccoEnv": 29,
+        "NCGEnv": 30,
+        "RBCEconomyWithPolicyEnv": 31,
+        "RBCPriorityBasedWeightedContractEnv": 32,
     }
 
     def __init__(self):
@@ -314,6 +371,11 @@ class Tokenizer:
         # Try exact match in aliases
         if name in self.STATE_ALIASES:
             return self.STATE_ALIASES[name]
+
+        # Try exact match in symbol->canonical aliases (kept separate from STATE_ALIASES; see
+        # SYMBOL_TO_CANONICAL's docstring for why)
+        if name in self.SYMBOL_TO_CANONICAL:
+            return self.SYMBOL_TO_CANONICAL[name]
 
         # Try normalized match in state tokens
         normalized_name = self._normalize_key(name)
@@ -402,12 +464,17 @@ class Tokenizer:
         )
 
     def decode_env_name(self, env_name: str) -> int:
-        """Decode an environment name to its ID."""
+        """Decode an environment name to its ID. Raises if the model is unmapped, instead of
+        silently colliding it with task 0 (this previously corrupted task conditioning whenever
+        a model was renamed or added without updating ENV_MAPPING)."""
         prefix = env_name.rsplit('_', 1)[0]
         if prefix.endswith('_config'):
             prefix = prefix.removesuffix('_config')
         if prefix not in self.ENV_MAPPING:
-            return 0  # Default to 0 if not found
+            raise KeyError(
+                f"Unknown env '{env_name}' (model '{prefix}') not in ENV_MAPPING. "
+                f"Add it to Tokenizer.ENV_MAPPING."
+            )
         return self.ENV_MAPPING[prefix]
 
     def state_encoder(self, x):
@@ -618,9 +685,12 @@ x
         rewards = self.pad_sequence(rewards, self.max_seq_len)
         endogenous = self.pad_sequence(endogenous, self.max_seq_len)
 
-        # Create attention mask
+        # Create attention mask. pad_sequence left-pads (padding first, real data last), so the
+        # valid positions are the LAST valid_len entries, not the first (matters once orig_seq_len
+        # < max_seq_len; a no-op when episodes are truncated instead, since valid_len == max_seq_len).
         attention_mask = torch.zeros(self.max_seq_len, dtype=torch.bool)
-        attention_mask[:min(orig_seq_len, self.max_seq_len)] = True
+        valid_len = min(orig_seq_len, self.max_seq_len)
+        attention_mask[self.max_seq_len - valid_len:] = True
 
         return {
             'states': states,  # [max_seq_len, max_state_dim]

@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import gymnasium as gym
 from typing import Optional, Dict, Tuple, Union
+from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.utility_funcs import log_utility, ces_utility
 
@@ -200,6 +201,10 @@ class RBCPriorityBasedWeightedContractEnv(AbstractEconomicEnv):
         """Clean up resources"""
         # included for compatibility with the Gymnasium API
         pass
+
+    @property
+    def task_id(self) -> int:
+        return Tokenizer.ENV_MAPPING["RBCPriorityBasedWeightedContractEnv"]
 
     @property
     def params(self) -> Dict[str, Union[float, str, dict]]:
