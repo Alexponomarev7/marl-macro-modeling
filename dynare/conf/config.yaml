@@ -1629,3 +1629,147 @@ models:
         data_path: ./data/interim/McCandless_2008_Chapter_13
 
 
+  Gali_2015_chapter_3:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1, log utility)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # 1 - labor share in production (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        phi_y: [0.0, 0.25]  # Taylor rule output response (paper: 0.125)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        rho_nu: [0.3, 0.7]  # Policy shock persistence (paper: 0.5)
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        monetary_shock_stderr: [0.15, 0.35]  # percent (paper IRF: 25bp)
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - TechnologyShock
+          - PreferenceShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - NaturalInterestRate
+          - HoursWorked
+          - RealWage
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_3
+
+
+  Gali_2015_chapter_5_discretion:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        rho_u: [0.0, 0.8]  # Cost-push persistence (paper: 0 and 0.8 cases)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        cost_push_shock_stderr: [0.1, 0.3]  # percent
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: WelfareRelevantOutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - CostPushShock
+          - TechnologyShock
+          - PreferenceShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WelfareRelevantOutputGap
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - HoursWorked
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_5_discretion
+
+
+  Gali_2015_chapter_5_commitment:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        rho_u: [0.0, 0.8]  # Cost-push persistence (paper: 0 and 0.8 cases)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        cost_push_shock_stderr: [0.1, 0.3]  # percent
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: WelfareRelevantOutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - CostPushShock
+          - TechnologyShock
+          - PreferenceShock
+          - [WelfareRelevantOutputGap, -1]
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WelfareRelevantOutputGap
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - HoursWorked
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_5_commitment
+
+

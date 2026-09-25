@@ -172,6 +172,8 @@ class Tokenizer:
         "TFPNews6",
         "TFPNews7",
         "TFPNews8",
+        "CostPushShock",
+        "WelfareRelevantOutputGap",
     )
 
     # State aliases for canonicalization across environments
@@ -366,6 +368,9 @@ class Tokenizer:
         "NCGEnv": 30,
         "RBCEconomyWithPolicyEnv": 31,
         "RBCPriorityBasedWeightedContractEnv": 32,
+        "Gali_2015_chapter_3": 33,
+        "Gali_2015_chapter_5_discretion": 34,
+        "Gali_2015_chapter_5_commitment": 35,
     }
 
     def __init__(self):
