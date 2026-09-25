@@ -1866,3 +1866,104 @@ models:
         data_path: ./data/interim/Gali_Monacelli_2005
 
 
+  Ireland_2004:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.985, 0.995]  # Discount factor (paper: 0.99, calibrated)
+        psi: [0.05, 0.2]  # Phillips-curve slope (paper: 0.1, calibrated)
+        omega: [0.0, 0.15]  # Preference-shock weight in the output gap (estimates 0.00001-0.06)
+        alpha_x: [0.0, 0.4]  # Backward-looking share, IS curve (estimates 0.00001-0.20)
+        alpha_pi: [0.0, 0.4]  # Backward-looking share, Phillips curve (estimates ~0)
+        rho_pi: [0.2, 0.6]  # Rule: inflation feedback (estimates 0.31-0.39)
+        rho_g: [0.1, 0.6]  # Rule: output-growth feedback (estimates 0.24-0.40)
+        rho_x: [0.0, 0.3]  # Rule: output-gap feedback (estimates 0.00001-0.17)
+        rho_a: [0.85, 0.97]  # Preference shock persistence (estimates 0.90-0.99)
+        rho_e: [0.5, 0.99]  # Cost-push persistence (estimates 0.54-0.99)
+        preference_shock_stderr: [1.0, 5.0]  # percent (estimates 3.0 post-1980 - 15.4 pre-1980)
+        cost_push_shock_stderr: [0.02, 0.35]  # percent (estimates 0.02-0.35)
+        technology_shock_stderr: [0.7, 1.1]  # percent (estimates 0.89-1.09)
+        monetary_shock_stderr: [0.2, 0.35]  # percent (estimates 0.28-0.33)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputGap
+        lambda_y: 0.25
+      input:
+        state_columns:
+          - [NominalInterestRate, -1]
+          - [OutputDeviationFromSteadyState, -1]
+          - [OutputGap, -1]
+          - [PriceInflation, -1]
+          - PreferenceShock
+          - CostPushShock
+          - TechnologyShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - OutputGrowth
+          - AnnualNominalRate
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Ireland_2004
+
+
+  Gali_2010:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        alfa: [0.25, 0.4]  # 1 - labor exponent in production (paper: 1/3)
+        varphi: [2.0, 8.0]  # Inverse Frisch elasticity of labor effort (paper: 5)
+        theta_w: [0.6, 0.85]  # Calvo wage rigidity (paper: 0.75)
+        theta_p: [0.6, 0.85]  # Calvo price rigidity (paper: 0.75)
+        gammma: [0.5, 1.5]  # Hiring-cost elasticity to tightness (paper: 1)
+        Theta: [0.001, 0.004]  # Hiring costs / GDP (paper: 0.0014; target-consistent 0.0036)
+        xi: [0.03, 0.1]  # Worker bargaining power (paper low-psi case: 0.05)
+        U: [0.03, 0.06]  # Steady-state unemployment rate (paper: 0.03)
+        x: [0.6, 0.75]  # Steady-state job finding rate (paper: 0.7)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        phi_y: [0.0, 0.25]  # Taylor rule output response (paper: 0.125)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_nu: [0.3, 0.7]  # Policy shock persistence (paper: 0.5)
+        technology_shock_stderr: [0.5, 0.9]  # percent (paper IRF: 1)
+        monetary_shock_stderr: [0.15, 0.35]  # percent (paper IRF: 25bp)
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputDeviationFromSteadyState
+        lambda_y: 0.25
+      input:
+        state_columns:
+          - [Employment, -1]
+          - [RealWage, -1]
+          - TechnologyShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WageInflation
+          - OutputDeviationFromSteadyState
+          - Consumption
+          - UnemploymentRate
+          - RealInterestRate
+          - Markup
+      output:
+        data_path: ./data/interim/Gali_2010
+
+

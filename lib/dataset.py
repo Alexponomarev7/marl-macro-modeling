@@ -379,6 +379,8 @@ class Tokenizer:
         "Gali_2015_chapter_5_commitment": 35,
         "Jermann_Quadrini_2012": 36,
         "Gali_Monacelli_2005": 37,
+        "Ireland_2004": 38,
+        "Gali_2010": 39,
     }
 
     def __init__(self):
