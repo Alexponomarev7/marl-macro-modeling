@@ -576,7 +576,7 @@ models:
       parameter_ranges:
         beta: [0.95, 0.99]                            # Discount rate (beta)
         sigma: [1.5, 2.0]                             # Risk aversion (sigma)
-        persistence_gov_spending: [0.7, 0.95]         # Persistence of gov spending (rho_G)
+        persistence_trend_growth: [0.0, 0.3]  # Persistence of trend growth shock (rho_G; paper: 0.01)
         persistence_productivity: [0.7, 0.95]         # Persistence of productivity (rho_A)
         # Aguiar_Gopinath_2007.mod's production function is Capital^(1-capital_share) * Labor^capital_share
         # (capital_share is applied to LABOR, matching its own default of 0.68 -> capital gets 1-0.68=0.32,
@@ -586,9 +586,9 @@ models:
         labor_share: [0.3, 0.4]                       # Separate Cobb-Douglas utility weight (consumption vs. leisure), unrelated to production
         depreciation: [0.02, 0.05]                    # Depreciation rate (delta)
         capital_adjustment_cost: [2.0, 6.0]           # Capital adjustment cost (phi_K)
-        elasticity_substitution: [0.0005, 0.002]      # Elasticity of substitution (eta)
+        debt_elastic_premium: [0.0005, 0.002]  # Debt-elastic interest rate premium (psi)
         debt_share: [0.05, 0.15]                      # Debt share (alpha_D)
-        shock_gov_spending_stderr: [0.02, 0.04]       # Std dev of gov spending shock
+        trend_growth_shock_stderr: [0.02, 0.04]  # Std dev of trend growth shock
         shock_productivity_stderr: [0.003, 0.006]     # Std dev of productivity shock
 
     rl_env_settings:
@@ -601,7 +601,7 @@ models:
           - [Capital, -1]
           - [Debt, -1]
           - Productivity
-          - GovSpending
+          - TrendGrowthShock
         action_columns:
           - Consumption
           - Labor
@@ -636,7 +636,7 @@ models:
         rho_nu: [0.80, 0.90]
         rho_mu: [0.85, 0.95]
         productivity_shock_stderr: [0.020, 0.035]
-        tech_growth_shock_stderr: [0.020, 0.040]
+        tech_growth_shock_stderr: [0.020, 0.035]
         preference_shock_stderr: [0.0, 0.0]
         country_premium_shock_stderr: [0.0, 0.0]
 

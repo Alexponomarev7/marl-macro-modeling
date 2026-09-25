@@ -371,6 +371,10 @@ def GarciaCicco(
     )
 
     consumption_equiv = C - (theta / omega) * (H ** omega)
+    # floor at 10% of the steady-state value: first-order paths can leave the utility's domain
+    c_ss, h_ss = parameters.get("c_ss"), parameters.get("h_ss")
+    if c_ss is not None and h_ss is not None and c_ss - theta / omega * h_ss ** omega > 0:
+        consumption_equiv = np.maximum(consumption_equiv, 0.1 * (c_ss - theta / omega * h_ss ** omega))
     # GHH utility's exponent (1-gamma) is negative for the standard gamma>1 case, so clamping
     # consumption_equiv to a tiny epsilon (as other reward fns do for a *positive* exponent)
     # backfires here: eps**(negative exponent) explodes toward +inf, landing utility in the

@@ -2,7 +2,7 @@
 % Small Open Economy with Trend Shocks
 %
 % Key features:
-%   - Trend shocks to productivity and government spending
+%   - Trend shocks to productivity and TFP growth trend
 %   - Debt-elastic interest rate
 %   - Capital adjustment costs
 %   - GHH-style preferences (consumption and leisure non-separable)
@@ -15,7 +15,7 @@ var Consumption $Consumption$                                    (long_name='con
     Output $Output$                                              (long_name='output')
     Debt $Debt$                                                  (long_name='debt')
     BondPrice $BondPrice$                                        (long_name='bond Price')
-    GovSpending $GovSpending$                                    (long_name='government Spending')
+    TrendGrowthShock $TrendGrowthShock$                                    (long_name='Permanent TFP growth trend shock (log)')
     Labor $Labor$                                                (long_name='labor')
     Utility $Utility$                                            (long_name='utility')
     Productivity $Productivity$                                  (long_name='productivity')
@@ -33,7 +33,7 @@ var Consumption $Consumption$                                    (long_name='con
 predetermined_variables Capital Debt;
 
 varexo ShockProductivity   $ShockProductivity$ (long_name='Productivity Shock')
-       ShockGovSpending    $ShockGovSpending$ (long_name='Government Spending Shock');
+       TrendGrowthInnovation    $TrendGrowthInnovation$ (long_name='Trend Growth Innovation');
 
 parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
            sigma ${\sigma}$                    (long_name='Risk Aversion')
@@ -43,11 +43,11 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
            depreciation ${\delta}$             (long_name='Depreciation Rate')
            capital_adjustment_cost ${\phi_K}$  (long_name='Capital Adjustment Cost')
            labor_share ${\alpha_N}$            (long_name='Labor Share')
-           elasticity_substitution ${\eta}$    (long_name='Elasticity of Substitution')
+           debt_elastic_premium ${\psi}$    (long_name='Debt-Elastic Interest Rate Premium Coefficient')
            steady_state_debt ${\bar{D}}$       (long_name='Steady State Debt')
            interest_rate ${r}$                 (long_name='Interest Rate')
            persistence_productivity ${\rho_A}$ (long_name='Persistence of Productivity')
-           persistence_gov_spending ${\rho_G}$ (long_name='Persistence of Government Spending');
+           persistence_trend_growth ${\rho_G}$ (long_name='Persistence of Trend Growth Shock');
 
 @#if !defined(beta)
   @#define beta = 0.98
@@ -57,8 +57,8 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
   @#define sigma = 2
 @#endif
 
-@#if !defined(persistence_gov_spending)
-  @#define persistence_gov_spending = 0.01
+@#if !defined(persistence_trend_growth)
+  @#define persistence_trend_growth = 0.01
 @#endif
 
 @#if !defined(persistence_productivity)
@@ -81,16 +81,16 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
   @#define capital_adjustment_cost = 4
 @#endif
 
-@#if !defined(elasticity_substitution)
-  @#define elasticity_substitution = 0.001
+@#if !defined(debt_elastic_premium)
+  @#define debt_elastic_premium = 0.001
 @#endif
 
 @#if !defined(debt_share)
   @#define debt_share = 0.1
 @#endif
 
-@#if !defined(shock_gov_spending_stderr)
-  @#define shock_gov_spending_stderr = 0.0281
+@#if !defined(trend_growth_shock_stderr)
+  @#define trend_growth_shock_stderr = 0.0281
 @#endif
 
 @#if !defined(shock_productivity_stderr)
@@ -99,13 +99,13 @@ parameters growth_rate ${\gamma}$              (long_name='Growth Rate')
 
 beta = @{beta};
 sigma = @{sigma};
-persistence_gov_spending = @{persistence_gov_spending};
+persistence_trend_growth = @{persistence_trend_growth};
 persistence_productivity = @{persistence_productivity};
 capital_share = @{capital_share};
 labor_share = @{labor_share};
 depreciation = @{depreciation};
 capital_adjustment_cost = @{capital_adjustment_cost};
-elasticity_substitution = @{elasticity_substitution};
+debt_elastic_premium = @{debt_elastic_premium};
 debt_share = @{debt_share};
 
 growth_rate = log(1.0066);
@@ -115,13 +115,13 @@ steady_state_debt = 0.1;
 model;
 
 [name='Production function']
-Output = exp(Productivity) * Capital^(1 - capital_share) * (exp(GovSpending) * Labor)^capital_share;
+Output = exp(Productivity) * Capital^(1 - capital_share) * (exp(TrendGrowthShock) * Labor)^capital_share;
 
 [name='Productivity process']
 Productivity = persistence_productivity * Productivity(-1) + ShockProductivity;
 
-[name='Government spending process']
-GovSpending = (1 - persistence_gov_spending) * growth_rate + persistence_gov_spending * GovSpending(-1) + ShockGovSpending;
+[name='Trend growth shock process']
+TrendGrowthShock = (1 - persistence_trend_growth) * growth_rate + persistence_trend_growth * TrendGrowthShock(-1) + TrendGrowthInnovation;
 
 [name='Utility function']
 Utility = (Consumption^labor_share * (1 - Labor)^(1 - labor_share))^(1 - sigma) / (1 - sigma);
@@ -133,29 +133,29 @@ MUConsumption = labor_share * Utility / Consumption * (1 - sigma);
 MULabor = -(1 - labor_share) * Utility / (1 - Labor) * (1 - sigma);
 
 [name='Resource constraint']
-Consumption + exp(GovSpending) * Capital(+1) = Output + (1 - depreciation) * Capital 
-    - capital_adjustment_cost / 2 * (exp(GovSpending) * Capital(+1) / Capital - exp(growth_rate))^2 * Capital 
-    - Debt + BondPrice * exp(GovSpending) * Debt(+1);
+Consumption + exp(TrendGrowthShock) * Capital(+1) = Output + (1 - depreciation) * Capital
+    - capital_adjustment_cost / 2 * (exp(TrendGrowthShock) * Capital(+1) / Capital - exp(growth_rate))^2 * Capital
+    - Debt + BondPrice * exp(TrendGrowthShock) * Debt(+1);
 
 [name='Bond price (debt-elastic interest rate)']
-1 / BondPrice = 1 + interest_rate + elasticity_substitution * (exp(Debt(+1) - steady_state_debt) - 1);
+1 / BondPrice = 1 + interest_rate + debt_elastic_premium * (exp(Debt(+1) - steady_state_debt) - 1);
 
 [name='Euler equation for capital']
-MUConsumption * (1 + capital_adjustment_cost * (exp(GovSpending) * Capital(+1) / Capital - exp(growth_rate))) * exp(GovSpending) = 
-    beta * exp(GovSpending * (labor_share * (1 - sigma))) * MUConsumption(+1) * 
-    (1 - depreciation + (1 - capital_share) * Output(+1) / Capital(+1) 
-    - capital_adjustment_cost / 2 * (2 * (exp(GovSpending(+1)) * Capital(+2) / Capital(+1) - exp(growth_rate)) * (-1) * exp(GovSpending(+1)) * Capital(+2) / Capital(+1) 
-    + (exp(GovSpending(+1)) * Capital(+2) / Capital(+1) - exp(growth_rate))^2));
-    
+MUConsumption * (1 + capital_adjustment_cost * (exp(TrendGrowthShock) * Capital(+1) / Capital - exp(growth_rate))) * exp(TrendGrowthShock) =
+    beta * exp(TrendGrowthShock * (labor_share * (1 - sigma))) * MUConsumption(+1) *
+    (1 - depreciation + (1 - capital_share) * Output(+1) / Capital(+1)
+    - capital_adjustment_cost / 2 * (2 * (exp(TrendGrowthShock(+1)) * Capital(+2) / Capital(+1) - exp(growth_rate)) * (-1) * exp(TrendGrowthShock(+1)) * Capital(+2) / Capital(+1)
+    + (exp(TrendGrowthShock(+1)) * Capital(+2) / Capital(+1) - exp(growth_rate))^2));
+
 [name='Labor supply FOC']
 MULabor + MUConsumption * capital_share * Output / Labor = 0;
 
 [name='Euler equation for bonds']
-MUConsumption * exp(GovSpending) * BondPrice = beta * exp(GovSpending * (labor_share * (1 - sigma))) * MUConsumption(+1);
+MUConsumption * exp(TrendGrowthShock) * BondPrice = beta * exp(TrendGrowthShock * (labor_share * (1 - sigma))) * MUConsumption(+1);
 
 [name='Investment definition']
-Investment = exp(GovSpending) * Capital(+1) - (1 - depreciation) * Capital 
-    + capital_adjustment_cost / 2 * (exp(GovSpending) * Capital(+1) / Capital - exp(growth_rate))^2 * Capital;
+Investment = exp(TrendGrowthShock) * Capital(+1) - (1 - depreciation) * Capital
+    + capital_adjustment_cost / 2 * (exp(TrendGrowthShock) * Capital(+1) / Capital - exp(growth_rate))^2 * Capital;
 
 [name='Consumption to GDP ratio']
 ConsumptionGDP = Consumption / Output;
@@ -164,7 +164,7 @@ ConsumptionGDP = Consumption / Output;
 InvestmentGDP = Investment / Output;
 
 [name='Net exports']
-NetExports = (Debt - exp(GovSpending) * BondPrice * Debt(+1)) / Output;
+NetExports = (Debt - exp(TrendGrowthShock) * BondPrice * Debt(+1)) / Output;
 
 [name='Log output']
 LogOutput = log(Output);
@@ -176,7 +176,7 @@ LogConsumption = log(Consumption);
 LogInvestment = log(Investment);
 
 [name='Output growth']
-OutputGrowth = log(Output) - log(Output(-1)) + GovSpending(-1);
+OutputGrowth = log(Output) - log(Output(-1)) + TrendGrowthShock(-1);
 
 end;
 
@@ -194,11 +194,11 @@ steady_state_model;
     interest_rate = 1 / BondPrice - 1;
     Debt = steady_state_debt;
     Productivity = 0;
-    GovSpending = growth_rate;
+    TrendGrowthShock = growth_rate;
     Utility = (Consumption^labor_share * (1 - Labor)^(1 - labor_share))^(1 - sigma) / (1 - sigma);
     MUConsumption = labor_share * Utility / Consumption * (1 - sigma);
     MULabor = -(1 - labor_share) * Utility / (1 - Labor) * (1 - sigma);
-    InvestmentGDP = (exp(GovSpending) * Capital - (1 - depreciation) * Capital) / Output;
+    InvestmentGDP = (exp(TrendGrowthShock) * Capital - (1 - depreciation) * Capital) / Output;
     LogOutput = log(Output);
     LogConsumption = log(Consumption);
     LogInvestment = log(Investment);
@@ -206,7 +206,7 @@ steady_state_model;
 end;
 
 shocks;
-    var ShockGovSpending; stderr @{shock_gov_spending_stderr};
+    var TrendGrowthInnovation; stderr @{trend_growth_shock_stderr};
     var ShockProductivity; stderr @{shock_productivity_stderr};
 end;
 

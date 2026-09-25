@@ -156,6 +156,7 @@ class Tokenizer:
         "OutputForeign",
         "PriceRatioH",
         "RealExchangeRate",
+        "TrendGrowthShock",
         "LaborProductivity",  # output per hour
     )
 

@@ -35,7 +35,7 @@ var LagrangeMultiplierA     $LagrangeMultiplierA$     (long_name='marginal utili
 varexo GovernmentSpendingInnovation   $GovernmentSpendingInnovation$   (long_name='government spending innovation')
        ProductivityInnovation         $ProductivityInnovation$         (long_name='TFP innovation');
 
- 
+
 parameters epsilon         ${\varepsilon}$   (long_name='substitution elasticity')
            psi_p           ${\psi}$          (long_name='price adjustment costs')
            beta            ${\beta}$         (long_name='discount factor')
@@ -74,9 +74,10 @@ g_share = @{g_share};
 rho_z = @{rho_z};
 rho_g = @{rho_g};
 
+% Taylor rule of Faia (2008), Table 1 ("with smoothing")
 phi_r = 0.9;
-phi_pi = 5;
-phi_y = 0;
+phi_pi = 1.5;
+phi_y = 0.5;
 phi_u = 0;
 
 NominalInterestRate_ss = 1 / beta;
