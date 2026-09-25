@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 import torch
 from scipy.stats import kurtosis, skew
 from sklearn.neighbors import NearestNeighbors
@@ -599,7 +600,8 @@ class EconomicsDataset(Dataset):
 
     def __init__(
         self, data_path: Path, max_state_dim: int, max_action_dim: int,
-        max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int
+        max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int,
+        random_window: bool = True,
     ):
         """
         Initialize the dataset with the given parameters.
@@ -607,13 +609,16 @@ class EconomicsDataset(Dataset):
         Args:
             data_path (Path): Path to the directory containing episode data files and metadata
             max_state_dim (int): Maximum dimension for state vectors after padding/truncation
-            max_seq_len (int): Maximum sequence length for episodes (default: 512)
+            max_seq_len (int): Length of the window drawn from each episode
+            random_window (bool): A fresh random window per access (training); otherwise a fixed
+                window per episode.
         """
         self.max_state_dim = max_state_dim
         self.max_action_dim = max_action_dim
         self.max_endogenous_dim = max_endogenous_dim
         self.max_seq_len = max_seq_len
         self.max_model_params_dim = max_model_params_dim
+        self.random_window = random_window
 
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
@@ -713,15 +718,50 @@ x
                 - task_id (torch.Tensor): Task identifier [scalar]
                 - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
-        data = pd.read_parquet(self.metadata[idx]["output_dir"])
+        path = self.metadata[idx]["output_dir"]
+        # info repeats on every row: read only its first row
+        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"])
+        parquet = pq.ParquetFile(path)
+        desc_keys = ["state_description", "action_description", "endogenous_description"]
+        first_row = next(parquet.iter_batches(
+            batch_size=1, columns=["info"] + [k for k in desc_keys if k in parquet.schema_arrow.names]
+        )).to_pylist()[0]
+        # descriptions: in info (python envs) or top-level columns (Dynare)
+        info = dict(first_row["info"])
+        for k in desc_keys:
+            if info.get(k) is None:
+                info[k] = first_row.get(k) or []
 
-        states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
-        endogenous = torch.tensor(data['endogenous'].tolist(), dtype=torch.float32)
-        actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
+        stack = lambda col: torch.from_numpy(np.stack(data[col].values).astype(np.float32).reshape(len(data), -1))
+        states, endogenous, actions = stack('state'), stack('endogenous'), stack('action')
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
-        info = data.iloc[0]["info"]
+        # step t sees (s_t, a_{t-1}, r_{t-1}) and predicts a_t
+        prev_actions = torch.cat([torch.zeros_like(actions[:1]), actions[:-1]], dim=0)
+        prev_rewards = torch.cat([torch.zeros_like(rewards[:1]), rewards[:-1]], dim=0)
+
+        # per-episode action scale for the loss (not a model input), floored at 1% of the level
+        action_scale = torch.maximum(
+            actions.std(dim=0, unbiased=False), 1e-2 * actions.abs().mean(dim=0) + 1e-4
+        )
+        # the episode's first step (a_{-1} = 0) is scaled by the action level
+        cold_start_scale = torch.maximum(actions.abs().mean(dim=0), action_scale)
+
+        n_steps = len(states)
+        n_starts = max(n_steps - self.max_seq_len + 1, 1)
+        if self.random_window:
+            # 10% of windows start at the episode's first step
+            start = 0 if torch.rand(1).item() < 0.1 else int(torch.randint(n_starts, (1,)))
+        else:
+            start = (idx * 2654435761) % n_starts
+        window = slice(start, start + self.max_seq_len)
+        states, endogenous, actions, rewards = states[window], endogenous[window], actions[window], rewards[window]
+        prev_actions, prev_rewards = prev_actions[window], prev_rewards[window]
+        action_scale = action_scale.expand(len(actions), -1).clone()
+        if start == 0:
+            action_scale[0] = cold_start_scale
+
         model_params = info["model_params"]
 
         sorted_model_params = list(sorted(model_params.items()))
@@ -730,20 +770,26 @@ x
 
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
-        state_description = data.iloc[0]["info"]["state_description"]
-        action_description = data.iloc[0]["info"]["action_description"]
-        endogenous_description = data.iloc[0]["info"]["endogenous_description"]
-        # Truncate descriptions if they exceed max dimensions, then pad to max dimensions
-        state_description = state_description[:self.max_state_dim]
-        action_description = action_description[:self.max_action_dim]
-        endogenous_description = endogenous_description[:self.max_endogenous_dim]
+        state_description = info["state_description"]
+        action_description = info["action_description"]
+        endogenous_description = info["endogenous_description"]
+        for kind, desc, limit in [("state", state_description, self.max_state_dim),
+                                  ("action", action_description, self.max_action_dim),
+                                  ("endogenous", endogenous_description, self.max_endogenous_dim)]:
+            if len(desc) > limit:
+                raise ValueError(
+                    f"{path}: {len(desc)} {kind} variables exceed max_{kind}_dim={limit}; "
+                    f"raise train.max_{kind}_dim"
+                )
         states_info = torch.tensor([self.tokenizer.state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
         actions_info = torch.tensor([self.tokenizer.action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
         endogenous_info = torch.tensor([self.tokenizer.state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"
         assert len(actions_info) == self.max_action_dim, f"actions_info length is {len(actions_info)} but max_action_dim is {self.max_action_dim}"
         # Pad actions to max_actions_dim
+        action_scale = self.pad_dim(action_scale - 1.0, self.max_action_dim) + 1.0  # pad with 1s
         actions = self.pad_dim(actions, self.max_action_dim)
+        prev_actions = self.pad_dim(prev_actions, self.max_action_dim)
         endogenous = self.pad_dim(endogenous, self.max_endogenous_dim)
 
         # Get original sequence length
@@ -752,7 +798,10 @@ x
         # Pad sequences to max_seq_len
         states = self.pad_sequence(states, self.max_seq_len)
         actions = self.pad_sequence(actions, self.max_seq_len)
+        action_scale = self.pad_sequence(action_scale - 1.0, self.max_seq_len) + 1.0  # pad with 1s
+        prev_actions = self.pad_sequence(prev_actions, self.max_seq_len)
         rewards = self.pad_sequence(rewards, self.max_seq_len)
+        prev_rewards = self.pad_sequence(prev_rewards, self.max_seq_len)
         endogenous = self.pad_sequence(endogenous, self.max_seq_len)
 
         # Create attention mask. pad_sequence left-pads (padding first, real data last), so the
@@ -765,14 +814,18 @@ x
         return {
             'states': states,  # [max_seq_len, max_state_dim]
             'states_info': states_info,  # [max_state_dim]
-            'actions': actions,  # [max_seq_len, action_dim]
+            'actions': actions,  # [max_seq_len, action_dim] - prediction targets a_t
+            'prev_actions': prev_actions,  # [max_seq_len, action_dim] - model input a_{t-1}
+            'action_scale': action_scale,  # [max_seq_len, action_dim] - loss weighting only
             'actions_info': actions_info,  # [action_dim]
             'endogenous': endogenous,  # [max_seq_len, max_endogenous_dim]
             'endogenous_info': endogenous_info,  # [max_endogenous_dim]
             'reward': rewards,  # [max_seq_len, 1]
+            'prev_reward': prev_rewards,  # [max_seq_len, 1] - model input r_{t-1}
             'task_id': task_id,  # scalar
             'model_params': model_params_values,
-            'attention_mask': attention_mask  # [max_seq_len]
+            'attention_mask': attention_mask,  # [max_seq_len]
+            'window_start': torch.tensor(start, dtype=torch.long),  # episode step of the window's first position
         }
 
 

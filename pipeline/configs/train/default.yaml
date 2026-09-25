@@ -6,9 +6,9 @@ data_root: ${dataset.workdir}
 epochs: 100
 val_freq: 10
 device: cpu
-max_state_dim: 30
-max_action_dim: 3
-max_endogenous_dim: 5
+max_state_dim: 16
+max_action_dim: 5
+max_endogenous_dim: 16
 # Must exceed the largest Dynare model's real parameter count (34, Faia_2008, verified against
 # data/raw/*_params.yaml) - EconomicsDataset truncates model_params alphabetically by key name,
 # so anything below that silently drops parameters for that model's conditioning signal.
