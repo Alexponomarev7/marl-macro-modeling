@@ -66,6 +66,38 @@ def causal_features(x: torch.Tensor, level_ok: torch.Tensor, delta_ok: torch.Ten
     return torch.stack(channels, -1).clamp(-10.0, 10.0).float(), unit.float()
 
 
+RIDGE_PENALTY = 1e-2  # on standardized features
+
+
+def in_context_ridge_change(states: torch.Tensor, prev_actions: torch.Tensor, state_delta_ok: torch.Tensor,
+                            action_delta_ok: torch.Tensor) -> torch.Tensor:
+    """In-context ridge estimate of a_t - a_{t-1}: regress a_tau - a_{tau-1} on s_tau - s_{tau-1}
+    over tau < t and evaluate at s_t - s_{t-1}; 0 until the window has two more pairs than moving
+    states. The pair of step tau is complete at position tau + 1.
+
+    states [B, L, S], prev_actions [B, L, A]; *_delta_ok [B, L, 1]. Returns [B, L, A].
+    Runs on the CPU: batched linalg.solve is slow on MPS.
+    """
+    device, dtype = prev_actions.device, prev_actions.dtype
+    states, prev_actions = states.detach().cpu().double(), prev_actions.detach().cpu().double()
+    state_delta_ok, action_delta_ok = state_delta_ok.cpu(), action_delta_ok.cpu()
+    ds = _first_difference(states) * state_delta_ok        # s_t - s_{t-1} at t
+    da = _first_difference(prev_actions) * action_delta_ok  # a_{t-1} - a_{t-2} at t
+    lag = lambda z: torch.cat([torch.zeros_like(z[:, :1]), z[:, :-1]], 1)
+    pair_ok = (action_delta_ok & lag(state_delta_ok)).double()       # pair of step t-1, complete at t
+    x, y = lag(ds) * pair_ok, da * pair_ok
+    xtx = torch.cumsum(x.unsqueeze(-1) * x.unsqueeze(-2), 1)          # [B, L, S, S], pairs completed by t
+    xty = torch.cumsum(x.unsqueeze(-1) * y.unsqueeze(-2), 1)          # [B, L, S, A]
+    scale = torch.diagonal(xtx, dim1=-2, dim2=-1).sqrt()               # [B, L, S]
+    moving = scale > 0
+    scale = torch.where(moving, scale, 1.0)
+    gram = xtx / (scale.unsqueeze(-1) * scale.unsqueeze(-2)) + RIDGE_PENALTY * torch.eye(states.shape[-1], dtype=torch.float64)
+    coef = torch.linalg.solve(gram, xty / scale.unsqueeze(-1))        # standardized G_hat
+    change = torch.einsum("bls,blsa->bla", torch.where(moving, ds / scale, 0.0), coef)
+    enough = torch.cumsum(pair_ok, 1) >= moving.sum(-1, keepdim=True) + 2
+    return torch.where(enough, change, 0.0).to(device=device, dtype=dtype)
+
+
 def causal_zscore(x: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
     """Running z-score of x [batch, seq, dim], skipping positions where valid [batch, seq] is False."""
     ok = torch.ones_like(x[..., :1], dtype=torch.bool) if valid is None else valid.bool().unsqueeze(-1)
@@ -136,13 +168,17 @@ class AlgorithmDistillationTransformer(nn.Module):
         has_pinn: bool,
         context_only: bool = False,
         input_normalization: str = "symlog",
+        ridge_channel: bool = False,
     ):
         """context_only: hide the task id and the model parameters.
         input_normalization: "symlog" or "causal" (scale-free running statistics, see causal_features).
+        ridge_channel: add in_context_ridge_change to each action slot (causal mode only).
         """
         super().__init__()
         if input_normalization not in ("symlog", "causal"):
             raise ValueError(f"input_normalization must be 'symlog' or 'causal', got {input_normalization!r}")
+        if ridge_channel and input_normalization != "causal":
+            raise ValueError("ridge_channel needs input_normalization='causal'")
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.max_seq_len = max_seq_len
@@ -151,12 +187,13 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.model_params_dim = model_params_dim
         self.context_only = context_only
         self.input_normalization = input_normalization
+        self.ridge_channel = ridge_channel
 
         self.tokenizer = Tokenizer()
         # slot = [variable-name embedding | numeric channels]
         state_channels = 3 if input_normalization == "causal" else 2
         self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - state_channels)
-        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 2)
+        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - (3 if ridge_channel else 2))
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
 
@@ -251,6 +288,9 @@ class AlgorithmDistillationTransformer(nn.Module):
             after = lambda ok: ok & torch.cat([torch.zeros_like(ok[:, :1]), ok[:, :-1]], 1)  # at t and t-1
             state_channels, _ = causal_features(states, valid, after(valid), lagged=True)
             action_channels, action_unit = causal_features(prev_actions, prev_valid, after(prev_valid))
+            if self.ridge_channel:
+                ridge = in_context_ridge_change(states, prev_actions, after(valid), after(prev_valid))
+                action_channels = torch.cat([action_channels, (ridge / action_unit).clamp(-10.0, 10.0).float().unsqueeze(-1)], -1)
             reward_channels, _ = causal_features(rewards, prev_valid, after(prev_valid))
             reward_input = reward_channels[..., 0]  # level z-score
         else:
