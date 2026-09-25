@@ -8,6 +8,7 @@
 ```python lib/data/generate_data.py --env_class lib.envs.rbc.RBCEnv --num_steps 1000 --discount_rate 0.98```
 7. Score a checkpoint per environment against persistence and an in-context least-squares oracle, and check whether it uses its context (history time-shuffled / cut to 2 steps):\
 ```python -m lib.evaluation --checkpoint checkpoints/<run>/last.ckpt --data <dir of processed episode parquets> --context-diagnostics --bootstrap 200```
+8. Fast invariants of the data -> model pipeline (dataset alignment, causality, rewards, evaluation): `pixi run test`.
 
 ## Project Organization
 
