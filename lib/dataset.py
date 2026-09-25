@@ -157,7 +157,20 @@ class Tokenizer:
         "PriceRatioH",
         "RealExchangeRate",
         "TrendGrowthShock",
+        "LoggedOutput",
+        "LoggedLabor",
+        "LoggedWage",
+        "LoggedInvestment",
         "LaborProductivity",  # output per hour
+        "CapitalDestruction",
+        "TFPNews1",  # TFP news hitting in 1..8 periods
+        "TFPNews2",
+        "TFPNews3",
+        "TFPNews4",
+        "TFPNews5",
+        "TFPNews6",
+        "TFPNews7",
+        "TFPNews8",
     )
 
     # State aliases for canonicalization across environments
@@ -223,6 +236,10 @@ class Tokenizer:
         "capital (log)": "LoggedCapital",
         "TFP (log)": "LoggedProductivity",
         "consumption (log)": "LoggedConsumption",
+        "output (log)": "LoggedOutput",
+        "hours worked (log)": "LoggedLabor",
+        "real wage (log)": "LoggedWage",
+        "investment (log)": "LoggedInvestment",
     }
 
     # .mod symbol -> state token, for tokenization only (STATE_ALIASES also renames CSV columns)
@@ -272,6 +289,7 @@ class Tokenizer:
         "C": "Consumption",
         "N": "HoursWorked",
         "util": "Utility",      # SGU_2003
+        "NaturalWage": "Natural Real Wage",  # Born_Pfeifer_2018_MP
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
@@ -297,6 +315,8 @@ class Tokenizer:
         "leisure",
         "money_supply_change",
         "tax_rate_change",
+        "LoggedConsumption",
+        "LoggedLabor",
     )
 
     ACTION_ALIASES: dict[str, str] = {

@@ -129,7 +129,8 @@ Capital = (1 - delta) * Capital(-1) + Investment;
 InterestRate = alpha * Productivity * Capital(-1)^(alpha - 1) - delta;
 
 [name='Euler equation (CRRA)']
-Consumption^(-sigma) = beta * Consumption(+1)^(-sigma) * (1 + InterestRate);
+% the return on capital chosen at t is paid at t+1
+Consumption^(-sigma) = beta * Consumption(+1)^(-sigma) * (1 + InterestRate(+1));
 
 end;
 

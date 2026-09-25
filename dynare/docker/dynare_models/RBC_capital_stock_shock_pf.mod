@@ -17,7 +17,8 @@ var Consumption              $Consumption$ (long_name='consumption')
     InterestRate             $InterestRate$ (long_name='real interest rate')
     Wage                     $Wage$ (long_name='real wage')
     LoggedProductivity       $LoggedProductivity$ (long_name='logged TFP')
-    Productivity             $Productivity$ (long_name='TFP level');
+    Productivity             $Productivity$ (long_name='TFP level')
+    CapitalDestruction       $CapitalDestruction$ (long_name='capital destruction shock (realized this period)');
 
 varexo LoggedProductivityInnovation   $LoggedProductivityInnovation$ (long_name='TFP shock')
        CapitalStockInnovation         $CapitalStockInnovation$ (long_name='capital destruction shock');
@@ -195,6 +196,10 @@ Consumption^(-sigma) = beta * Consumption(+1)^(-sigma) * (1 + alpha * Productivi
 [name='Labor supply (intratemporal FOC)']
 psi * Consumption^sigma / (1 - Labor) = Wage;
 
+[name='Realized capital destruction (observable state)']
+% capital destroyed this period (an observable copy of the shock)
+CapitalDestruction = CapitalStockInnovation;
+
 end;
 
 initval;
@@ -210,6 +215,7 @@ initval;
   Wage = (1 - alpha) * Output / l_ss;
   MarginalProductCapital = alpha * start_capital^(alpha-1) * l_ss^(1-alpha);
   InterestRate = alpha * start_capital^(alpha - 1) * l_ss^(1 - alpha) - delta;
+  CapitalDestruction = 0;
 end;
 
 endval;
@@ -225,6 +231,7 @@ endval;
   Wage = w_ss;
   MarginalProductCapital = alpha * k_ss^(alpha-1) * l_ss^(1-alpha);
   InterestRate = r_ss;
+  CapitalDestruction = 0;
 end;
 
 % unanticipated shocks: agents re-plan when each shock arrives (mit_shock_solver.m)

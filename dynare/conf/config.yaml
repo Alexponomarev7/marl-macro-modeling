@@ -318,6 +318,7 @@ models:
           - [Capital, -1]
           - LoggedProductivity
           - Productivity
+          - CapitalDestruction
         action_columns:
           - Consumption
           - Labor
@@ -361,6 +362,7 @@ models:
           - [Capital, -1]
           - LoggedProductivity
           - Productivity
+          - CapitalDestruction
         action_columns:
           - Consumption
           - Labor
@@ -413,15 +415,23 @@ models:
         log_inputs: true
       input:
         state_columns:
-          - [Capital, -1]
+          - [LoggedCapital, -1]
           - LoggedProductivity
+          - TFPNews8
+          - TFPNews7
+          - TFPNews6
+          - TFPNews5
+          - TFPNews4
+          - TFPNews3
+          - TFPNews2
+          - TFPNews1
         action_columns:
-          - Consumption
-          - Labor
+          - LoggedConsumption
+          - LoggedLabor
         endogenous_columns:
-          - Output
-          - Investment
-          - Wage
+          - LoggedOutput
+          - LoggedInvestment
+          - LoggedWage
           - AnnualInterestRate
       output:
         data_path: ./data/interim/RBC_news_shock_pf
@@ -447,23 +457,33 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.crra_reward
+      reward: lib.rewards.ces_utility_reward
       reward_kwargs:
-        target_column: Consumption
-        # RBC_news_shock_model_stoch.mod stores Consumption as consumption (log), not the
-        # level - c**(1-sigma) on a raw log value is negative-base/NaN roughly half the time.
-        log_input: true
+        consumption_column: Consumption
+        labor_column: Labor
+        sigma_column: sigma
+        A_column: psi
+        eta_default: 1.0
+        log_inputs: True
       input:
         state_columns:
-          - [Capital, -1]
+          - [LoggedCapital, -1]
           - LoggedProductivity
+          - TFPNews8
+          - TFPNews7
+          - TFPNews6
+          - TFPNews5
+          - TFPNews4
+          - TFPNews3
+          - TFPNews2
+          - TFPNews1
         action_columns:
-          - Consumption
-          - Labor
+          - LoggedConsumption
+          - LoggedLabor
         endogenous_columns:
-          - Output
-          - Investment
-          - Wage
+          - LoggedOutput
+          - LoggedInvestment
+          - LoggedWage
           - AnnualInterestRate
       output:
         data_path: ./data/interim/RBC_news_shock_stoch
@@ -490,18 +510,20 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.stability_reward
+      reward: lib.rewards.ces_utility_reward
       reward_kwargs:
-        target_column: Consumption
+        consumption_column: Consumption
+        labor_column: Labor
         sigma_column: sigma
+        A_column: psi
       input:
         state_columns:
           - [Capital, -1]
           - LoggedProductivity
           - LoggedGovSpending
-          - Labor
         action_columns:
           - Consumption
+          - Labor
         endogenous_columns:
           - Output
           - Investment
@@ -646,12 +668,10 @@ models:
         omega_column: omega
       input:
         state_columns:
-          - Capital
-          - Debt
+          - [Capital, -1]
+          - [Debt, -1]
           - LoggedProductivity
           - TechGrowthRate
-          - PreferenceShock
-          - CountryPremiumShock
         action_columns:
           - Consumption
           - Labor
@@ -703,11 +723,11 @@ models:
         lambda_y: 0.5
       input:
         state_columns:
-          - PriceInflation
-          - OutputGap
-          - RealWageGap
+          - [Output, -1]
+          - [NominalInterestRate, -1]
+          - [RealWageGap, -1]
+          - [NaturalWage, -1]
           - TechnologyShock
-          - MonetaryShock
           - PreferenceShock
         action_columns:
           - NominalInterestRate
@@ -789,9 +809,13 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.log_reward
+      reward: lib.rewards.separable_utility_reward
       reward_kwargs:
-        target_column: Consumption
+        consumption_column: Consumption
+        labor_column: Labor
+        labor_form: power
+        labor_weight_column: sigma
+        frisch_column: psi
       input:
         state_columns:
           - [Capital, -1]
@@ -843,14 +867,9 @@ models:
           - [Vacancies, -1]
           - [MeetingRate, -1]
           - [NominalInterestRate, -1]
+          - [GrossOutputB, -1]
           - LogTFP
           - GovernmentSpendingShock
-          - Consumption
-          - InflationRate
-          - UnemploymentRate
-          - MarginalCosts
-          - RealWage
-          - GrossOutputB
         action_columns:
           - NominalInterestRate
         endogenous_columns:
@@ -906,17 +925,10 @@ models:
       input:
         state_columns:
           - [TermsOfTrade, -1]
-          - [NominalExchangeRate, -1]
-          - [NominalInterestRate, -1]
           - [PriceRatioH, -1]
           - LogProductivity
           - OutputForeign
           - InflationForeign
-          - Consumption
-          - Output
-          - RealExchangeRate
-          - InflationCPI
-          - MarginalCost
         action_columns:
           - NominalInterestRate
         endogenous_columns:
@@ -1367,6 +1379,8 @@ models:
   #        - 'Capital'               # k (управляемая переменная)
   #    output:
   #      data_path: ./data/interim/SGU_2004  # Путь для сохранения обработанных данных
+
+
   Hansen_1985:
     dynare_model_settings:
       periods: ${metadata.periods}
