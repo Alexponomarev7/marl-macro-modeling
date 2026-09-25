@@ -172,29 +172,32 @@ models:
       periods: ${metadata.periods}
       num_samples:
         base: ${metadata.num_samples}
-        coefficient: 1.5  # actual = int(base * coefficient)
+        coefficient: 1.0  # actual = int(base * coefficient)
       parameter_ranges:
-        start_capital: [0.5, 1.5]
         alpha: [0.3, 0.4]
-        beta: [0.4, 0.6]
-        delta: [0.8, 0.9]
-        n: [0.05, 0.1]
-        g: [0.2, 0.3]
+        beta: [0.4, 0.6]  # discounting between youth and old age (one period ~ a generation)
+        delta: [0.8, 0.9]  # generational depreciation
+        n: [0.05, 0.1]  # population growth per generation
+        g: [0.2, 0.3]  # technology growth per generation
+        sigma: [0.5, 3.0]  # CRRA curvature
+        rho_z: [0.0, 0.5]  # generational TFP persistence
+        productivity_shock_stderr: [0.05, 0.15]
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.olg_log_utility_reward
+      reward: lib.rewards.olg_lifetime_utility_reward
       reward_kwargs:
         consumption_young_column: ConsYoung
         consumption_old_column: ConsOld
         beta_column: beta
+        sigma_column: sigma
       input:
         state_columns:
           - [Capital, -1]
+          - LoggedProductivity
           - Output
           - Wage
           - InterestRate
-          - Savings
         action_columns:
           - Savings
         endogenous_columns:

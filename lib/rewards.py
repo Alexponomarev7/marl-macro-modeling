@@ -258,47 +258,28 @@ def cara_reward(
     return utility
 
 
-def olg_log_utility_reward(
+def olg_lifetime_utility_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     consumption_young_column: str = 'ConsYoung',
     consumption_old_column: str = 'ConsOld',
-    beta_column: str | None = None,
-    beta_default: float = 0.4,
-    **kwargs  # Accept any additional kwargs and ignore them
+    beta_column: str = 'beta',
+    sigma_column: str | None = None,
+    **kwargs
 ) -> pd.Series:
     """
-    OLG (Overlapping Generations) log utility reward:
-    U = log(c1_t) + beta * log(c2_{t+1})
-
-    Note: In OLG models, beta represents discounting between youth and old age,
-    not between periods as in Ramsey model.
-
-    Args:
-        data: DataFrame with consumption data
-        parameters: Model parameters including beta
-        consumption_young_column: Column name for young consumption
-        consumption_old_column: Column name for old consumption
-        beta_column: Column name or parameter name for discount factor
-        beta_default: Default value for beta
-        **kwargs: Additional parameters (ignored)
+    Lifetime utility of the generation young at t: U_t = u(c1_t) + beta * u(c2_{t+1}), CRRA u.
+    The last row uses c2_T for c2_{T+1}.
     """
-
     c1 = data[consumption_young_column]
-    c2 = data[consumption_old_column]
+    c2_next = data[consumption_old_column].shift(-1).fillna(data[consumption_old_column].iloc[-1])
+    beta = parameters[beta_column]
+    sigma = parameters[sigma_column] if sigma_column else 1.0
 
-    if beta_column is not None and beta_column in data.columns:
-        beta = data[beta_column]
-    elif beta_column is not None and beta_column in parameters:
-        beta = parameters[beta_column]
-    else:
-        beta = beta_default
-
-    utility = np.log(c1) + beta * np.log(c2)
+    u = np.log if np.isclose(sigma, 1.0) else (lambda c: (c ** (1 - sigma) - 1) / (1 - sigma))
+    utility = u(c1) + beta * u(c2_next)
     utility = utility.replace([np.inf, -np.inf], np.nan)
-    utility = utility.fillna(-1e6)
-
-    return utility
+    return utility.fillna(-1e6)
 
 
 def GarciaCicco(
