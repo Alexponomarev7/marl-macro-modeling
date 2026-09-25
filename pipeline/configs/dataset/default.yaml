@@ -11,9 +11,15 @@ enabled: True
 train:
   type: dynare
   dynare_output_path: ???
+  # Optional Dynare model-name lists, e.g. leave-one-environment-out:
+  #   dataset.train.exclude_models=[Hansen_1985] dataset.val.include_models=[Hansen_1985]
+  include_models: null
+  exclude_models: null
 val:
   type: dynare
   dynare_output_path: ???
+  include_models: null
+  exclude_models: null
   # type: envs
   # envs:
   #   - env_name: rbc
