@@ -4,6 +4,7 @@ from typing import (
     Optional,
     cast,
 )
+import math
 from pathlib import Path
 
 import hydra
@@ -24,6 +25,7 @@ from lib.my_utils import (
     get_run_id,
 )
 from lib.dataset import EconomicsDataset, Tokenizer
+from lib.models.transformer import symlog
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
     DatasetGenerator,
@@ -89,6 +91,7 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=True,
             )
             self.val_dataset = EconomicsDataset(
                 self.data_root / "val",
@@ -97,6 +100,7 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=False,
             )
         if stage == "test":
             self.test_dataset = EconomicsDataset(
@@ -106,6 +110,7 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=False,
             )
 
     def train_dataloader(self):
@@ -162,7 +167,8 @@ class EconomicPolicyModel(L.LightningModule):
         self.save_hyperparameters(ignore=['test_envs'])
 
         self.model = hydra.utils.instantiate(model_cfg)
-        self.criterion = hydra.utils.instantiate(criterion_cfg)
+        # elementwise, for masking
+        self.criterion = hydra.utils.instantiate(criterion_cfg, reduction="none")
         self.optimizer_cfg = optimizer_cfg
         self.scheduler_cfg = scheduler_cfg
         self.test_envs = test_envs
@@ -185,88 +191,67 @@ class EconomicPolicyModel(L.LightningModule):
         )
 
     def configure_optimizers(self):
-        """Configure optimizer for training."""
+        """Optimizer from config, with a per-step linear warmup then cosine decay to eta_min."""
         optimizer = hydra.utils.instantiate(
             self.optimizer_cfg,
             params=self.parameters()
         )
-        scheduler = hydra.utils.instantiate(self.scheduler_cfg, optimizer=optimizer)
-        return [optimizer], [scheduler]
+        warmup = int(self.scheduler_cfg["warmup_steps"])
+        total = max(int(self.trainer.estimated_stepping_batches), warmup + 1)
+        floor = float(self.scheduler_cfg["eta_min"]) / optimizer.defaults["lr"]
 
-    def training_step(self, batch, batch_idx):
-        """Updated training step to handle the new batch format"""
-        states = batch['states']
-        actions = batch['actions']
-        rewards = batch['reward']
-        task_ids = batch['task_id']
-        model_params = batch['model_params']
-        states_info = batch['states_info']
-        actions_info = batch['actions_info']
+        def lr_factor(step: int) -> float:
+            if step < warmup:
+                return (step + 1) / warmup
+            progress = min((step - warmup) / (total - warmup), 1.0)
+            return floor + (1.0 - floor) * 0.5 * (1.0 + math.cos(math.pi * progress))
 
-        # weird bug with nan values
-        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_factor)
+        return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
+    @staticmethod
+    def _sanitize(x: torch.Tensor) -> torch.Tensor:
+        return torch.clamp(torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+
+    def _masked_loss(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        per_elem = self.criterion(pred, target)
+        mask = mask.to(per_elem.dtype)
+        return (per_elem * mask).sum() / mask.sum().clamp(min=1.0)
+
+    def _shared_step(self, batch, stage: str):
+        # step t sees (s_t, a_{t-1}, r_{t-1}) and is scored on a_t
         predicted_actions, pinn_preds = self(
-            states=states,
-            states_info=states_info,
-            actions=actions,
-            actions_info=actions_info,
-            rewards=rewards,
-            task_ids=task_ids,
-            model_params=model_params,
+            states=self._sanitize(batch['states']),
+            states_info=batch['states_info'],
+            actions=self._sanitize(batch['prev_actions']),
+            actions_info=batch['actions_info'],
+            rewards=self._sanitize(batch['prev_reward']),
+            task_ids=batch['task_id'],
+            model_params=batch['model_params'],
         )
 
-        # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
-        # actions shape: [batch_size, seq_length, action_dim]
-        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
-        self.log('train_action_loss', loss, on_step=True, on_epoch=True)
-        if "endogenous" in batch and pinn_preds is not None:
-            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
-            self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
-            loss += pinn_loss
+        valid_steps = batch['attention_mask'].unsqueeze(-1)  # [bs, seq, 1]
+        action_mask = valid_steps & (batch['actions_info'] != 0).unsqueeze(1)
+        # NMSE: errors in units of each episode's action scale
+        scale = batch['action_scale']  # [bs, seq, action_dim]
+        loss = self._masked_loss(predicted_actions / scale, self._sanitize(batch['actions']) / scale, action_mask)
+        self.log(f'{stage}_action_loss', loss, on_step=(stage == 'train'), on_epoch=True)
+
+        if pinn_preds is not None and (batch['endogenous_info'] != 0).any():
+            endo_mask = valid_steps & (batch['endogenous_info'] != 0).unsqueeze(1)
+            pinn_loss = self._masked_loss(pinn_preds, symlog(self._sanitize(batch['endogenous'])), endo_mask)
+            self.log(f'{stage}_pinn_loss', pinn_loss, on_step=(stage == 'train'), on_epoch=True)
+            loss = loss + pinn_loss
 
         assert not torch.isnan(loss)
-        self.log('train_loss', loss, on_step=True, on_epoch=True)
+        self.log(f'{stage}_loss', loss, on_step=(stage == 'train'), on_epoch=True)
         return loss
+
+    def training_step(self, batch, batch_idx):
+        return self._shared_step(batch, 'train')
 
     def validation_step(self, batch, batch_idx):
-        """Updated validation step to match training step"""
-        states = batch['states']
-        actions = batch['actions']
-        rewards = batch['reward']
-        task_ids = batch['task_id']
-        states_info = batch['states_info']
-        actions_info = batch['actions_info']
-        model_params = batch['model_params']
-
-        # weird bug with nan values
-        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-
-        predicted_actions, pinn_preds = self(
-            states=states,
-            actions=actions,
-            rewards=rewards,
-            task_ids=task_ids,
-            states_info=states_info,
-            actions_info=actions_info,
-            model_params=model_params,
-        )
-
-        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
-        self.log('val_action_loss', loss, on_epoch=True)
-        if "endogenous" in batch and pinn_preds is not None:
-            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
-            self.log('val_pinn_loss', pinn_loss, on_epoch=True)
-            loss += pinn_loss
-
-        self.log('val_loss', loss, on_epoch=True)
-        return loss
+        return self._shared_step(batch, 'val')
 
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
@@ -327,6 +312,7 @@ def main(hydra_cfg: DictConfig) -> None:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
+        gradient_clip_val=cfg['train']['gradient_clip_val'],
         accelerator='gpu' if torch.cuda.is_available() else 'cpu',
         devices=1,
         strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True), # type: ignore

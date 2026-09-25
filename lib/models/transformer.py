@@ -14,6 +14,19 @@ def _to_scalar(x) -> float:
     return float(np.asarray(x, dtype=np.float64).reshape(-1)[0])
 
 
+def symlog(x: torch.Tensor) -> torch.Tensor:
+    """sign(x) * log(1 + |x|)."""
+    return torch.sign(x) * torch.log1p(torch.abs(x))
+
+
+DELTA_SCALE = 100.0  # first differences are scaled into symlog's near-linear range
+
+
+def _first_difference(x: torch.Tensor) -> torch.Tensor:
+    """x_t - x_{t-1} along the sequence dim ([batch, seq, ...]), 0 at the first step."""
+    return torch.cat([torch.zeros_like(x[:, :1]), x[:, 1:] - x[:, :-1]], dim=1)
+
+
 class PositionalEncoding(nn.Module):
     """
     Implements positional encoding for transformer inputs.
@@ -76,7 +89,9 @@ class AlgorithmDistillationTransformer(nn.Module):
         model_params_dim: int,
         pinn_output_dim: int,  # Optional PINN head output dimension
         has_pinn: bool,
+        context_only: bool = False,
     ):
+        """context_only: hide the task id and the model parameters."""
         super().__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -84,10 +99,12 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.d_model = d_model * (1 + state_dim + action_dim + 1)
         self.has_pinn = has_pinn
         self.model_params_dim = model_params_dim
+        self.context_only = context_only
 
         self.tokenizer = Tokenizer()
-        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - 1)
-        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 1)
+        # slot = [variable-name embedding | numeric channels]
+        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - 2)
+        self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 2)
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
 
@@ -102,13 +119,19 @@ class AlgorithmDistillationTransformer(nn.Module):
 
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
-               d_model=self.d_model,
+                d_model=self.d_model,
                 nhead=nhead,
+                norm_first=True,
                 dtype=torch.float32
             ),
-            num_layers=num_layers
+            num_layers=num_layers,
+            norm=nn.LayerNorm(self.d_model),
+            enable_nested_tensor=False,
         )
         self.action_head = nn.Linear(self.d_model, action_dim, dtype=torch.float32)
+        # zero-init residual head: training starts from persistence, a_t = a_{t-1}
+        nn.init.zeros_(self.action_head.weight)
+        nn.init.zeros_(self.action_head.bias)
 
         # Optional PINN head for predicting additional data
         if self.has_pinn:
@@ -118,37 +141,12 @@ class AlgorithmDistillationTransformer(nn.Module):
                 nn.Linear(self.d_model // 2, pinn_output_dim)
             )
 
-    def get_state_embedding(self, states: torch.Tensor, states_info: torch.Tensor) -> torch.Tensor:
-        # states: [batch_size, seq_length, state_dim]
-        # states_info: [batch_size, state_dim]
-
-        # Get embeddings for state classes [batch_size, state_dim, d_model-1]
-        class_embeddings = self.state_embedding(states_info)
-
-        # Reshape states to [batch_size, seq_len, state_dim] and expand class embeddings
-        # Expand class embeddings to match sequence length
-        class_embeddings = class_embeddings.unsqueeze(1).expand(-1, states.shape[1], -1, -1)
-        states = states.unsqueeze(-1)
-
-        # Concatenate states with class embeddings along last dimension
-        # [batch_size, seq_len, state_dim, d_model]
-        combined = torch.cat([class_embeddings, states], dim=-1)
-
-        # Flatten the state_dim dimension into d_model
-        # [batch_size, seq_len, d_model]
-        return combined.view(combined.shape[0], combined.shape[1], -1)
-
-    def get_action_embedding(self, actions: torch.Tensor, actions_info: torch.Tensor) -> torch.Tensor:
-        # actions: [batch_size, seq_length, action_dim]
-        # actions_info: [batch_size, action_dim]
-        class_embeddings = self.action_embedding(actions_info)
-        class_embeddings = class_embeddings.unsqueeze(1).expand(-1, actions.shape[1], -1, -1)
-        actions = actions.unsqueeze(-1)
-        # print(class_embeddings.shape)
-        # print(actions.shape)
-        # assert False
-        combined = torch.cat([class_embeddings, actions], dim=-1)
-        return combined.view(combined.shape[0], combined.shape[1], -1)
+    @staticmethod
+    def _slot_embedding(embedding: nn.Embedding, info: torch.Tensor, channels: torch.Tensor) -> torch.Tensor:
+        """info: [batch, slots]; channels: [batch, seq, slots, C] -> [batch, seq, slots * d_model]."""
+        names = embedding(info).unsqueeze(1).expand(-1, channels.shape[1], -1, -1)
+        combined = torch.cat([names, channels], dim=-1)
+        return combined.reshape(combined.shape[0], combined.shape[1], -1)
 
     def forward(
         self,
@@ -164,11 +162,10 @@ class AlgorithmDistillationTransformer(nn.Module):
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
         Args:
-            states: [batch_size, seq_length, state_dim]
-            actions: [batch_size, seq_length-1, action_dim] or None (for first step)
-            rewards: [batch_size, seq_length-1, 1] or None (for first step)
-            task_id: [batch_size]
-            padding_mask: [batch_size, seq_length]
+            states: [batch_size, seq_length, state_dim] - s_t
+            actions: [batch_size, seq_length, action_dim] - a_{t-1} (0 at an episode's first step)
+            rewards: [batch_size, seq_length, 1] - r_{t-1} (0 at an episode's first step)
+            task_ids: [batch_size]
 
         Returns:
             tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
@@ -178,17 +175,26 @@ class AlgorithmDistillationTransformer(nn.Module):
             torch.nan_to_num(x, nan=0.0, posinf=1000.0, neginf=-1000.0).clamp(-1000.0, 1000.0)
             for x in (states, actions, rewards, model_params)
         )
+        prev_actions = actions  # step t carries a_{t-1}
+        state_channels = torch.stack([symlog(states), symlog(DELTA_SCALE * _first_difference(states))], -1)
+        action_channels = torch.stack([symlog(actions), symlog(DELTA_SCALE * _first_difference(actions))], -1)
+        reward_input = symlog(rewards)
+        model_params = symlog(model_params)
 
         # Embed state and task
-        state_emb = self.get_state_embedding(states, states_info)
+        state_emb = self._slot_embedding(self.state_embedding, states_info, state_channels)
 
-        task_emb = torch.cat([
-            self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model]
-            model_params.unsqueeze(1)  # [bs, 1, num_params]
-        ], dim=2)  # [bs, 1, d_model + num_params]
+        if self.context_only:
+            # no lookup, so task ids of envs added after training are accepted
+            task_emb = states.new_zeros(states.shape[0], 1, self.task_embedding.embedding_dim + self.model_params_dim)
+        else:
+            task_emb = torch.cat([
+                self.task_embedding(task_ids).unsqueeze(1),  # [bs, 1, d_model]
+                model_params.unsqueeze(1)  # [bs, 1, num_params]
+            ], dim=2)  # [bs, 1, d_model + num_params]
 
-        action_emb = self.get_action_embedding(actions, actions_info)
-        reward_emb = self.reward_embedding(rewards)
+        action_emb = self._slot_embedding(self.action_embedding, actions_info, action_channels)
+        reward_emb = self.reward_embedding(reward_input)
 
         # Create sequence: [task, state_1, action_1, reward_1, state_2, ...]
         sequence = torch.cat([
@@ -202,8 +208,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         mask = self.causal_mask[:seq_length, :seq_length]
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
 
-        # Main action prediction head
-        actions_pred = self.action_head(encoded) # [bs, seq_length-1, action_dim]
+        actions_pred = prev_actions + self.action_head(encoded)  # [bs, seq_length, action_dim]
 
         # Optional PINN predictions
         pinn_pred = None

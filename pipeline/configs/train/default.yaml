@@ -5,14 +5,12 @@ defaults:
 data_root: ${dataset.workdir}
 epochs: 100
 val_freq: 10
+gradient_clip_val: 1.0
 device: cpu
 max_state_dim: 16
 max_action_dim: 5
 max_endogenous_dim: 16
-# Must exceed the largest Dynare model's real parameter count (34, Faia_2008, verified against
-# data/raw/*_params.yaml) - EconomicsDataset truncates model_params alphabetically by key name,
-# so anything below that silently drops parameters for that model's conditioning signal.
-max_model_params_dim: 36
+max_model_params_dim: 36  # >= the largest model's parameter count
 max_seq_len: 50
 
 model:
@@ -20,25 +18,21 @@ model:
   state_dim: ${train.max_state_dim}
   action_dim: ${train.max_action_dim}
   pinn_output_dim: ${train.max_endogenous_dim}
-  # task_embedding dim is d_model - model_params_dim; raised alongside max_model_params_dim
-  # to keep that at 12 (same as the previous 32-20), rather than let it go negative/tiny.
-  d_model: 48
+  d_model: 48  # task_embedding dim is d_model - model_params_dim
   num_layers: 2
   nhead: 4
   max_seq_len: ${train.max_seq_len}
   model_params_dim: ${train.max_model_params_dim}
   has_pinn: true
+  context_only: true  # hide the task id and the model parameters
 optimizer:
   _target_: torch.optim.Adam
-  lr: 0.0001
+  lr: 3.0e-5  # peak, after warmup
   weight_decay: 0.01
   betas: [0.9, 0.98]
-scheduler:
-  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-  # T_max was left at 10 when epochs grew 1->100 (git history), so LR cycled back up ~5x over
-  # a full run instead of annealing once. Interpolated so it can't drift out of sync again.
-  T_max: ${train.epochs}
-  eta_min: 1.0e-5
+scheduler:  # per-step linear warmup, then cosine decay to eta_min
+  warmup_steps: 200
+  eta_min: 3.0e-6
 loss:
   _target_: torch.nn.MSELoss
   reduction: mean
