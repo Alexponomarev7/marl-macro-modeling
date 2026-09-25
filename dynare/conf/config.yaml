@@ -1773,3 +1773,96 @@ models:
         data_path: ./data/interim/Gali_2015_chapter_5_commitment
 
 
+  Jermann_Quadrini_2012:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        theta: [0.32, 0.40]  # Capital share (paper: 0.36)
+        betta: [0.975, 0.99]  # Discount factor (paper: 0.9825)
+        delta: [0.02, 0.03]  # Depreciation (paper: 0.025)
+        tau: [0.30, 0.40]  # Tax advantage of debt (paper: 0.35)
+        kappa: [0.10, 0.20]  # Equity-payout adjustment cost (paper: 0.146)
+        xi_ss: [0.14, 0.19]  # Steady-state enforcement tightness (paper-implied: 0.1634 <-> debt/output 3.36)
+        A11: [0.92, 0.97]  # TFP persistence in the (z, xi) VAR (paper: 0.9457)
+        A22: [0.95, 0.98]  # Financial-condition persistence (paper: 0.9703)
+        productivity_shock_stderr: [0.003, 0.006]  # (paper: 0.0045)
+        financial_shock_stderr: [0.007, 0.013]  # (paper: 0.0098)
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: Dividends
+      input:
+        state_columns:
+          - [Capital, -1]
+          - [Debt, -1]
+          - Productivity
+          - FinancialConditions
+        action_columns:
+          - Investment
+          - Debt
+          - Dividends
+        endogenous_columns:
+          - Output
+          - Consumption
+          - Labor
+          - Wage
+          - InterestRate
+          - EnforcementMultiplier
+          - FirmValue
+      output:
+        data_path: ./data/interim/Jermann_Quadrini_2012
+
+
+  Gali_Monacelli_2005:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        sigma: [0.8, 2.0]  # Inverse EIS (paper: 1)
+        eta: [0.8, 1.5]  # Home/foreign substitution (paper: 1)
+        gamma_f: [0.8, 1.5]  # Substitution across foreign countries (paper: 1)
+        phi: [1.0, 5.0]  # Inverse Frisch elasticity (paper: 3)
+        epsilon: [4.0, 8.0]  # Variety elasticity (paper: 6)
+        theta: [0.6, 0.85]  # Calvo (paper: 0.75)
+        beta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        alpha: [0.2, 0.5]  # Openness (paper: 0.4)
+        phi_pi: [1.2, 2.5]  # CPI Taylor rule inflation response (paper: 1.5)
+        rhoa: [0.6, 0.9]  # TFP persistence (paper: 0.66)
+        rhoy: [0.8, 0.9]  # World output persistence (paper: 0.86)
+        technology_shock_stderr: [0.5, 1.0]  # percent (paper: 0.71)
+        world_output_shock_stderr: [0.5, 1.0]  # percent (paper: 0.78)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: InflationH
+        output_gap_column: OutputGap
+        lambda_y: 0.057
+      input:
+        state_columns:
+          - TechnologyShock
+          - OutputForeign
+          - [TermsOfTrade, -1]
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - InflationH
+          - InflationCPI
+          - OutputGap
+          - TermsOfTrade
+          - NominalDepreciationRate
+          - NetExports
+          - Employment
+          - ConsumptionH
+      output:
+        data_path: ./data/interim/Gali_Monacelli_2005
+
+

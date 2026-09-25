@@ -174,6 +174,10 @@ class Tokenizer:
         "TFPNews8",
         "CostPushShock",
         "WelfareRelevantOutputGap",
+        "FinancialConditions",
+        "EnforcementMultiplier",
+        "FirmValue",
+        "NominalDepreciationRate",
     )
 
     # State aliases for canonicalization across environments
@@ -320,6 +324,8 @@ class Tokenizer:
         "tax_rate_change",
         "LoggedConsumption",
         "LoggedLabor",
+        "Debt",
+        "Dividends",
     )
 
     ACTION_ALIASES: dict[str, str] = {
@@ -371,6 +377,8 @@ class Tokenizer:
         "Gali_2015_chapter_3": 33,
         "Gali_2015_chapter_5_discretion": 34,
         "Gali_2015_chapter_5_commitment": 35,
+        "Jermann_Quadrini_2012": 36,
+        "Gali_Monacelli_2005": 37,
     }
 
     def __init__(self):
