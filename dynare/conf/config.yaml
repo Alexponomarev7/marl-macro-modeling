@@ -1967,3 +1967,84 @@ models:
         data_path: ./data/interim/Gali_2010
 
 
+  Jermann_1998:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        growth_factor: [1.0, 1.008]  # Gross trend growth gamma (paper: 1.005)
+        alpha: [0.3, 0.4]  # Capital share (paper: 0.36)
+        delta: [0.02, 0.03]  # Depreciation (paper: 0.025)
+        tau: [1.0, 5.0]  # Curvature / risk aversion (paper: 5)
+        h: [0.5, 0.85]  # Internal habit (paper: 0.82)
+        betastar: [0.985, 0.995]  # Discount factor (paper: gamma/1.011138 = 0.9939)
+        rho: [0.9, 0.99]  # TFP persistence (paper: 0.99)
+        xi: [0.1, 0.8]  # Elasticity of I/K to q (paper: 0.23); xi < 1
+        productivity_shock_stderr: [0.006, 0.012]  # (paper: 0.01)
+
+    rl_env_settings:
+      discount_factor_param: betastar
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: HabitAdjustedConsumption
+        sigma_column: tau
+      input:
+        state_columns:
+          - [Capital, -1]
+          - [Consumption, -1]
+          - LoggedProductivity
+        action_columns:
+          - Consumption
+          - Investment
+        endogenous_columns:
+          - Output
+          - RealWage
+          - MUConsumption
+          - RealReturnOnCapital
+          - RiskFreeRate
+          - ConsumptionGrowthRate
+          - OutputGrowthRate
+          - InvestmentGrowthRate
+      output:
+        data_path: ./data/interim/Jermann_1998
+
+
+  Kiyotaki_Moore_1997:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        alpha: [0.25, 0.4]  # Gatherers' production exponent (notes: 1/3)
+        m: [0.3, 1.0]  # Population of gatherers (notes: 0.5)
+        beta: [0.95, 0.98]  # Farmers' discount factor (notes: 0.98)
+        betap: [0.985, 0.995]  # Gatherers' discount factor (notes: 0.99)
+        a: [0.5, 0.8]  # Tradable share of the farmers' fruit (notes: 0.7)
+        c: [0.2, 0.4]  # Non-tradable share, consumed by farmers (notes: 0.3)
+        z: [0.005, 0.02]  # Constant in the gatherers' technology (notes: 0.01)
+        productivity_shock_stderr: [0.0005, 0.0015]  # iid (notes: 0.0011)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: FarmerConsumption
+        sigma_default: 0.0
+      input:
+        state_columns:
+          - [Land, -1]
+          - [Debt, -1]
+          - TechnologyShock
+        action_columns:
+          - Land
+          - Debt
+        endogenous_columns:
+          - LandPrice
+          - EnforcementMultiplier
+          - Consumption
+          - Output
+      output:
+        data_path: ./data/interim/Kiyotaki_Moore_1997

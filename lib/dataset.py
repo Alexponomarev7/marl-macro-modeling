@@ -178,6 +178,8 @@ class Tokenizer:
         "EnforcementMultiplier",
         "FirmValue",
         "NominalDepreciationRate",
+        "Land",
+        "LandPrice",
     )
 
     # State aliases for canonicalization across environments
@@ -326,6 +328,7 @@ class Tokenizer:
         "LoggedLabor",
         "Debt",
         "Dividends",
+        "Land",
     )
 
     ACTION_ALIASES: dict[str, str] = {
@@ -381,6 +384,8 @@ class Tokenizer:
         "Gali_Monacelli_2005": 37,
         "Ireland_2004": 38,
         "Gali_2010": 39,
+        "Jermann_1998": 40,
+        "Kiyotaki_Moore_1997": 41,
     }
 
     def __init__(self):
