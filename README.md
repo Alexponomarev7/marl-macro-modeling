@@ -6,6 +6,8 @@
 5. To run test pipeline: `make pipeline-exp`
 6*. To generate data for a specific environment run python command (an example):\
 ```python lib/data/generate_data.py --env_class lib.envs.rbc.RBCEnv --num_steps 1000 --discount_rate 0.98```
+7. Score a checkpoint per environment against persistence and an in-context least-squares oracle, and check whether it uses its context (history time-shuffled / cut to 2 steps):\
+```python -m lib.evaluation --checkpoint checkpoints/<run>/last.ckpt --data <dir of processed episode parquets> --context-diagnostics --bootstrap 200```
 
 ## Project Organization
 
