@@ -151,6 +151,11 @@ start_capital = @{start_capital};
 
 r_ss = 1 / beta - 1;
 k_ss = ((r_ss + delta) / alpha) ^ (1 / (alpha - 1)) * l_ss;
+
+% initial capital = start_capital_ratio * steady-state capital
+@#if defined(start_capital_ratio)
+start_capital = @{start_capital_ratio} * k_ss;
+@#endif
 y_ss = k_ss^alpha * l_ss^(1 - alpha);
 i_ss = delta * k_ss;
 c_ss = y_ss - i_ss;

@@ -98,6 +98,11 @@ sigma = @{sigma};
 start_capital = @{start_capital};
 
 k_ss = ((1 / beta - (1 - delta)) / alpha) ^ (1 / (alpha - 1));
+
+% initial capital = start_capital_ratio * steady-state capital
+@#if defined(start_capital_ratio)
+start_capital = @{start_capital_ratio} * k_ss;
+@#endif
 y_ss = k_ss^alpha;  % A = 1 in steady state
 i_ss = delta * k_ss;
 c_ss = y_ss - i_ss;
