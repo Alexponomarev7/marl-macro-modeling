@@ -1,8 +1,17 @@
+import inspect
 import math
+
+import gymnasium as gym
+import numpy as np
 from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 import torch
 import torch.nn as nn
+
+
+def _to_scalar(x) -> float:
+    """Env state values are floats or shape-(1,) arrays."""
+    return float(np.asarray(x, dtype=np.float64).reshape(-1)[0])
 
 
 class PositionalEncoding(nn.Module):
@@ -165,6 +174,10 @@ class AlgorithmDistillationTransformer(nn.Module):
             tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
         """
         seq_length = states.shape[1]
+        states, actions, rewards, model_params = (
+            torch.nan_to_num(x, nan=0.0, posinf=1000.0, neginf=-1000.0).clamp(-1000.0, 1000.0)
+            for x in (states, actions, rewards, model_params)
+        )
 
         # Embed state and task
         state_emb = self.get_state_embedding(states, states_info)
@@ -203,7 +216,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         state_values, state_ids = [], []
         for state_name, state_value in state.items():
             state_ids.append(self.tokenizer.state_token_id(state_name))
-            state_values.append(state_value)
+            state_values.append(_to_scalar(state_value))
 
         state_values += [0] * (self.state_dim - len(state_values))
         empty_token_id = self.tokenizer.state_mapping["Empty"]
@@ -214,57 +227,85 @@ class AlgorithmDistillationTransformer(nn.Module):
         action_values, action_ids = [], []
         for action_name, action_value in action.items():
             action_ids.append(self.tokenizer.action_token_id(action_name))
-            action_values.append(action_value)
+            action_values.append(_to_scalar(action_value))
         action_values += [0] * (self.action_dim - len(action_values))
         empty_token_id = self.tokenizer.action_mapping["Empty"]
         action_ids += [empty_token_id] * (self.action_dim - len(action_ids))
         return torch.tensor(action_values, dtype=torch.float32), torch.tensor(action_ids, dtype=torch.long)
 
+    @staticmethod
+    def _clip_to_action_space(env: AbstractEconomicEnv, values: np.ndarray) -> np.ndarray:
+        """Clip actions to the env's Box bounds where declared."""
+        space = getattr(env, "action_space", None)
+        if isinstance(space, gym.spaces.Box):
+            low, high = space.low.reshape(-1), space.high.reshape(-1)
+            n = min(len(values), len(low))
+            values[:n] = np.clip(values[:n], low[:n], high[:n])
+        return values
+
+    @staticmethod
+    def _env_step(env: AbstractEconomicEnv, values: np.ndarray):
+        """Call env.step as the env expects: one kwarg per action, a dict per agent, or an array
+        (a scalar for single-action envs)."""
+        names = list(env.action_description)
+        if list(inspect.signature(env.step).parameters) == names:
+            return env.step(**{name: np.float64(v) for name, v in zip(names, values)})
+        if hasattr(env, "agent_ids"):
+            return env.step({agent: values.copy() for agent in env.agent_ids})
+        return env.step(values if len(values) > 1 else np.float64(values[0]))
+
+    @staticmethod
+    def _scalar_reward(reward) -> float:
+        # multi-agent envs: total over agents
+        if isinstance(reward, dict):
+            return float(sum(_to_scalar(v) for v in reward.values()))
+        return _to_scalar(reward)
+
     def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
+        state_names, action_names = list(env.state_description), list(env.action_description)
+        if len(state_names) > self.state_dim or len(action_names) > self.action_dim:
+            raise ValueError(
+                f"{type(env).__name__} has {len(state_names)} states / {len(action_names)} actions, but the "
+                f"model was built with state_dim={self.state_dim} / action_dim={self.action_dim} "
+                "(train.max_state_dim / train.max_action_dim)."
+            )
+        device = next(self.parameters()).device
+
         init_state, _ = env.reset()
-        init_state_values, states_info = self._get_state_info({
-            state_name: init_state[state_name] for state_name in env.state_description.keys()
-        })
-        init_action_values, actions_info = self._get_action_info(
-            {k: 0.0 for k, _ in env.action_description.items()},
-        )
+        state = {name: _to_scalar(init_state[name]) for name in state_names}
+        action = {name: 0.0 for name in action_names}  # a_{-1} = 0, as in training
+        _, states_info = self._get_state_info(state)
+        _, actions_info = self._get_action_info(action)
 
-        state_to_plot = [{
-            state_name: init_state[state_name] for state_name in env.state_description.keys()
-        }]
-        action_to_plot = [{k: 0.0 for k, _ in env.action_description.items()}]
-
-        state_history = [init_state_values]
-        action_history = [init_action_values]
+        state_to_plot, action_to_plot = [state], [action]
+        state_history = [self._get_state_info(state)[0]]
+        action_history = [self._get_action_info(action)[0]]
         reward_history = [torch.tensor([0.0], dtype=torch.float32)]
         task_ids = torch.tensor([env.task_id], dtype=torch.long)
-        model_params = torch.tensor([v for _, v in sorted(env.params.items())] + [0] * (self.model_params_dim - len(env.params)), dtype=torch.float32)
+        numeric_params = [v for _, v in sorted(env.params.items()) if isinstance(v, (int, float))][:self.model_params_dim]
+        model_params = torch.tensor(numeric_params + [0.0] * (self.model_params_dim - len(numeric_params)), dtype=torch.float32)
 
         for _ in range(max_steps):
+            window = slice(-self.max_seq_len, None)
             out, _ = self.forward(
-                states=torch.stack(state_history).unsqueeze(0).to(self.device),
-                states_info=states_info.unsqueeze(0).to(self.device),
-                actions=torch.stack(action_history).unsqueeze(0).to(self.device),
-                actions_info=actions_info.unsqueeze(0).to(self.device),
-                rewards=torch.stack(reward_history).unsqueeze(0).to(self.device),
-                task_ids=task_ids.to(self.device),
-                model_params=model_params.unsqueeze(0).to(self.device)
+                states=torch.stack(state_history[window]).unsqueeze(0).to(device),
+                states_info=states_info.unsqueeze(0).to(device),
+                actions=torch.stack(action_history[window]).unsqueeze(0).to(device),
+                actions_info=actions_info.unsqueeze(0).to(device),
+                rewards=torch.stack(reward_history[window]).unsqueeze(0).to(device),
+                task_ids=task_ids.to(device),
+                model_params=model_params.unsqueeze(0).to(device),
             )
+            predicted = out[0, -1, :len(action_names)].detach().cpu().numpy().astype(np.float64)
+            executed = self._clip_to_action_space(env, predicted)
+            next_state, reward, _, _, _ = self._env_step(env, executed)
 
-            predicted_action = out[0][-1]
-            action = float(predicted_action[0])
-            next_state, reward, _, _, _ = env.step(action) # type: ignore
-            state_to_plot.append({
-                state_name: next_state[state_name] for state_name in env.state_description.keys()
-            })
-            # Use the action the model actually predicted (aligned with actions_info order),
-            # not next_state: state keys don't generally match action keys.
-            action_to_plot.append({
-                name: float(predicted_action[i]) for i, name in enumerate(env.action_description.keys())
-            })
-
-            state_history.append(self._get_state_info(state_to_plot[-1])[0])
-            action_history.append(self._get_action_info(action_to_plot[-1])[0])
-            reward_history.append(torch.tensor([reward], dtype=torch.float32))
+            state = {name: _to_scalar(next_state[name]) for name in state_names}
+            action = {name: float(v) for name, v in zip(action_names, executed)}
+            state_to_plot.append(state)
+            action_to_plot.append(action)
+            state_history.append(self._get_state_info(state)[0])
+            action_history.append(self._get_action_info(action)[0])
+            reward_history.append(torch.tensor([self._scalar_reward(reward)], dtype=torch.float32))
 
         return state_to_plot, action_to_plot

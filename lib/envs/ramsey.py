@@ -39,8 +39,8 @@ class RamseyEnv(AbstractEconomicEnv):
         })
 
         self.action_space = gym.spaces.Box(
-            low=np.array([0, 0]),
-            high=np.array([np.inf, np.inf]),
+            low=np.array([0.0]),
+            high=np.array([np.inf]),
             dtype=np.float32,
         )
 
@@ -59,7 +59,8 @@ class RamseyEnv(AbstractEconomicEnv):
     def step(self, Consumption: float) -> tuple[dict, float, bool, bool, dict]:
         """Advance model"""
         self.output = self.capital ** self.alpha
-        self.consumption = Consumption
+        # at most output + undepreciated capital
+        self.consumption = float(np.clip(Consumption, 0.0, self.output + (1 - self.delta) * self.capital))
         self.investment = self.output - self.consumption
         self.capital = self.capital * (1 - self.delta) + self.investment
 
@@ -68,6 +69,7 @@ class RamseyEnv(AbstractEconomicEnv):
         done = False
 
         info = {
+            "action": [self.consumption],
             "consumption": self.consumption,
             "investment": self.investment,
             "utility": reward,

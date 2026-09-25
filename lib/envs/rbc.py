@@ -192,9 +192,10 @@ class RBCEnv(AbstractEconomicEnv):
         # TODO(aponomarev): think about clipping
         leisure = np.clip(action[1], 0, 1)
 
-        # Normalize only investment and consumption rates to sum to 1
+        # Normalize only investment and consumption rates to sum to 1 (equal split if both are 0)
         investment_consumption = np.clip(action[[0, 2]], 0, 1)
-        investment_consumption = investment_consumption / np.sum(investment_consumption)
+        total_rate = np.sum(investment_consumption)
+        investment_consumption = investment_consumption / total_rate if total_rate > 0 else np.full(2, 0.5)
 
         investment_rate, consumption_rate = investment_consumption
 

@@ -112,8 +112,8 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
         labor_supply = 1 - leisure
 
-        # Technology shock
-        self.technology += (
+        # Technology shock: AR(1) in logs
+        self.technology = (
                 self.technology_shock_persistence * self.technology
                 + np.random.normal(0, self.technology_shock_variance)
         )

@@ -43,14 +43,19 @@ def log_utility(C: Union[float, np.array], L: Union[float, np.array], A: float =
     :param C: consumption, must be positive
     :param L: labor supply, must be between 0 and 1
     :param A: weight on leisure in utility function, defaults to 1.0
-    :return: utility value
+    :return: utility value (-1e6 where C <= 0 or L is outside (0, 1), like crra)
     """
-    if np.any(L >= 1) or np.any(L <= 0):
-        raise ValueError("Labor supply must be between 0 and 1")
-    if np.any(C <= 0):
-        raise ValueError("Consumption must be positive")
+    return _penalize_infeasible(C, L, lambda c, l: np.log(c) + A * np.log(1 - l))
 
-    return np.log(C) + A * np.log(1 - L)
+
+def _penalize_infeasible(C, L, utility) -> Union[float, np.array]:
+    """-1e6 where C <= 0 or L is outside (0, 1)."""
+    C, L = np.asarray(C, dtype=np.float64), np.asarray(L, dtype=np.float64)
+    feasible = (C > 0) & (L > 0) & (L < 1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        value = utility(np.where(feasible, C, 1.0), np.where(feasible, L, 0.5))
+    value = np.where(feasible, value, -1e6)
+    return float(value) if value.ndim == 0 else value
 
 
 def ces_utility(
@@ -69,13 +74,9 @@ def ces_utility(
     :param sigma: coefficient of relative risk aversion, defaults to 2.0
     :param eta: inverse Frisch elasticity of labor supply, defaults to 1.5
     :param A: weight on leisure in utility function, defaults to 1.0
-    :return: utility value
+    :return: utility value (-1e6 where C <= 0 or L is outside (0, 1), like crra)
     """
-    if np.any(L >= 1) or np.any(L <= 0):
-        raise ValueError("Labor supply must be between 0 and 1")
-    if np.any(C <= 0):
-        raise ValueError("Consumption must be positive")
-
-    consumption_utility = (C ** (1 - sigma)) / (1 - sigma)
-    leisure_utility = A * ((1 - L) ** (1 - eta)) / (1 - eta)
-    return consumption_utility + leisure_utility
+    return _penalize_infeasible(
+        C, L,
+        lambda c, l: (c ** (1 - sigma)) / (1 - sigma) + A * ((1 - l) ** (1 - eta)) / (1 - eta),
+    )
