@@ -2,6 +2,9 @@ metadata:
   data_folder: data
   periods: 1000
   num_samples: 6000
+  seed: null  # set an int for a reproducible dataset (parameter draws + Dynare shock seeds)
+  only_models: null  # e.g. metadata.only_models=[Hansen_1985,SGU_2004] to run a subset
+  resume: false  # true: keep draws already written to data_folder/raw, generate the rest
 
 models:
 
