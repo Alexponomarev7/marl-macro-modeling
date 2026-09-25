@@ -6,7 +6,7 @@ data_root: ${dataset.workdir}
 epochs: 100
 val_freq: 10
 gradient_clip_val: 1.0
-device: cpu
+device: auto  # Lightning accelerator: auto, cpu, mps, gpu
 max_state_dim: 16
 max_action_dim: 5
 max_endogenous_dim: 16

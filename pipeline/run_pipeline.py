@@ -313,9 +313,8 @@ def main(hydra_cfg: DictConfig) -> None:
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
         gradient_clip_val=cfg['train']['gradient_clip_val'],
-        accelerator='gpu' if torch.cuda.is_available() else 'cpu',
+        accelerator=cfg['train'].get('device', 'auto'),
         devices=1,
-        strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True), # type: ignore
         callbacks=[
             ModelCheckpoint(
                 dirpath=str(checkpoint_dir),
