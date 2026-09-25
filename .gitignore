@@ -10,6 +10,8 @@ __pycache__
 dynare/docker/dynare_models/*
 
 !dynare/docker/dynare_models/*.mod
+# Octave helper called by the perfect-foresight .mod files (unanticipated-shock solver)
+!dynare/docker/dynare_models/mit_shock_solver.m
 .snakemake
 data
 dataset
