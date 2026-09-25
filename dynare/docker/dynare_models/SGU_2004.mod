@@ -2,9 +2,9 @@
     @#define periods = 100
 @#endif
 
-var c ${c}$ (long_name='Consumption')
-    k ${k}$ (long_name='Capital')
-    a ${a}$ (long_name='Technology Shock');
+var c ${c}$ (long_name='consumption (log)')
+    k ${k}$ (long_name='capital (log)')
+    a ${a}$ (long_name='Total Factor Productivity');   % log TFP (enters as exp(a))
 
 varexo epsilon ${\varepsilon}$ (long_name='Technology Shock Innovation');
 
@@ -16,11 +16,28 @@ parameters SIG ${\sigma}$ (long_name='Intertemporal Elasticity Of Substitution')
            BETTA ${\beta}$ (long_name='Discount Factor')
            RHO ${\rho}$ (long_name='Persistence Of Technology Shock');
 
-BETTA = 0.95;
+% DELTA stays 1 (full depreciation, the paper's closed-form benchmark)
+@#if !defined(BETTA)
+    @#define BETTA = 0.95
+@#endif
+@#if !defined(ALFA)
+    @#define ALFA = 0.3
+@#endif
+@#if !defined(RHO)
+    @#define RHO = 0
+@#endif
+@#if !defined(SIG)
+    @#define SIG = 2
+@#endif
+@#if !defined(technology_shock_stderr)
+    @#define technology_shock_stderr = 0.01
+@#endif
+
+BETTA = @{BETTA};
 DELTA = 1;
-ALFA = 0.3;
-RHO = 0;
-SIG = 2;
+ALFA = @{ALFA};
+RHO = @{RHO};
+SIG = @{SIG};
 
 model;
     0 = exp(c) + exp(k(+1)) - (1 - DELTA) * exp(k) - exp(a) * exp(k)^ALFA;
@@ -35,7 +52,7 @@ steady_state_model;
 end;
 
 shocks;
-    var epsilon; stderr 1;
+    var epsilon; stderr @{technology_shock_stderr};
 end;
 
 steady;

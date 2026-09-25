@@ -156,6 +156,7 @@ class Tokenizer:
         "OutputForeign",
         "PriceRatioH",
         "RealExchangeRate",
+        "LaborProductivity",  # output per hour
     )
 
     # State aliases for canonicalization across environments
@@ -223,16 +224,7 @@ class Tokenizer:
         "consumption (log)": "LoggedConsumption",
     }
 
-    # Aliases from a raw .mod SYMBOL name (not a long_name/header) straight to its canonical
-    # STATE_TOKEN, for cases too far from the token for canonical_state_name's normalized
-    # (case/space-insensitive) matching to bridge (e.g. "AnnualInterestRate" vs "Annualized
-    # Interest Rate"). Deliberately kept OUT of STATE_ALIASES: lib/dynare_traj2rl_transitions.py
-    # aliases `_COLUMN_ALIASES = Tokenizer.STATE_ALIASES` to rename raw CSV columns before
-    # state/action/endogenous extraction, and dynare/conf/config.yaml consistently requests
-    # those columns by their raw symbol name - an alias here would get the symbol renamed out
-    # from under that config lookup. Verified via an actual end-to-end pipeline run: adding
-    # these to STATE_ALIASES broke Born_Pfeifer_2018_MP/RBC_news_shock_model_pf/_stoch this way.
-    # Consulted only by canonical_state_name/state_token_id below, never by dynare_traj2rl_transitions.py.
+    # .mod symbol -> state token, for tokenization only (STATE_ALIASES also renames CSV columns)
     SYMBOL_TO_CANONICAL: dict[str, str] = {
         "AnnualInflation": "Annualized Inflation Rate",
         "AnnualInterestRate": "Annualized Interest Rate",
@@ -247,6 +239,38 @@ class Tokenizer:
         "PriceMarkup": "Markup",
         "RiskFreeRate": "Risk-Free Rate",
         "TradeBalanceToOutput": "Trade Balance to Output Ratio",
+        # Hansen_1985, SGU_2003/2004, McCandless_2008_Chapter_9/13
+        "c": "Consumption",
+        "w": "Wage",
+        "r": "Real Return On Capital",
+        "y": "Output",
+        "h": "HoursWorked",
+        "k": "Capital",
+        "invest": "Investment",
+        "lambda": "Productivity",
+        "productivity": "LaborProductivity",
+        "m": "Money Stock",
+        "p": "Price Level",
+        "g": "Growth Rate Of Money Stock",
+        "d": "Debt",
+        "tb_y": "Trade Balance to Output Ratio",
+        "ca_y": "Current Account To Output Ratio",
+        "pstar": "Foreign Price Level",
+        "b": "Foreign Bonds",
+        "rf": "Foreign Interest Rate",
+        "e": "Exchange Rate",
+        "x": "Net Exports",
+        # Gali_2008_chapter_2
+        "A": "AR(1) Technology Process",
+        "W_real": "Real Wage",
+        "Pi": "Inflation",
+        "R": "Nominal Interest Rate",
+        "realinterest": "Real Interest Rate",
+        "Y": "Output",
+        "m_growth_ann": "Money Growth",
+        "C": "Consumption",
+        "N": "HoursWorked",
+        "util": "Utility",      # SGU_2003
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
@@ -277,6 +301,10 @@ class Tokenizer:
     ACTION_ALIASES: dict[str, str] = {
         "Real Consumption": "Consumption",
         "Capital": "Savings",  # In OLG models: (1 + n) * (1 + g) * Capital = Savings
+        "c": "Consumption",    # Hansen_1985, McCandless_2008_Chapter_9/13
+        "h": "HoursWorked",    # Hansen_1985, McCandless_2008_Chapter_9/13
+        "C": "Consumption",    # Gali_2008_chapter_2
+        "N": "HoursWorked",    # Gali_2008_chapter_2
     }
 
     # Keys must match the dynare model_name exactly (dynare/docker/dynare_models/*.mod stem).

@@ -11,8 +11,15 @@ varexo w $w$              (long_name='Exogenous Shock');
 parameters R $R$          (long_name='Parameter R')
            sigma_w ${\sigma_w}$ (long_name='Shock Scale Parameter');
 
-sigma_w = 1;
-R = 1.2;
+@#if !defined(sigma_w)
+    @#define sigma_w = 1
+@#endif
+@#if !defined(R)
+    @#define R = 1.2
+@#endif
+
+sigma_w = @{sigma_w};
+R = @{R};
 
 model;
     c = c(-1) + sigma_w * (1 - R^(-1)) * w;

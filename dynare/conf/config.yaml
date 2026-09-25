@@ -1373,3 +1373,251 @@ models:
   #        - 'Capital'               # k (управляемая переменная)
   #    output:
   #      data_path: ./data/interim/SGU_2004  # Путь для сохранения обработанных данных
+  Hansen_1985:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        rho_a: [0.85, 0.97]  # AR(1) persistence of TFP (paper: 0.95)
+        A: [1.5, 3.0]  # Labor disutility parameter (paper: 2)
+        h_0: [0.25, 0.40]  # Target steady-state hours worked
+        sigma_eps: [0.004, 0.010]  # TFP shock std dev (paper: 0.00712)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: c
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+        action_columns:
+          - c
+          - h
+        endogenous_columns:
+          - y
+          - invest
+          - w
+          - r
+          - productivity
+      output:
+        data_path: ./data/interim/Hansen_1985
+
+
+  SGU_2003:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      model2: 1  # selects the debt-elastic interest-rate premium closing
+      parameter_ranges:
+        gamma_risk: [1.5, 3.0]  # Risk aversion (paper: 2)
+        omega: [1.2, 1.8]  # Frisch-elasticity-related labor curvature (paper: 1.455)
+        rho: [0.3, 0.6]  # TFP shock persistence (paper: 0.42)
+        sigma_tfp: [0.008, 0.018]  # TFP shock std dev (paper: 0.0129)
+        delta: [0.08, 0.12]  # Depreciation rate (paper: 0.1)
+        alpha: [0.28, 0.36]  # Capital's exponent despite the 'Labor Share' label in the .mod file (paper: 0.32)
+        phi: [0.01, 0.05]  # Capital adjustment cost (paper: 0.028)
+        psi_2: [0.0003, 0.0015]  # Debt-elastic risk premium coefficient (paper: 0.000742)
+        r_bar: [0.03, 0.05]  # Steady-state world interest rate (paper: 0.04)
+        d_bar: [0.5, 0.9]  # Steady-state debt (paper: 0.7442)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: util
+      input:
+        state_columns:
+          - [LoggedCapital, -1]
+          - LoggedProductivity
+          - [d, -1]
+        action_columns:
+          - LoggedConsumption
+          - LoggedLabor
+        endogenous_columns:
+          - LoggedOutput
+          - LoggedInvestment
+          - tb_y
+          - ca_y
+      output:
+        data_path: ./data/interim/SGU_2003
+
+
+  SGU_2004:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        BETTA: [0.92, 0.97]  # Discount factor (paper: 0.95)
+        ALFA: [0.25, 0.35]  # Capital share (paper: 0.3)
+        RHO: [0.0, 0.3]  # TFP persistence (paper's own benchmark: 0, i.i.d.)
+        SIG: [1.5, 3.0]  # Intertemporal elasticity parameter (paper: 2)
+        technology_shock_stderr: [0.006, 0.015]
+
+    rl_env_settings:
+      discount_factor_param: BETTA
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: LoggedConsumption
+        sigma_column: SIG
+        log_input: true
+      input:
+        state_columns:
+          - [LoggedCapital, -1]
+          - LoggedProductivity
+        action_columns:
+          - LoggedConsumption
+        endogenous_columns: []
+      output:
+        data_path: ./data/interim/SGU_2004
+
+
+  Gali_2008_chapter_2:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.98, 0.999]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Risk aversion / inverse IES (paper: 1, log utility)
+        phi: [0.5, 3.0]  # Inverse Frisch elasticity (paper: 1)
+        rho: [0.7, 0.95]  # TFP shock persistence (paper: 0.9)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        eta: [2.0, 6.0]  # Semi-elasticity of money demand (paper: 4)
+        technology_shock_stderr: [0.006, 0.015]
+        monetary_shock_stderr: [0.0015, 0.004]
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: C
+        labor_column: N
+        sigma_column: siggma
+        labor_form: power
+        frisch_column: phi
+      input:
+        state_columns:
+          - A
+        action_columns:
+          - C
+          - N
+        endogenous_columns:
+          - Y
+          - Pi
+          - R
+          - realinterest
+          - W_real
+          - m_growth_ann
+      output:
+        data_path: ./data/interim/Gali_2008_chapter_2
+
+
+  McCandless_2008_Chapter_9:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        A: [1.2, 2.2]  # Labor disutility parameter
+        h_0: [0.25, 0.40]  # Target steady-state hours
+        rho_a: [0.90, 0.98]  # TFP persistence (paper: 0.95)
+        pi: [0.3, 0.7]  # Money growth AR(1) persistence, NOT inflation (paper: 0.48)
+        D: [0.005, 0.02]  # Real-balances utility weight
+        money_growth_shock_stderr: [0.005, 0.02]
+        productivity_shock_stderr: [0.005, 0.02]
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: Real Consumption
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+        labor_weight_scale: -1.0
+        money_column: mreal
+        money_weight_column: D
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+          - g
+        action_columns:
+          - Real Consumption
+          - h
+        endogenous_columns:
+          - y
+          - Real Wage
+          - r
+      output:
+        data_path: ./data/interim/McCandless_2008_Chapter_9
+
+
+  McCandless_2008_Chapter_13:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        kappa: [0.2, 1.0]  # Capital adjustment cost
+        a: [0.005, 0.02]  # Debt-elastic risk premium sensitivity
+        B: [-3.5, -1.5]  # Composite labor disutility parameter, negative by construction
+        gamma_lambda: [0.90, 0.98]  # TFP persistence
+        gamma_g: [0.90, 0.98]  # Money growth persistence
+        gamma_pstar: [0.90, 0.98]  # Foreign price persistence
+        rstar: [0.01, 0.05]  # Foreign (world) interest rate
+        sigma_lambda: [0.005, 0.02]  # TFP shock scale
+        sigma_g: [0.005, 0.02]  # Money growth shock scale
+        sigma_pstar: [0.005, 0.02]  # Foreign price shock scale
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: Real Consumption
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+        labor_weight_scale: -1.0
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+          - g
+          - pstar
+          - [b, -1]
+        action_columns:
+          - Real Consumption
+          - h
+        endogenous_columns:
+          - Real Wage
+          - r
+          - x
+          - rf
+      output:
+        data_path: ./data/interim/McCandless_2008_Chapter_13
+
+

@@ -23,13 +23,41 @@ parameters alppha ${\alpha}$ (long_name='Capital Share')
            phi_pi ${\phi_{\pi}}$ (long_name='Inflation Feedback Taylor Rule')
            eta ${\eta}$      (long_name='Semi-Elasticity Of Money Demand');
 
-alppha = 0.33;
-betta = 0.99;
-rho = 0.9;
-siggma = 1;
-phi = 1;
-phi_pi = 1.5;
-eta = 4;
+@#if !defined(alppha)
+    @#define alppha = 0.33
+@#endif
+@#if !defined(betta)
+    @#define betta = 0.99
+@#endif
+@#if !defined(rho)
+    @#define rho = 0.9
+@#endif
+@#if !defined(siggma)
+    @#define siggma = 1
+@#endif
+@#if !defined(phi)
+    @#define phi = 1
+@#endif
+@#if !defined(phi_pi)
+    @#define phi_pi = 1.5
+@#endif
+@#if !defined(eta)
+    @#define eta = 4
+@#endif
+@#if !defined(technology_shock_stderr)
+    @#define technology_shock_stderr = 0.01
+@#endif
+@#if !defined(monetary_shock_stderr)
+    @#define monetary_shock_stderr = 0.0025
+@#endif
+
+alppha = @{alppha};
+betta = @{betta};
+rho = @{rho};
+siggma = @{siggma};
+phi = @{phi};
+phi_pi = @{phi_pi};
+eta = @{eta};
 
 model;
     W_real = C^siggma * N^phi;
@@ -44,8 +72,8 @@ model;
 end;
 
 shocks;
-    var eps_A; stderr 1;
-    var eps_m; stderr 1;
+    var eps_A; stderr @{technology_shock_stderr};
+    var eps_m; stderr @{monetary_shock_stderr};
 end;
 
 steady_state_model;
