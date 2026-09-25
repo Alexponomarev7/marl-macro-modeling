@@ -25,7 +25,7 @@ from lib.my_utils import (
     get_run_id,
 )
 from lib.dataset import EconomicsDataset, Tokenizer
-from lib.models.transformer import symlog
+from lib.models.transformer import causal_zscore, symlog
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
     DatasetGenerator,
@@ -178,7 +178,8 @@ class EconomicPolicyModel(L.LightningModule):
         self.action_max_dim = action_max_dim
         self.endogenous_max_dim = endogenous_max_dim
 
-    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params):
+    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params,
+                first_step=None, attention_mask=None):
         """Forward pass matching the transformer's interface"""
         return self.model(
             states=states,
@@ -188,6 +189,8 @@ class EconomicPolicyModel(L.LightningModule):
             rewards=rewards,
             task_ids=task_ids,
             model_params=model_params,
+            first_step=first_step,
+            attention_mask=attention_mask,
         )
 
     def configure_optimizers(self):
@@ -210,8 +213,8 @@ class EconomicPolicyModel(L.LightningModule):
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
     @staticmethod
-    def _sanitize(x: torch.Tensor) -> torch.Tensor:
-        return torch.clamp(torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+    def _sanitize(x: torch.Tensor, bound: float = 1000.0) -> torch.Tensor:
+        return torch.clamp(torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), min=-bound, max=bound)
 
     def _masked_loss(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         per_elem = self.criterion(pred, target)
@@ -219,27 +222,37 @@ class EconomicPolicyModel(L.LightningModule):
         return (per_elem * mask).sum() / mask.sum().clamp(min=1.0)
 
     def _shared_step(self, batch, stage: str):
+        causal = self.model.input_normalization == "causal"
+        bound = 1e9 if causal else 1000.0
+        first_step = batch['window_start'] == 0
         # step t sees (s_t, a_{t-1}, r_{t-1}) and is scored on a_t
         predicted_actions, pinn_preds = self(
-            states=self._sanitize(batch['states']),
+            states=self._sanitize(batch['states'], bound),
             states_info=batch['states_info'],
-            actions=self._sanitize(batch['prev_actions']),
+            actions=self._sanitize(batch['prev_actions'], bound),
             actions_info=batch['actions_info'],
-            rewards=self._sanitize(batch['prev_reward']),
+            rewards=self._sanitize(batch['prev_reward'], bound),
             task_ids=batch['task_id'],
             model_params=batch['model_params'],
+            first_step=first_step,
+            attention_mask=batch['attention_mask'],
         )
 
         valid_steps = batch['attention_mask'].unsqueeze(-1)  # [bs, seq, 1]
+        if causal:
+            # the episode's first action is not scored in causal mode
+            _, valid_steps = self.model._observed_steps(batch['states'], first_step, batch['attention_mask'])
         action_mask = valid_steps & (batch['actions_info'] != 0).unsqueeze(1)
         # NMSE: errors in units of each episode's action scale
         scale = batch['action_scale']  # [bs, seq, action_dim]
-        loss = self._masked_loss(predicted_actions / scale, self._sanitize(batch['actions']) / scale, action_mask)
+        loss = self._masked_loss(predicted_actions / scale, self._sanitize(batch['actions'], bound) / scale, action_mask)
         self.log(f'{stage}_action_loss', loss, on_step=(stage == 'train'), on_epoch=True)
 
         if pinn_preds is not None and (batch['endogenous_info'] != 0).any():
             endo_mask = valid_steps & (batch['endogenous_info'] != 0).unsqueeze(1)
-            pinn_loss = self._masked_loss(pinn_preds, symlog(self._sanitize(batch['endogenous'])), endo_mask)
+            endogenous = self._sanitize(batch['endogenous'], bound)
+            target = causal_zscore(endogenous, batch['attention_mask']) if causal else symlog(endogenous)
+            pinn_loss = self._masked_loss(pinn_preds, target, endo_mask)
             self.log(f'{stage}_pinn_loss', pinn_loss, on_step=(stage == 'train'), on_epoch=True)
             loss = loss + pinn_loss
 

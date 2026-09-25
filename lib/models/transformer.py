@@ -27,6 +27,51 @@ def _first_difference(x: torch.Tensor) -> torch.Tensor:
     return torch.cat([torch.zeros_like(x[:, :1]), x[:, 1:] - x[:, :-1]], dim=1)
 
 
+UNIT_LEVEL_FLOOR = 1e-3  # share of the running level added to the causal-mode unit of change
+
+
+def _running_stats(x: torch.Tensor, level_ok: torch.Tensor, delta_ok: torch.Tensor):
+    """Running mean and std of the level and RMS of the first differences over positions <= t.
+
+    x: [batch, seq, dim]; level_ok / delta_ok: [batch, seq, 1] masks of observed values / differences.
+    """
+    dtype = torch.float32 if x.device.type == "mps" else torch.float64
+    x = x.to(dtype)
+    lv, dv = level_ok.to(dtype), delta_ok.to(dtype)
+    # shift by the first observed value to avoid cancellation in E[x^2] - E[x]^2
+    first = level_ok.long().argmax(dim=1, keepdim=True).expand(-1, 1, x.shape[-1])
+    ref = torch.gather(x, 1, first)
+    y = (x - ref) * lv
+    count = torch.cumsum(lv, 1)
+    mean_y = torch.cumsum(y, 1) / count.clamp(min=1)
+    std = (torch.cumsum(y * y, 1) / count.clamp(min=1) - mean_y ** 2).clamp(min=0).sqrt()
+    mean = torch.where(count > 0, ref + mean_y, 0.0)
+    dx = _first_difference(x) * dv
+    rms = (torch.cumsum(dx * dx, 1) / torch.cumsum(dv, 1).clamp(min=1)).sqrt()
+    return mean, std, rms, dx
+
+
+def causal_features(x: torch.Tensor, level_ok: torch.Tensor, delta_ok: torch.Tensor, lagged: bool = False):
+    """Scale-free channels of each variable from positions <= t: the level's running z-score, the
+    first difference over the running RMS of differences and, with `lagged`, the previous difference.
+
+    Returns channels [batch, seq, dim, C] and the unit of change [batch, seq, dim].
+    """
+    mean, std, rms, dx = _running_stats(x, level_ok, delta_ok)
+    eps = 1e-6 * mean.abs() + 1e-12
+    channels = [torch.where(level_ok, (x.to(mean.dtype) - mean) / (std + eps), 0.0), dx / (rms + eps)]
+    if lagged:
+        channels.append(torch.cat([torch.zeros_like(dx[:, :1]), dx[:, :-1]], 1) / (rms + eps))
+    unit = rms + UNIT_LEVEL_FLOOR * mean.abs() + 1e-12
+    return torch.stack(channels, -1).clamp(-10.0, 10.0).float(), unit.float()
+
+
+def causal_zscore(x: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
+    """Running z-score of x [batch, seq, dim], skipping positions where valid [batch, seq] is False."""
+    ok = torch.ones_like(x[..., :1], dtype=torch.bool) if valid is None else valid.bool().unsqueeze(-1)
+    return causal_features(x, ok, ok)[0][..., 0]
+
+
 class PositionalEncoding(nn.Module):
     """
     Implements positional encoding for transformer inputs.
@@ -90,9 +135,14 @@ class AlgorithmDistillationTransformer(nn.Module):
         pinn_output_dim: int,  # Optional PINN head output dimension
         has_pinn: bool,
         context_only: bool = False,
+        input_normalization: str = "symlog",
     ):
-        """context_only: hide the task id and the model parameters."""
+        """context_only: hide the task id and the model parameters.
+        input_normalization: "symlog" or "causal" (scale-free running statistics, see causal_features).
+        """
         super().__init__()
+        if input_normalization not in ("symlog", "causal"):
+            raise ValueError(f"input_normalization must be 'symlog' or 'causal', got {input_normalization!r}")
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.max_seq_len = max_seq_len
@@ -100,10 +150,12 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.has_pinn = has_pinn
         self.model_params_dim = model_params_dim
         self.context_only = context_only
+        self.input_normalization = input_normalization
 
         self.tokenizer = Tokenizer()
         # slot = [variable-name embedding | numeric channels]
-        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - 2)
+        state_channels = 3 if input_normalization == "causal" else 2
+        self.state_embedding = nn.Embedding(self.tokenizer.num_state_tokens, d_model - state_channels)
         self.action_embedding = nn.Embedding(self.tokenizer.num_action_tokens, d_model - 2)
         self.reward_embedding = nn.Linear(1, d_model, dtype=torch.float32)  # Assuming scalar rewards
         self.task_embedding = nn.Embedding(num_tasks, d_model - model_params_dim)
@@ -142,6 +194,19 @@ class AlgorithmDistillationTransformer(nn.Module):
             )
 
     @staticmethod
+    def _observed_steps(states: torch.Tensor, first_step: torch.Tensor | None, attention_mask: torch.Tensor | None):
+        """[batch, seq, 1] masks of real s_t and of real (a_{t-1}, r_{t-1}): padding is neither, and
+        an episode's first step has placeholder a_{-1}, r_{-1}."""
+        batch, seq = states.shape[:2]
+        valid = torch.ones(batch, seq, 1, dtype=torch.bool, device=states.device)
+        if attention_mask is not None:
+            valid = attention_mask.bool().view(batch, seq, 1)
+        if first_step is None:
+            return valid, valid
+        first_valid = valid & ~torch.cat([torch.zeros_like(valid[:, :1]), valid[:, :-1]], 1)
+        return valid, valid & ~(first_valid & first_step.bool().view(batch, 1, 1))
+
+    @staticmethod
     def _slot_embedding(embedding: nn.Embedding, info: torch.Tensor, channels: torch.Tensor) -> torch.Tensor:
         """info: [batch, slots]; channels: [batch, seq, slots, C] -> [batch, seq, slots * d_model]."""
         names = embedding(info).unsqueeze(1).expand(-1, channels.shape[1], -1, -1)
@@ -157,6 +222,8 @@ class AlgorithmDistillationTransformer(nn.Module):
         rewards: torch.Tensor,
         task_ids: torch.Tensor,
         model_params: torch.Tensor,
+        first_step: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
@@ -166,19 +233,30 @@ class AlgorithmDistillationTransformer(nn.Module):
             actions: [batch_size, seq_length, action_dim] - a_{t-1} (0 at an episode's first step)
             rewards: [batch_size, seq_length, 1] - r_{t-1} (0 at an episode's first step)
             task_ids: [batch_size]
+            first_step: [batch_size] bool, the window starts the episode (causal mode only)
+            attention_mask: [batch_size, seq_length] bool, non-padding positions (causal mode only)
 
         Returns:
             tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
         """
         seq_length = states.shape[1]
+        bound = 1e9 if self.input_normalization == "causal" else 1000.0
         states, actions, rewards, model_params = (
-            torch.nan_to_num(x, nan=0.0, posinf=1000.0, neginf=-1000.0).clamp(-1000.0, 1000.0)
+            torch.nan_to_num(x, nan=0.0, posinf=bound, neginf=-bound).clamp(-bound, bound)
             for x in (states, actions, rewards, model_params)
         )
         prev_actions = actions  # step t carries a_{t-1}
-        state_channels = torch.stack([symlog(states), symlog(DELTA_SCALE * _first_difference(states))], -1)
-        action_channels = torch.stack([symlog(actions), symlog(DELTA_SCALE * _first_difference(actions))], -1)
-        reward_input = symlog(rewards)
+        if self.input_normalization == "causal":
+            valid, prev_valid = self._observed_steps(states, first_step, attention_mask)
+            after = lambda ok: ok & torch.cat([torch.zeros_like(ok[:, :1]), ok[:, :-1]], 1)  # at t and t-1
+            state_channels, _ = causal_features(states, valid, after(valid), lagged=True)
+            action_channels, action_unit = causal_features(prev_actions, prev_valid, after(prev_valid))
+            reward_channels, _ = causal_features(rewards, prev_valid, after(prev_valid))
+            reward_input = reward_channels[..., 0]  # level z-score
+        else:
+            state_channels = torch.stack([symlog(states), symlog(DELTA_SCALE * _first_difference(states))], -1)
+            action_channels = torch.stack([symlog(actions), symlog(DELTA_SCALE * _first_difference(actions))], -1)
+            reward_input = symlog(rewards)
         model_params = symlog(model_params)
 
         # Embed state and task
@@ -208,7 +286,10 @@ class AlgorithmDistillationTransformer(nn.Module):
         mask = self.causal_mask[:seq_length, :seq_length]
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
 
-        actions_pred = prev_actions + self.action_head(encoded)  # [bs, seq_length, action_dim]
+        residual = self.action_head(encoded)
+        if self.input_normalization == "causal":
+            residual = residual * action_unit
+        actions_pred = prev_actions + residual  # [bs, seq_length, action_dim]
 
         # Optional PINN predictions
         pinn_pred = None
@@ -266,7 +347,10 @@ class AlgorithmDistillationTransformer(nn.Module):
             return float(sum(_to_scalar(v) for v in reward.values()))
         return _to_scalar(reward)
 
-    def inference(self, env: AbstractEconomicEnv, max_steps: int = 50) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
+    def inference(
+        self, env: AbstractEconomicEnv, max_steps: int = 50, initial_action: dict[str, float] | None = None,
+    ) -> tuple[list[dict[str, float]], list[dict[str, float]]]:
+        """Roll the policy out in env; initial_action (required in causal mode) is the first action."""
         state_names, action_names = list(env.state_description), list(env.action_description)
         if len(state_names) > self.state_dim or len(action_names) > self.action_dim:
             raise ValueError(
@@ -274,6 +358,8 @@ class AlgorithmDistillationTransformer(nn.Module):
                 f"model was built with state_dim={self.state_dim} / action_dim={self.action_dim} "
                 "(train.max_state_dim / train.max_action_dim)."
             )
+        if self.input_normalization == "causal" and initial_action is None:
+            raise ValueError("a causal-mode policy needs initial_action")
         device = next(self.parameters()).device
 
         init_state, _ = env.reset()
@@ -290,18 +376,22 @@ class AlgorithmDistillationTransformer(nn.Module):
         numeric_params = [v for _, v in sorted(env.params.items()) if isinstance(v, (int, float))][:self.model_params_dim]
         model_params = torch.tensor(numeric_params + [0.0] * (self.model_params_dim - len(numeric_params)), dtype=torch.float32)
 
-        for _ in range(max_steps):
-            window = slice(-self.max_seq_len, None)
-            out, _ = self.forward(
-                states=torch.stack(state_history[window]).unsqueeze(0).to(device),
-                states_info=states_info.unsqueeze(0).to(device),
-                actions=torch.stack(action_history[window]).unsqueeze(0).to(device),
-                actions_info=actions_info.unsqueeze(0).to(device),
-                rewards=torch.stack(reward_history[window]).unsqueeze(0).to(device),
-                task_ids=task_ids.to(device),
-                model_params=model_params.unsqueeze(0).to(device),
-            )
-            predicted = out[0, -1, :len(action_names)].detach().cpu().numpy().astype(np.float64)
+        for step in range(max_steps):
+            if step == 0 and initial_action is not None:
+                predicted = np.array([initial_action[name] for name in action_names], dtype=np.float64)
+            else:
+                window = slice(-self.max_seq_len, None)
+                out, _ = self.forward(
+                    states=torch.stack(state_history[window]).unsqueeze(0).to(device),
+                    states_info=states_info.unsqueeze(0).to(device),
+                    actions=torch.stack(action_history[window]).unsqueeze(0).to(device),
+                    actions_info=actions_info.unsqueeze(0).to(device),
+                    rewards=torch.stack(reward_history[window]).unsqueeze(0).to(device),
+                    task_ids=task_ids.to(device),
+                    model_params=model_params.unsqueeze(0).to(device),
+                    first_step=torch.tensor([len(state_history) <= self.max_seq_len], device=device),
+                )
+                predicted = out[0, -1, :len(action_names)].detach().cpu().numpy().astype(np.float64)
             executed = self._clip_to_action_space(env, predicted)
             next_state, reward, _, _, _ = self._env_step(env, executed)
 
