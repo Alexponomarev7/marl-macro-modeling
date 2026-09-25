@@ -120,7 +120,7 @@ def crra_reward(
 ) -> pd.Series:
     """
     CRRA (Constant Relative Risk Aversion) utility reward:
-    U(c) = c^(1-sigma)/(1-sigma) for sigma ≠ 1, or U(c) = ln(c) for sigma = 1
+    U(c) = (c^(1-sigma) - 1)/(1-sigma) for sigma ≠ 1, or U(c) = ln(c) for sigma = 1
 
     Args:
         data: DataFrame with state/action variables
@@ -147,21 +147,74 @@ def crra_reward(
     else:
         sigma = sigma_default
 
+    # normalized: U(1) = 0 for every sigma
     if isinstance(sigma, (int, float)):
         if np.isclose(sigma, 1):
             utility = np.log(consumption)
         else:
-            utility = consumption ** (1 - sigma) / (1 - sigma)
+            utility = (consumption ** (1 - sigma) - 1) / (1 - sigma)
     else:
         utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(sigma, 1.0, atol=1e-6)
         utility[log_mask] = np.log(consumption[log_mask])
-        utility[~log_mask] = consumption[~log_mask] ** (1 - sigma[~log_mask])  / (1 - sigma[~log_mask])
+        utility[~log_mask] = (consumption[~log_mask] ** (1 - sigma[~log_mask]) - 1)  / (1 - sigma[~log_mask])
 
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
 
     return utility
+
+
+def separable_utility_reward(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str,
+    labor_column: str | None = None,
+    sigma_column: str | None = None,
+    sigma_default: float = 1.0,
+    labor_form: str = "power",
+    labor_weight_column: str | None = None,
+    labor_weight_default: float = 1.0,
+    labor_weight_scale: float = 1.0,
+    frisch_column: str | None = None,
+    frisch_default: float = 1.0,
+    money_column: str | None = None,
+    price_column: str | None = None,
+    money_weight_column: str | None = None,
+    **kwargs
+) -> pd.Series:
+    """
+    Separable period utility:
+
+        U = (C^(1-sigma) - 1)/(1-sigma)                  (log C at sigma = 1)
+            - chi * L^(1+phi)/(1+phi)                    labor_form="power"
+            - chi * L                                    labor_form="linear"
+            + D * log(M/P)                               with money_column (M/P, or M if no price_column)
+
+    chi = labor_weight_scale * parameters[labor_weight_column], phi = parameters[frisch_column].
+    """
+    C = data[consumption_column]
+    sigma = parameters.get(sigma_column, sigma_default) if sigma_column else sigma_default
+    utility = np.log(C) if np.isclose(sigma, 1.0) else (C ** (1 - sigma) - 1) / (1 - sigma)
+
+    if labor_column is not None:
+        L = data[labor_column]
+        weight = parameters[labor_weight_column] if labor_weight_column else labor_weight_default
+        chi = labor_weight_scale * weight
+        if labor_form == "power":
+            phi = parameters.get(frisch_column, frisch_default) if frisch_column else frisch_default
+            utility = utility - chi * L ** (1 + phi) / (1 + phi)
+        elif labor_form == "linear":
+            utility = utility - chi * L
+        else:
+            raise ValueError(f"unknown labor_form {labor_form!r}")
+
+    if money_column is not None:
+        real_money = data[money_column] if price_column is None else data[money_column] / data[price_column]
+        utility = utility + parameters[money_weight_column] * np.log(real_money)
+
+    utility = utility.replace([np.inf, -np.inf], np.nan)
+    return utility.fillna(-1e6)
 
 
 def cara_reward(
@@ -404,7 +457,7 @@ def ces_utility_reward(
 ) -> pd.Series:
     """
     CES utility reward:
-    U(C,L) = C^(1-sigma)/(1-sigma) + A * (1-L)^(1-eta)/(1-eta)
+    U(C,L) = (C^(1-sigma) - 1)/(1-sigma) + A * ((1-L)^(1-eta) - 1)/(1-eta)
 
     Args:
         data: DataFrame with state/action variables
@@ -454,17 +507,18 @@ def ces_utility_reward(
         else A_default
     )
 
+    # normalized: each term is 0 at C = 1 and leisure = 1
     if isinstance(sigma, (int, float)):
         if np.isclose(sigma, 1.0):
             consumption_utility = np.log(C)
         else:
-            consumption_utility = C ** (1 - sigma) / (1 - sigma)
+            consumption_utility = (C ** (1 - sigma) - 1) / (1 - sigma)
     else:
         consumption_utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(sigma, 1.0, atol=1e-6)
         consumption_utility[log_mask] = np.log(C[log_mask])
         consumption_utility[~log_mask] = (
-            C[~log_mask] ** (1 - sigma[~log_mask]) / (1 - sigma[~log_mask])
+            (C[~log_mask] ** (1 - sigma[~log_mask]) - 1) / (1 - sigma[~log_mask])
         )
 
     leisure = np.maximum(1 - L, 1e-10)
@@ -473,13 +527,13 @@ def ces_utility_reward(
         if np.isclose(eta, 1.0):
             leisure_utility = A * np.log(leisure)
         else:
-            leisure_utility = A * leisure ** (1 - eta) / (1 - eta)
+            leisure_utility = A * (leisure ** (1 - eta) - 1) / (1 - eta)
     else:
         leisure_utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(eta, 1.0, atol=1e-6)
         leisure_utility[log_mask] = A * np.log(leisure[log_mask])
         leisure_utility[~log_mask] = (
-            A * leisure[~log_mask] ** (1 - eta[~log_mask]) / (1 - eta[~log_mask])
+            A * (leisure[~log_mask] ** (1 - eta[~log_mask]) - 1) / (1 - eta[~log_mask])
         )
 
     utility = consumption_utility + leisure_utility
@@ -613,7 +667,7 @@ def epstein_zin_utility(
     """
     Period utility for Epstein-Zin preferences.
     u(C, L) = C^nu * (1-L)^(1-nu)
-    This is the flow utility component before Epstein-Zin aggregation.
+    This is the flow utility before the recursive aggregation; nu is read from `parameters`.
     """
     C = data[consumption_column]
     L = data[labor_column]
