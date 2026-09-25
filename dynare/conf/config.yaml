@@ -554,31 +554,28 @@ models:
         rho_g: [0.90, 0.99]
         gshare: [0.15, 0.30]
         productivity_shock_stderr: [0.005, 0.010]
-        gov_spending_shock_stderr: [0.008, 0.015]
+        public_good_preference_shock_stderr: [0.008, 0.015]
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.government_welfare
+      reward: lib.rewards.public_good_welfare_reward
       reward_kwargs:
         consumption_column: Consumption
         labor_column: Labor
-        output_column: Output
         gov_spending_column: GovSpending
-        sigma_column: sigma
-        lambda_utility: 1.0
-        lambda_output_gap: 0.1
-        lambda_smoothing: 0.05
+        preference_column: PublicGoodPreference
       input:
         state_columns:
           - [Capital, -1]
           - LoggedProductivity
-          - Output
-          - Consumption
-          - Labor
+          - PublicGoodPreference
         action_columns:
           - GovSpending
         endogenous_columns:
           - LoggedGovSpending
+          - Output
+          - Consumption
+          - Labor
           - Investment
           - Wage
           - InterestRate

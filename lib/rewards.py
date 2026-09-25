@@ -528,80 +528,43 @@ def ces_utility_reward(
     return utility
 
 
-def government_welfare(
+def public_good_welfare_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     consumption_column: str = 'Consumption',
     labor_column: str = 'Labor',
-    output_column: str = 'Output',
     gov_spending_column: str = 'GovSpending',
-    sigma_column: str | None = 'sigma',
-    lambda_utility: float = 1.0,
-    lambda_output_gap: float = 0.1,
-    lambda_smoothing: float = 0.05,
+    preference_column: str = 'PublicGoodPreference',
+    sigma_column: str = 'sigma',
+    psi_column: str = 'psi',
+    chi_column: str = 'chi_bar',
+    **kwargs
 ) -> pd.Series:
     """
-    Calculate government welfare function.
+    Benevolent government's period welfare: household utility including the public good,
 
-    Welfare = lambda_u * U(C,L) - lambda_y * (Y/Y_ss - 1)² - lambda_g * (ΔG/G_ss)²
+        W = (C^(1-sigma) - 1)/(1-sigma) + psi*log(1-L) + chi_bar*exp(z)*log(G)   (log C at sigma=1)
 
-    where:
-    - U(C,L) is household utility from consumption and leisure
-    - (Y/Y_ss - 1)² penalizes deviations from steady-state output
-    - (ΔG/G_ss)² penalizes volatile government spending changes
-
-    Args:
-        data: DataFrame with simulation data
-        parameters: Model parameters from Dynare
-        consumption_column: Column name for consumption data
-        labor_column: Column name for labor data
-        output_column: Column name for output data
-        gov_spending_column: Column name for government spending data
-        sigma_column: Column name for CRRA parameter (or None for default=1)
-        lambda_utility: Weight for household utility component
-        lambda_output_gap: Weight for output stabilization penalty
-        lambda_smoothing: Weight for government spending smoothing penalty
-
-    Returns:
-        pd.Series with welfare values for each time period
+    where z is the public-good preference shock.
     """
     C = data[consumption_column]
     L = data[labor_column]
-    Y = data[output_column]
     G = data[gov_spending_column]
-
-    if sigma_column and sigma_column in parameters:
-        sigma = parameters[sigma_column]
-    else:
-        sigma = 1.0
-
-    psi = parameters.get('psi', 1.0)
-    y_ss = parameters.get('y_ss', Y.mean())
-    g_ss = parameters.get('g_ss', G.mean())
+    chi = parameters[chi_column] * np.exp(data[preference_column])
+    sigma = parameters[sigma_column]
 
     if np.isclose(sigma, 1.0):
         consumption_utility = np.log(C)
     else:
-        consumption_utility = (C ** (1 - sigma)) / (1 - sigma)
-
-    leisure = np.maximum(1 - L, 1e-10)
-    leisure_utility = psi * np.log(leisure)
-    household_utility = consumption_utility + leisure_utility
-
-    output_gap = ((Y - y_ss) / y_ss) ** 2
-
-    g_change = (G.diff().fillna(0) / g_ss) ** 2
+        consumption_utility = (C ** (1 - sigma) - 1) / (1 - sigma)
 
     welfare = (
-        lambda_utility * household_utility
-        - lambda_output_gap * output_gap
-        - lambda_smoothing * g_change
+        consumption_utility
+        + parameters[psi_column] * np.log(np.maximum(1 - L, 1e-10))
+        + chi * np.log(G)
     )
-
     welfare = welfare.replace([np.inf, -np.inf], np.nan)
-    welfare = welfare.fillna(-1e6)
-
-    return welfare
+    return welfare.fillna(-1e6)
 
 
 def central_bank_loss(

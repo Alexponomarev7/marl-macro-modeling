@@ -162,6 +162,7 @@ class Tokenizer:
         "LoggedWage",
         "LoggedInvestment",
         "LaborProductivity",  # output per hour
+        "PublicGoodPreference",
         "CapitalDestruction",
         "TFPNews1",  # TFP news hitting in 1..8 periods
         "TFPNews2",
