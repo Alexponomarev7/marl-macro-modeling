@@ -63,7 +63,8 @@ class DataModule(L.LightningDataModule):
     def __init__(
         self, data_root: Path, state_max_dim: int, action_max_dim: int,
         endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int,
-        batch_size: int = 32
+        batch_size: int = 32, state_dropout: float = 0.0, state_noise: float = 0.0,
+        hide_latent: float = 0.0,
     ):
         """
         Initialize DataModule.
@@ -80,6 +81,9 @@ class DataModule(L.LightningDataModule):
         self.endogenous_max_dim = endogenous_max_dim
         self.model_params_max_dim = model_params_max_dim
         self.max_seq_len = max_seq_len
+        self.state_dropout = state_dropout
+        self.state_noise = state_noise
+        self.hide_latent = hide_latent
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
@@ -92,6 +96,9 @@ class DataModule(L.LightningDataModule):
                 self.model_params_max_dim,
                 self.max_seq_len,
                 random_window=True,
+                state_dropout=self.state_dropout,
+                state_noise=self.state_noise,
+                hide_latent=self.hide_latent,
             )
             self.val_dataset = EconomicsDataset(
                 self.data_root / "val",
@@ -319,6 +326,9 @@ def main(hydra_cfg: DictConfig) -> None:
         model_params_max_dim=cfg['train']['max_model_params_dim'],
         max_seq_len=cfg['train']['max_seq_len'],
         batch_size=cfg['train'].get('batch_size', 32),
+        state_dropout=cfg['train'].get('state_dropout', 0.0),
+        state_noise=cfg['train'].get('state_noise', 0.0),
+        hide_latent=cfg['train'].get('hide_latent', 0.0),
     )
 
     checkpoint_dir = Path('checkpoints') / metadata['run_id']

@@ -2,7 +2,8 @@
 persistence (a_t = a_{t-1}) and an in-context ridge oracle, by window position.
 
 --context-diagnostics re-scores the last position with the history shuffled in time and with the
-context cut to TRUNCATED steps; --bootstrap N adds per-environment CIs of model/persistence.
+context cut to TRUNCATED steps; --bootstrap N adds per-environment CIs of model/persistence;
+--observables-only hides LATENT_STATES from the model and the oracle.
 
     python -m lib.evaluation --checkpoint path/to/model.ckpt --data data/interim [--windows 8]
 """
@@ -15,7 +16,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from lib.dataset import EconomicsDataset, Tokenizer
+from lib.dataset import LATENT_STATES, EconomicsDataset, Tokenizer, latent_token_ids
 from lib.generate_dataset import run_generation_batch_dynare
 from lib.models.transformer import AlgorithmDistillationTransformer
 
@@ -100,6 +101,7 @@ def evaluate(
     context_diagnostics: bool = False,
     bootstrap: int = 0,
     batch_size: int = 64,
+    hidden_states: tuple[str, ...] = (),
 ) -> pd.DataFrame:
     with tempfile.TemporaryDirectory() as index_dir:
         run_generation_batch_dynare(Path(data_dir), Path(index_dir))
@@ -108,12 +110,17 @@ def evaluate(
             model.model_params_dim, model.max_seq_len, random_window=True,
         )
         env_of_task = {v: k for k, v in Tokenizer.ENV_MAPPING.items()}
+        hidden_ids = torch.tensor(sorted(latent_token_ids(hidden_states)), dtype=torch.long)
         torch.manual_seed(seed)
         generator = torch.Generator().manual_seed(seed)
         # env -> episode -> per-window arrays; diagnostics hold last-position errors
         records: dict[str, dict[int, dict[str, list]]] = {}
         for _ in range(windows_per_episode):
             for batch_start, batch in enumerate(DataLoader(dataset, batch_size=batch_size, shuffle=False)):
+                if len(hidden_ids):
+                    hide = torch.isin(batch["states_info"], hidden_ids)
+                    batch["states"] = batch["states"] * (~hide).unsqueeze(1)
+                    batch["states_info"] = torch.where(hide, 0, batch["states_info"])
                 pred = _predict(model, batch)
                 # scored steps: no padding, no episode-start placeholder
                 steps = model._observed_steps(batch["states"], batch["window_start"] == 0, batch["attention_mask"])[1][..., 0]
@@ -238,10 +245,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--context-diagnostics", action="store_true", help="time-shuffle and truncation tests")
     parser.add_argument("--bootstrap", type=int, default=0, help="bootstrap resamples for CIs (0 = off)")
+    parser.add_argument("--observables-only", action="store_true", help="hide LATENT_STATES from model and oracle")
     parser.add_argument("--out", type=Path, help="optional CSV path for the per-env table")
     args = parser.parse_args()
 
-    table = evaluate(load_policy(args.checkpoint), args.data, args.windows, args.seed, args.context_diagnostics, args.bootstrap)
+    table = evaluate(load_policy(args.checkpoint), args.data, args.windows, args.seed, args.context_diagnostics,
+                     args.bootstrap, hidden_states=LATENT_STATES if args.observables_only else ())
     pd.set_option("display.width", 250)
     print(table.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     print()

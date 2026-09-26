@@ -586,6 +586,26 @@ class Tokenizer:
 # Create a default tokenizer instance for use across the module
 _default_tokenizer = Tokenizer()
 
+# states that real data does not observe (shocks, TFP and its news)
+LATENT_STATES = (
+    "TechnologyShock", "PreferenceShock", "CostPushShock", "MonetaryShock", "LoggedProductivity",
+    "Productivity", "LogTFP", "LogProductivity", "AR(1) Technology Process", "TrendGrowthShock",
+    "TechGrowthRate", "LoggedVolatility", "PublicGoodPreference", "FinancialConditions",
+    "CountryPremiumShock", "Government Spending Shock", "CapitalDestruction",
+    *(f"TFPNews{h}" for h in range(1, 9)),
+)
+
+
+def latent_token_ids(names=LATENT_STATES) -> set[int]:
+    ids = set()
+    for name in names:
+        try:
+            ids.add(_default_tokenizer.state_token_id(name))
+        except KeyError:
+            pass
+    return ids
+
+
 class EconomicsDataset(Dataset):
     """
     A PyTorch Dataset for loading and processing economic episodes data.
@@ -601,7 +621,8 @@ class EconomicsDataset(Dataset):
     def __init__(
         self, data_path: Path, max_state_dim: int, max_action_dim: int,
         max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int,
-        random_window: bool = True,
+        random_window: bool = True, state_dropout: float = 0.0, state_noise: float = 0.0,
+        hide_latent: float = 0.0,
     ):
         """
         Initialize the dataset with the given parameters.
@@ -612,6 +633,10 @@ class EconomicsDataset(Dataset):
             max_seq_len (int): Length of the window drawn from each episode
             random_window (bool): A fresh random window per access (training); otherwise a fixed
                 window per episode.
+            state_dropout (float): Probability of hiding each state variable of an episode.
+            state_noise (float): Std of Gaussian noise added to states, relative to each variable's
+                std in the window.
+            hide_latent (float): Probability of hiding all LATENT_STATES of an episode.
         """
         self.max_state_dim = max_state_dim
         self.max_action_dim = max_action_dim
@@ -619,6 +644,10 @@ class EconomicsDataset(Dataset):
         self.max_seq_len = max_seq_len
         self.max_model_params_dim = max_model_params_dim
         self.random_window = random_window
+        self.state_dropout = state_dropout
+        self.state_noise = state_noise
+        self.hide_latent = hide_latent
+        self.latent_ids = torch.tensor(sorted(latent_token_ids()), dtype=torch.long)
 
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
@@ -696,6 +725,25 @@ class EconomicsDataset(Dataset):
             padding_size = max_dim - current_dim
             padding = torch.zeros(*sequence.shape[:-1], padding_size, dtype=sequence.dtype)
             return torch.cat([sequence, padding], dim=-1)
+
+    def _perturb_states(self, states: torch.Tensor, states_info: torch.Tensor, n: int) -> torch.Tensor:
+        """Hide state variables (value 0, padding token; states_info in place) and add noise."""
+        if self.hide_latent > 0 and torch.rand(1).item() < self.hide_latent:
+            hidden = torch.nonzero(torch.isin(states_info[:n], self.latent_ids)).flatten()
+            states[:, hidden] = 0.0
+            states_info[hidden] = 0
+        if self.state_dropout > 0 and n > 1:
+            drop = torch.rand(n) < self.state_dropout
+            if drop.all():
+                drop[torch.randint(n, (1,))] = False
+            hidden = torch.nonzero(drop).flatten()
+            states[:, hidden] = 0.0
+            states_info[hidden] = 0
+        if self.state_noise > 0 and n > 0:
+            kept = (states_info[:n] != 0).to(states.dtype)
+            noise = self.state_noise * states[:, :n].std(0, keepdim=True) * torch.randn_like(states[:, :n])
+            states[:, :n] = states[:, :n] + noise * kept
+        return states
 
     def __getitem__(self, idx: int):
         """
@@ -782,6 +830,7 @@ x
                     f"raise train.max_{kind}_dim"
                 )
         states_info = torch.tensor([self.tokenizer.state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
+        states = self._perturb_states(states, states_info, len(state_description))
         actions_info = torch.tensor([self.tokenizer.action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
         endogenous_info = torch.tensor([self.tokenizer.state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"

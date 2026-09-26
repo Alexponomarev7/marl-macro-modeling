@@ -72,6 +72,22 @@ def test_dataset_alignment(episode_dir, tmp_path):
         assert (item["action_scale"][:, 2:] == 1).all()  # padded action slots
 
 
+def test_state_dropout_hides_variables(episode_dir, tmp_path):
+    torch.manual_seed(0)
+    ds = EconomicsDataset(_index(episode_dir, tmp_path), **DIMS, max_seq_len=L, random_window=False, state_dropout=0.9)
+    for _ in range(20):
+        item = ds[0]
+        shown = item["states_info"][:2] != 0
+        assert shown.any()  # at least one variable stays
+        assert (item["states"][:, :2][:, ~shown] == 0).all()
+
+
+def test_hide_latent_hides_only_latent_states(episode_dir, tmp_path):
+    item = EconomicsDataset(_index(episode_dir, tmp_path), **DIMS, max_seq_len=L, random_window=False, hide_latent=1.0)[0]
+    assert item["states_info"][0] != 0 and item["states_info"][1] == 0  # Capital kept, LoggedProductivity hidden
+    assert (item["states"][:, 1] == 0).all() and (item["states"][:, 0] != 0).any()
+
+
 def test_random_windows_cover_the_episode(episode_dir, tmp_path):
     ds = EconomicsDataset(_index(episode_dir, tmp_path), **DIMS, max_seq_len=L, random_window=True)
     torch.manual_seed(0)
@@ -250,6 +266,8 @@ def test_evaluation_persistence_baseline(episode_dir, tmp_path):
     row = table.iloc[0]
     assert row.env == "Hansen_1985" and row.episodes == 3
     assert np.isclose(row.model_nmse, row.persistence_nmse)
+    hidden = evaluate(_model(), episode_dir, windows_per_episode=2, seed=0, hidden_states=("Capital",)).iloc[0]
+    assert np.isclose(hidden.model_nmse, hidden.persistence_nmse)
 
 
 def test_in_context_ridge_recovers_a_linear_policy():
