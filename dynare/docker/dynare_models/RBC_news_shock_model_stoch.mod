@@ -26,7 +26,15 @@ var Output              $Output$ (long_name='output (log)')
     LoggedProductivity  $LoggedProductivity$ (long_name='TFP (log)')
     AnnualInterestRate  $AnnualInterestRate$ (long_name='annualized interest rate')
     Wage                $Wage$ (long_name='real wage (log)')
-    Investment          $Investment$ (long_name='investment (log)');
+    Investment          $Investment$ (long_name='investment (log)')
+    TFPNews8             $TFPNews8$ (long_name='TFP news hitting in 8 periods')
+    TFPNews7             $TFPNews7$ (long_name='TFP news hitting in 7 periods')
+    TFPNews6             $TFPNews6$ (long_name='TFP news hitting in 6 periods')
+    TFPNews5             $TFPNews5$ (long_name='TFP news hitting in 5 periods')
+    TFPNews4             $TFPNews4$ (long_name='TFP news hitting in 4 periods')
+    TFPNews3             $TFPNews3$ (long_name='TFP news hitting in 3 periods')
+    TFPNews2             $TFPNews2$ (long_name='TFP news hitting in 2 periods')
+    TFPNews1             $TFPNews1$ (long_name='TFP news hitting in 1 period');
 
 varexo NewsShock        $NewsShock$ (long_name='anticipated TFP shock')
        SurpriseShock    $SurpriseShock$ (long_name='unanticipated TFP shock');
@@ -118,7 +126,7 @@ psi = (1 - alpha) * (k_ss / l_ss)^alpha * (1 - l_ss) / c_ss^sigma;
 model;
 
 [name='Euler equation (with growth)']
-exp(Consumption)^(-sigma) = beta / gammax * exp(Consumption(+1))^(-sigma) * 
+exp(Consumption)^(-sigma) = beta / gammax * exp(Consumption(+1))^(-sigma) *
     (alpha * exp(LoggedProductivity(+1)) * (exp(Capital) / exp(Labor(+1)))^(alpha - 1) + (1 - delta));
 
 [name='Labor supply FOC']
@@ -140,7 +148,18 @@ exp(Wage) = (1 - alpha) * exp(Output) / exp(Labor);
 AnnualInterestRate = 4 * alpha * exp(Output) / exp(Capital(-1));
 
 [name='TFP process with news shock']
-LoggedProductivity = rhoz * LoggedProductivity(-1) + SurpriseShock + NewsShock(-8);
+LoggedProductivity = rhoz * LoggedProductivity(-1) + SurpriseShock + TFPNews1(-1);  % = NewsShock(-8), via the explicit news pipeline
+
+[name='News pipeline (observable state)']
+% TFPNewsH: announced news that hits TFP in H periods
+TFPNews8 = NewsShock;
+TFPNews7 = TFPNews8(-1);
+TFPNews6 = TFPNews7(-1);
+TFPNews5 = TFPNews6(-1);
+TFPNews4 = TFPNews5(-1);
+TFPNews3 = TFPNews4(-1);
+TFPNews2 = TFPNews3(-1);
+TFPNews1 = TFPNews2(-1);
 
 end;
 
@@ -155,6 +174,14 @@ initval;
   Labor = log(l_ss);
   Wage = log(w_ss);
   AnnualInterestRate = r_ss;
+  TFPNews8 = 0;
+  TFPNews7 = 0;
+  TFPNews6 = 0;
+  TFPNews5 = 0;
+  TFPNews4 = 0;
+  TFPNews3 = 0;
+  TFPNews2 = 0;
+  TFPNews1 = 0;
 end;
 
 steady;

@@ -1,11 +1,11 @@
-% RBC Model with Government Spending - State Dependent GIRF
-% Based on standard RBC framework with fiscal policy
+% RBC Model with an optimizing fiscal authority, derived from Pfeifer's RBC_state_dependent_GIRF:
+% households value a public good (utility adds chi_t*log(G_t)), and the government sets G by the
+% Samuelson rule chi_t / G_t = C_t^(-sigma). chi_bar sets steady-state G/Y = gshare.
 %
 % Features:
-%   - Government spending shocks
+%   - Optimal public-good provision (Samuelson rule), public-good preference shocks
 %   - TFP shocks (AR(1) process)
 %   - Population and technology growth
-%   - Stochastic simulation (order=2)
 %
 % Timing convention:
 %   - Capital_t is end-of-period t capital
@@ -17,13 +17,14 @@ var Consumption $Consumption$ (long_name='Consumption')
     Labor $Labor$ (long_name='Hours Worked')
     LoggedProductivity $LoggedProductivity$ (long_name='Total Factor Productivity')
     LoggedGovSpending $LoggedGovSpending$ (long_name='Government Spending')
+    PublicGoodPreference $PublicGoodPreference$ (long_name='public good preference (log deviation of chi)')
     InterestRate $InterestRate$ (long_name='Annualized Interest Rate')
     Wage $Wage$ (long_name='Real Wage')
     Investment $Investment$ (long_name='Investment')
     GovSpending $GovSpending$ (long_name='Government Spending Level');
 
 varexo ProductivityShock $ProductivityShock$ (long_name='TFP shock')
-       GovSpendingShock  $GovSpendingShock$ (long_name='Government Spending Shock');
+       PublicGoodPreferenceShock $PublicGoodPreferenceShock$ (long_name='Public Good Preference Shock');
 
 parameters alpha ${\alpha}$ (long_name='Capital Share')
            beta ${\beta}$ (long_name='Discount Factor')
@@ -31,7 +32,8 @@ parameters alpha ${\alpha}$ (long_name='Capital Share')
            sigma ${\sigma}$ (long_name='Risk Aversion')
            psi ${\psi}$ (long_name='Labor Disutility Parameter')
            rho ${\rho}$ (long_name='Persistence TFP Shock')
-           rho_g ${\rho_g}$ (long_name='Persistence Government Spending Shock')
+           rho_g ${\rho_g}$ (long_name='Persistence Public Good Preference Shock')
+           chi_bar ${\bar\chi}$ (long_name='Public Good Utility Weight')
            n ${n}$ (long_name='Population Growth')
            x ${x}$ (long_name='Technology Growth')
            gammax ${\gamma_x}$ (long_name='Composite Growth Rate')
@@ -85,8 +87,8 @@ parameters alpha ${\alpha}$ (long_name='Capital Share')
     @#define productivity_shock_stderr = 0.0068
 @#endif
 
-@#if !defined(gov_spending_shock_stderr)
-    @#define gov_spending_shock_stderr = 0.0105
+@#if !defined(public_good_preference_shock_stderr)
+    @#define public_good_preference_shock_stderr = 0.0105
 @#endif
 
 alpha = @{alpha};
@@ -113,6 +115,7 @@ c_ss = y_ss - i_ss - g_ss;
 w_ss = (1 - alpha) * y_ss / l_ss;
 r_ss = 4 * alpha * y_ss / k_ss;
 psi = (1 - alpha) * (k_ss / l_ss)^alpha * (1 - l_ss) / c_ss^sigma;
+chi_bar = g_ss / c_ss^sigma;  % Samuelson rule at the steady state: g_ss = chi_bar * c_ss^sigma
 
 model;
 
@@ -131,11 +134,14 @@ Output = exp(LoggedProductivity) * Capital(-1)^alpha * Labor^(1 - alpha);
 [name='TFP law of motion']
 LoggedProductivity = rho * LoggedProductivity(-1) + ProductivityShock;
 
-[name='Government spending law of motion']
-LoggedGovSpending = rho_g * LoggedGovSpending(-1) + GovSpendingShock;
+[name='Public good preference law of motion']
+PublicGoodPreference = rho_g * PublicGoodPreference(-1) + PublicGoodPreferenceShock;
 
-[name='Government spending level']
-GovSpending = g_ss * exp(LoggedGovSpending);
+[name='Optimal public good provision (Samuelson rule)']
+GovSpending = chi_bar * exp(PublicGoodPreference) * Consumption^sigma;
+
+[name='Government spending, log deviation from steady state']
+LoggedGovSpending = log(GovSpending / g_ss);
 
 [name='Real wage (MPL)']
 Wage = (1 - alpha) * Output / Labor;
@@ -151,6 +157,7 @@ end;
 initval;
   LoggedProductivity = 0;
     LoggedGovSpending = 0;
+    PublicGoodPreference = 0;
     Labor = l_ss;
     Capital = k_ss;
     Output = y_ss;
@@ -167,8 +174,8 @@ check;
 shocks;
   var ProductivityShock;
   stderr @{productivity_shock_stderr};
-  var GovSpendingShock;
-  stderr @{gov_spending_shock_stderr};
+  var PublicGoodPreferenceShock;
+  stderr @{public_good_preference_shock_stderr};
 end;
 
 steady;

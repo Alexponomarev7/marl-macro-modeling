@@ -3,35 +3,45 @@ defaults:
   - _self_
 
 data_root: ${dataset.workdir}
-epochs: 100
+epochs: 600
 val_freq: 10
-device: cpu
-max_state_dim: 30
-max_action_dim: 3
-max_endogenous_dim: 5
-max_model_params_dim: 20
+gradient_clip_val: 1.0
+device: auto  # Lightning accelerator: auto, cpu, mps, gpu
+max_state_dim: 16
+max_action_dim: 5
+max_endogenous_dim: 16
+max_model_params_dim: 36  # >= the largest model's parameter count
 max_seq_len: 50
+state_dropout: 0.0  # training: probability of hiding each state variable of an episode
+state_noise: 0.0  # training: state noise std relative to each variable's std
+hide_latent: 0.0  # training: probability of hiding all latent states (shocks, TFP) of an episode
+dynamics_weight: 0.1  # training: weight of the next-state loss (model.dynamics_head)
 
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
   state_dim: ${train.max_state_dim}
   action_dim: ${train.max_action_dim}
   pinn_output_dim: ${train.max_endogenous_dim}
-  d_model: 32
+  d_model: 48  # task_embedding dim is d_model - model_params_dim
   num_layers: 2
   nhead: 4
   max_seq_len: ${train.max_seq_len}
   model_params_dim: ${train.max_model_params_dim}
-  has_pinn: true
+  has_pinn: false
+  context_only: true  # hide the task id and the model parameters
+  input_normalization: causal  # symlog | causal (scale-free; inference() then needs initial_action)
+  ridge_channel: true  # in-context ridge estimate as an action input (causal only)
+  ridge_windows: [10]  # extra ridge estimates over the last k steps each
+  ridge_skip: true  # output a_{t-1} + a learned mix of the ridge estimates + a gated correction
+  dynamics_head: true  # also predict s_{t+1} - s_t (causal only)
 optimizer:
-  _target_: torch.optim.Adam
-  lr: 0.0001
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4  # peak, after warmup (symlog inputs need 3.0e-5)
   weight_decay: 0.01
   betas: [0.9, 0.98]
-scheduler:
-  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-  T_max: 10
-  eta_min: 1.0e-5
+scheduler:  # per-step linear warmup, then cosine decay to eta_min
+  warmup_steps: 200
+  eta_min: 3.0e-6
 loss:
   _target_: torch.nn.MSELoss
   reduction: mean

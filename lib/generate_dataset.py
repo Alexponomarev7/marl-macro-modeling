@@ -1,8 +1,10 @@
 import json
 import hydra
 import hashlib
+import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
+import pyarrow.parquet as pq
 from tqdm import tqdm
 from pathlib import Path
 from loguru import logger
@@ -26,6 +28,12 @@ def generate_hash(params: Dict) -> str:
     return hashlib.md5(params_str.encode()).hexdigest()[:8]
 
 
+def _to_scalar(x: Any) -> float:
+    """Extract a python float from either a raw number or a shape-(1,) array (both
+    conventions are used across lib/envs/*.py state dicts)."""
+    return float(np.asarray(x, dtype=np.float64).reshape(-1)[0])
+
+
 def generate_env_data(env, num_steps: int = 1000) -> Dict:
     """
     Generate data from the given environment using its analytical solution.
@@ -35,57 +43,53 @@ def generate_env_data(env, num_steps: int = 1000) -> Dict:
     :param seed: Random seed for reproducibility
     :return: A dictionary containing:
         - 'env_params': The parameters of the environment.
-        - 'tracks': A DataFrame containing the generated data with columns:
-            - 'state': The state of the environment at each step.
-            - 'reward': The reward received at each step.
-            - 'done': A boolean indicating if the episode is done.
-            - 'truncated': A boolean indicating if the episode was truncated.
-            - 'info': Additional information from the environment at each step.
+        - 'tracks': A DataFrame with columns matching the processed Dynare episodes,
+          so both are consumable by lib.dataset.EconomicsDataset: 'state', 'action', 'endogenous',
+          'reward', 'done', 'truncated', 'info' (with state_description/action_description/
+          endogenous_description embedded in 'info', matching each row).
     """
     env.reset()
 
-    data = []
+    state_description = env.state_description
+    action_description = env.action_description
+    state_names = list(state_description.keys())
+    action_names = list(action_description.keys())
+    # EconomicsDataset needs a flat numeric model_params dict; env.params may also carry
+    # non-numeric entries (e.g. utility_function name/params), which don't belong there.
+    model_params = {k: v for k, v in env.params.items() if isinstance(v, (int, float))}
+
+    rows = []
     for _ in tqdm(range(num_steps)):
         state, reward, done, truncated, info = env.analytical_step()
-        data.append({
-            "state": state,
+        if "action" not in info:
+            raise KeyError(
+                f"{env.__class__.__name__}.analytical_step() info is missing 'action'; "
+                "cannot build training data without the action taken at each step."
+            )
+        row_info = dict(info)
+        row_info.update({
+            "state_description": state_names,
+            "action_description": action_names,
+            "endogenous_description": [],
+            "model_params": model_params,
+        })
+        rows.append({
+            "state": np.array([_to_scalar(state[name]) for name in state_names], dtype=np.float32),
+            "action": np.array([_to_scalar(v) for v in info["action"]], dtype=np.float32),
+            "endogenous": np.array([], dtype=np.float32),
             "reward": reward,
             "done": done,
             "truncated": truncated,
-            "info": info
+            "info": row_info,
         })
 
     return {
         'env_name': env.__class__.__name__,
         'env_group': env.__class__.__name__,
         'env_params': env.params,
-        'action_description': env.action_description,
-        'state_description': env.state_description,
-        'tracks': pd.DataFrame(data),
-    }
-
-def generate_env_data_dynare(dynare_file_path: Path):
-    df = pd.read_parquet(dynare_file_path)
-    if df.empty:
-        logger.warning(f"Skipping empty dynare episode parquet: {dynare_file_path}")
-        return None
-    df["done"] = False
-
-    info = {
-        "action_description": list(df.iloc[0]["action_description"]),
-        "state_description": list(df.iloc[0]["state_description"]),
-        "endogenous_description": list(df.iloc[0]["info"].get("endogenous_description", [])),
-    }
-    df["info"] = df["info"].apply(lambda x: x | info)
-    env_name = dynare_file_path.name
-    env_group = df.iloc[0]["info"]["env_group"]
-    return {
-        "env_name": env_name,
-        "env_group": env_group,
-        "env_params": env_name,
-        "action_description": df.iloc[0]["action_description"],
-        "state_description": df.iloc[0]["state_description"],
-        "tracks": df[["state", "action", "endogenous", "reward", "done", "truncated", "info"]],
+        'action_description': action_description,
+        'state_description': state_description,
+        'tracks': pd.DataFrame(rows),
     }
 
 class DatasetWriter:
@@ -155,17 +159,50 @@ def run_generation_batch(dataset_cfg: dict[str, Any], envs_cfg: dict[str, Any], 
                     logger.exception(e)
                     continue
 
-def run_generation_batch_dynare(dynare_output_path: Path, workdir: Path):
+def run_generation_batch_dynare(
+    dynare_output_path: Path,
+    workdir: Path,
+    include_models: list[str] | None = None,
+    exclude_models: list[str] | None = None,
+    lq_tasks: dict[str, Any] | None = None,
+):
+    """Index the processed Dynare episodes in place (no copies) for EconomicsDataset.
+
+    include_models / exclude_models: Dynare model names to keep / drop.
+    lq_tasks: keyword arguments of lib.lq_tasks.write_tasks; those episodes are written to
+        workdir/lq_tasks and indexed too.
+    """
     processed_path = dynare_output_path
 
     assert processed_path.exists(), f"processed path {processed_path} does not exist"
-    with DatasetWriter(workdir) as writer:
-        for file in processed_path.glob("*.parquet"):
-            env_data = generate_env_data_dynare(file)
-            if env_data is None:
-                continue
-            params_hash = generate_hash({"file_name": file.name})
-            writer.write(env_data, params_hash)
+    files = sorted(processed_path.glob("*.parquet"))
+    models = {f: f.name.rsplit("_config_", 1)[0] for f in files}
+    for name, selection in (("include_models", include_models), ("exclude_models", exclude_models)):
+        unknown = sorted(set(selection or []) - set(models.values()))
+        if unknown:
+            raise KeyError(f"{name} lists models with no episodes in {processed_path}: {unknown}")
+    if include_models:
+        files = [f for f in files if models[f] in include_models]
+    if exclude_models:
+        files = [f for f in files if models[f] not in exclude_models]
+    if lq_tasks and lq_tasks.get("episodes", 0) > 0:
+        from lib.lq_tasks import write_tasks
+        files += write_tasks(workdir / "lq_tasks", **lq_tasks)
+    metadata = []
+    for file in files:
+        parquet = pq.ParquetFile(file)
+        if parquet.metadata.num_rows == 0:
+            logger.warning(f"Skipping empty dynare episode parquet: {file}")
+            continue
+        info = next(parquet.iter_batches(batch_size=1, columns=["info"])).to_pylist()[0]["info"]
+        metadata.append({
+            "env_name": file.name,
+            "env_group": info["env_group"],
+            "env_params": file.name,
+            "output_dir": str(file.resolve()),
+        })
+    with open(workdir / "metadata.json", "w") as f:
+        json.dump(metadata, f, indent=4)
 
 class DatasetGenerator:
     """Handles the creation and organization of datasets."""
@@ -202,7 +239,10 @@ class DatasetGenerator:
             elif stage_cfg['type'] == 'dynare':
                 run_generation_batch_dynare(
                     PathStorage(stage_cfg['dynare_output_path']).processed_root,
-                    stage_dir
+                    stage_dir,
+                    include_models=stage_cfg.get('include_models'),
+                    exclude_models=stage_cfg.get('exclude_models'),
+                    lq_tasks=stage_cfg.get('lq_tasks'),
                 )
             else:
                 raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")

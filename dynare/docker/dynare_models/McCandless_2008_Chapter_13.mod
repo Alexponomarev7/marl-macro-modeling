@@ -11,7 +11,7 @@ var w           $W$         (long_name='Real Wage')
     p           $P$         (long_name='Price Level')
     pstar       ${P^*}$     (long_name='Foreign Price Level')
     g           $g$         (long_name='Growth Rate Of Money Stock')
-    lambda      $\lambda$   (long_name='Total Factor Productivity')
+    lambda      $\lambda$   (long_name='tfp level')
     b           $B$         (long_name='Foreign Bonds')
     rf          ${r^f}$     (long_name='Foreign Interest Rate')
     e           $e$         (long_name='Exchange Rate')
@@ -36,19 +36,60 @@ parameters beta         ${\beta}$    (long_name='Discount Factor')
            sigma_g      ${\sigma_g}$ (long_name='Standard Deviation Money Shock')
            sigma_pstar  ${\sigma_{P^*}}$ (long_name='Standard Deviation Foreign Price Shock');
 
-kappa = 0.5;
-beta = 0.99;
-delta = 0.025;
-theta = 0.36;
-rstar = 0.03;
-a = 0.01;
-B = -2.58;
-gamma_lambda = 0.95;
-gamma_g = 0.95;
-gamma_pstar = 0.95;
-sigma_lambda = 0.01;
-sigma_g = 0.01;
-sigma_pstar = 0.01;
+% shock scales are sigma_lambda/sigma_g/sigma_pstar (unit-variance innovations below)
+@#if !defined(kappa)
+    @#define kappa = 0.5
+@#endif
+@#if !defined(beta)
+    @#define beta = 0.99
+@#endif
+@#if !defined(delta)
+    @#define delta = 0.025
+@#endif
+@#if !defined(theta)
+    @#define theta = 0.36
+@#endif
+@#if !defined(rstar)
+    @#define rstar = 0.03
+@#endif
+@#if !defined(a)
+    @#define a = 0.01
+@#endif
+@#if !defined(B)
+    @#define B = -2.58
+@#endif
+@#if !defined(gamma_lambda)
+    @#define gamma_lambda = 0.95
+@#endif
+@#if !defined(gamma_g)
+    @#define gamma_g = 0.95
+@#endif
+@#if !defined(gamma_pstar)
+    @#define gamma_pstar = 0.95
+@#endif
+@#if !defined(sigma_lambda)
+    @#define sigma_lambda = 0.01
+@#endif
+@#if !defined(sigma_g)
+    @#define sigma_g = 0.01
+@#endif
+@#if !defined(sigma_pstar)
+    @#define sigma_pstar = 0.01
+@#endif
+
+kappa = @{kappa};
+beta = @{beta};
+delta = @{delta};
+theta = @{theta};
+rstar = @{rstar};
+a = @{a};
+B = @{B};
+gamma_lambda = @{gamma_lambda};
+gamma_g = @{gamma_g};
+gamma_pstar = @{gamma_pstar};
+sigma_lambda = @{sigma_lambda};
+sigma_g = @{sigma_g};
+sigma_pstar = @{sigma_pstar};
 
 model;
     0 = e / (p(+1) * c(+1)) - beta * e(+1) * (1 + rf) / (p(+2) * c(+2));

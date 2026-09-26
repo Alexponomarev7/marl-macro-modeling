@@ -27,11 +27,11 @@
 @#endif
 
 
-var c ${c}$ (long_name='Consumption')
-    h ${h}$ (long_name='Hours Worked')
-    y ${y}$ (long_name='Output')
-    i ${i}$ (long_name='Investment')
-    k ${k}$ (long_name='Capital')
+var c ${c}$ (long_name='consumption (log)')
+    h ${h}$ (long_name='hours worked (log)')
+    y ${y}$ (long_name='output (log)')
+    i ${i}$ (long_name='investment (log)')
+    k ${k}$ (long_name='capital (log)')
     a ${a}$ (long_name='Total Factor Productivity')
     lambda ${\lambda}$ (long_name='Marginal Utility')
     util ${util}$ (long_name='Utility')
@@ -57,7 +57,7 @@ var c ${c}$ (long_name='Consumption')
 
 varexo e ${\varepsilon}$ (long_name='TFP Shock');
 
-parameters gamma ${\gamma}$ (long_name='Risk Aversion')
+parameters gamma_risk ${\gamma_risk}$ (long_name='Risk Aversion')
            omega ${\omega}$ (long_name='Frisch Elasticity Parameter')
            rho ${\rho}$ (long_name='Persistence TFP Shock')
            sigma_tfp ${\sigma_{a}}$ (long_name='Standard Deviation TFP Shock')
@@ -72,16 +72,48 @@ parameters gamma ${\gamma}$ (long_name='Risk Aversion')
            d_bar ${\bar d}$ (long_name='Steady State Debt')
            beta ${\beta}$ (long_name='Discount Factor');
 
-gamma = 2;
-omega = 1.455;
-rho = 0.42;
-sigma_tfp = 0.0129;
-delta = 0.1;
-alpha = 0.32;
-phi = 0.028;
-r_bar = 0.04;
-d_bar = 0.7442;
-psi_2 = 0.000742;
+% only model2 (debt-elastic interest-rate premium) is used; psi_1/psi_3/psi_4 belong to the others
+@#if !defined(gamma_risk)
+    @#define gamma_risk = 2
+@#endif
+@#if !defined(omega)
+    @#define omega = 1.455
+@#endif
+@#if !defined(rho)
+    @#define rho = 0.42
+@#endif
+@#if !defined(sigma_tfp)
+    @#define sigma_tfp = 0.0129
+@#endif
+@#if !defined(delta)
+    @#define delta = 0.1
+@#endif
+@#if !defined(alpha)
+    @#define alpha = 0.32
+@#endif
+@#if !defined(phi)
+    @#define phi = 0.028
+@#endif
+@#if !defined(r_bar)
+    @#define r_bar = 0.04
+@#endif
+@#if !defined(d_bar)
+    @#define d_bar = 0.7442
+@#endif
+@#if !defined(psi_2)
+    @#define psi_2 = 0.000742
+@#endif
+
+gamma_risk = @{gamma_risk};
+omega = @{omega};
+rho = @{rho};
+sigma_tfp = @{sigma_tfp};
+delta = @{delta};
+alpha = @{alpha};
+phi = @{phi};
+r_bar = @{r_bar};
+d_bar = @{d_bar};
+psi_2 = @{psi_2};
 psi_3 = 0.00074;
 psi_4 = 0;
 
@@ -95,13 +127,13 @@ model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
     exp(lambda) = beta_fun * (1 + exp(r)) * exp(lambda(+1));
-    exp(lambda) = (exp(c) - (exp(h)^omega) / omega)^(-gamma) - eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1));
+    exp(lambda) = (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) - eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1));
     eta = -util(+1) + eta(+1) * beta_fun(+1);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) + eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1) * (-exp(h)^(omega - 1))) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) + eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1) * (-exp(h)^(omega - 1))) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta_fun * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     a = rho * a(-1) + sigma_tfp * e;
     beta_fun = (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1);
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
     exp(r) = r_bar;
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
     ca_y = (1 / exp(y)) * (d(-1) - d);
@@ -116,11 +148,11 @@ steady_state_model;
     i = log(delta * exp(k));
     c = log(exp(y) - exp(i) - r_bar * d);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
     psi_1 = -log(1 / (1 + r_bar)) / (log((1 + exp(c) - omega^(-1) * exp(h)^omega)));
     beta_fun = (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1);
     eta = -util / (1 - beta_fun);
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma) - eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1)));
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) - eta * (-psi_1 * (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1 - 1)));
     a = 0;
     ca_y = 0;
 end;
@@ -132,12 +164,12 @@ model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
     exp(lambda) = beta_fun * (1 + exp(r)) * exp(lambda(+1));
-    exp(lambda) = (exp(c) - (exp(h)^omega) / omega)^(-gamma);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    exp(lambda) = (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta_fun * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     a = rho * a(-1) + sigma_tfp * e;
     beta_fun = (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1);
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
     exp(r) = r_bar;
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
     ca_y = (1 / exp(y)) * (d(-1) - d);
@@ -152,10 +184,10 @@ steady_state_model;
     i = log(delta * exp(k));
     c = log(exp(y) - exp(i) - r_bar * d);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
     psi_1 = -log(1 / (1 + r_bar)) / (log((1 + exp(c) - omega^(-1) * exp(h)^omega)));
     beta_fun = (1 + exp(c) - omega^(-1) * exp(h)^omega)^(-psi_1);
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma));
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk));
     a = 0;
     ca_y = 0;
 end;
@@ -167,15 +199,15 @@ model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
     exp(lambda) = beta * (1 + exp(r)) * exp(lambda(+1));
-    (exp(c) - (exp(h)^omega) / omega)^(-gamma) = exp(lambda);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) = exp(lambda);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     a = rho * a(-1) + sigma_tfp * e;
     exp(r) = r_bar + riskpremium;
     riskpremium = psi_2 * (exp(d - d_bar) - 1);
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
     ca_y = (1 / exp(y)) * (d(-1) - d);
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
 end;
 
 steady_state_model;
@@ -188,8 +220,8 @@ steady_state_model;
     i = log(delta * exp(k));
     c = log(exp(y) - exp(i) - r_bar * d);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma));
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk));
     a = 0;
     ca_y = 0;
     riskpremium = 0;
@@ -202,14 +234,14 @@ model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
     exp(lambda) * (1 - psi_3 * (d - d_bar)) = beta * (1 + exp(r)) * exp(lambda(+1));
-    (exp(c) - (exp(h)^omega) / omega)^(-gamma) = exp(lambda);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) = exp(lambda);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     a = rho * a(-1) + sigma_tfp * e;
     exp(r) = r_bar;
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
     ca_y = (1 / exp(y)) * (d(-1) - d);
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
 end;
 
 steady_state_model;
@@ -222,8 +254,8 @@ steady_state_model;
     i = log(delta * exp(k));
     c = log(exp(y) - exp(i) - r_bar * d);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma));
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk));
     a = 0;
     ca_y = 0;
 end;
@@ -233,13 +265,13 @@ end;
 model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
-    (exp(c) - (exp(h)^omega) / omega)^(-gamma) = exp(lambda);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) = exp(lambda);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     exp(lambda) = psi_4;
     a = rho * a(-1) + sigma_tfp * e;
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
 end;
 
 steady_state_model;
@@ -249,10 +281,10 @@ steady_state_model;
     y = log((exp(k)^alpha) * (exp(h)^(1 - alpha)));
     i = log(delta * exp(k));
     c = 0.110602;
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma));
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk));
     psi_4 = exp(lambda);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
     a = 0;
 end;
 @#endif
@@ -263,14 +295,14 @@ model;
     exp(y) = exp(a) * (exp(k(-1))^alpha) * (exp(h)^(1 - alpha));
     exp(k) = exp(i) + (1 - delta) * exp(k(-1));
     exp(lambda) = beta * (1 + exp(r)) * exp(lambda(+1));
-    (exp(c) - (exp(h)^omega) / omega)^(-gamma) = exp(lambda);
-    ((exp(c) - (exp(h)^omega) / omega)^(-gamma)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
+    (exp(c) - (exp(h)^omega) / omega)^(-gamma_risk) = exp(lambda);
+    ((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk)) * (exp(h)^(omega - 1)) = exp(lambda) * (1 - alpha) * exp(y) / exp(h);
     exp(lambda) * (1 + phi * (exp(k) - exp(k(-1)))) = beta * exp(lambda(+1)) * (alpha * exp(y(+1)) / exp(k) + 1 - delta + phi * (exp(k(+1)) - exp(k)));
     a = rho * a(-1) + sigma_tfp * e;
     exp(r) = r_bar;
     tb_y = 1 - ((exp(c) + exp(i) + (phi / 2) * (exp(k) - exp(k(-1)))^2) / exp(y));
     ca_y = (1 / exp(y)) * (d(-1) - d);
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
 end;
 
 steady_state_model;
@@ -283,8 +315,8 @@ steady_state_model;
     i = log(delta * exp(k));
     c = log(exp(y) - exp(i) - r_bar * d);
     tb_y = 1 - ((exp(c) + exp(i)) / exp(y));
-    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma)) - 1) / (1 - gamma);
-    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma));
+    util = (((exp(c) - omega^(-1) * exp(h)^omega)^(1 - gamma_risk)) - 1) / (1 - gamma_risk);
+    lambda = log((exp(c) - (exp(h)^omega) / omega)^(-gamma_risk));
     a = 0;
     ca_y = 0;
 end;

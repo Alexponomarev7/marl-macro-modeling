@@ -17,7 +17,8 @@ var Consumption              $Consumption$ (long_name='consumption')
     InterestRate             $InterestRate$ (long_name='real interest rate')
     Wage                     $Wage$ (long_name='real wage')
     LoggedProductivity       $LoggedProductivity$ (long_name='logged TFP')
-    Productivity             $Productivity$ (long_name='TFP level');
+    Productivity             $Productivity$ (long_name='TFP level')
+    CapitalDestruction       $CapitalDestruction$ (long_name='capital destruction shock (realized this period)');
 
 varexo LoggedProductivityInnovation   $LoggedProductivityInnovation$ (long_name='TFP shock')
        CapitalStockInnovation         $CapitalStockInnovation$ (long_name='capital destruction shock');
@@ -151,6 +152,11 @@ start_capital = @{start_capital};
 
 r_ss = 1 / beta - 1;
 k_ss = ((r_ss + delta) / alpha) ^ (1 / (alpha - 1)) * l_ss;
+
+% initial capital = start_capital_ratio * steady-state capital
+@#if defined(start_capital_ratio)
+start_capital = @{start_capital_ratio} * k_ss;
+@#endif
 y_ss = k_ss^alpha * l_ss^(1 - alpha);
 i_ss = delta * k_ss;
 c_ss = y_ss - i_ss;
@@ -190,6 +196,10 @@ Consumption^(-sigma) = beta * Consumption(+1)^(-sigma) * (1 + alpha * Productivi
 [name='Labor supply (intratemporal FOC)']
 psi * Consumption^sigma / (1 - Labor) = Wage;
 
+[name='Realized capital destruction (observable state)']
+% capital destroyed this period (an observable copy of the shock)
+CapitalDestruction = CapitalStockInnovation;
+
 end;
 
 initval;
@@ -205,6 +215,7 @@ initval;
   Wage = (1 - alpha) * Output / l_ss;
   MarginalProductCapital = alpha * start_capital^(alpha-1) * l_ss^(1-alpha);
   InterestRate = alpha * start_capital^(alpha - 1) * l_ss^(1 - alpha) - delta;
+  CapitalDestruction = 0;
 end;
 
 endval;
@@ -220,53 +231,18 @@ endval;
   Wage = w_ss;
   MarginalProductCapital = alpha * k_ss^(alpha-1) * l_ss^(1-alpha);
   InterestRate = r_ss;
+  CapitalDestruction = 0;
 end;
 
+% unanticipated shocks: agents re-plan when each shock arrives (mit_shock_solver.m)
 shocks;
   var LoggedProductivityInnovation;
-  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5}
-          @{productivity_shock_period_6} @{productivity_shock_period_7} @{productivity_shock_period_8} @{productivity_shock_period_9} @{productivity_shock_period_10}
-          @{productivity_shock_period_11} @{productivity_shock_period_12} @{productivity_shock_period_13} @{productivity_shock_period_14} @{productivity_shock_period_15}
-          @{productivity_shock_period_16} @{productivity_shock_period_17} @{productivity_shock_period_18} @{productivity_shock_period_19} @{productivity_shock_period_20}
-          @{productivity_shock_period_21} @{productivity_shock_period_22} @{productivity_shock_period_23} @{productivity_shock_period_24} @{productivity_shock_period_25}
-          @{productivity_shock_period_26} @{productivity_shock_period_27} @{productivity_shock_period_28} @{productivity_shock_period_29} @{productivity_shock_period_30}
-          @{productivity_shock_period_31} @{productivity_shock_period_32} @{productivity_shock_period_33} @{productivity_shock_period_34} @{productivity_shock_period_35}
-          @{productivity_shock_period_36} @{productivity_shock_period_37} @{productivity_shock_period_38} @{productivity_shock_period_39} @{productivity_shock_period_40}
-          @{productivity_shock_period_41} @{productivity_shock_period_42} @{productivity_shock_period_43} @{productivity_shock_period_44} @{productivity_shock_period_45}
-          @{productivity_shock_period_46} @{productivity_shock_period_47} @{productivity_shock_period_48} @{productivity_shock_period_49} @{productivity_shock_period_50};
-  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5}
-         @{productivity_shock_value_6} @{productivity_shock_value_7} @{productivity_shock_value_8} @{productivity_shock_value_9} @{productivity_shock_value_10}
-         @{productivity_shock_value_11} @{productivity_shock_value_12} @{productivity_shock_value_13} @{productivity_shock_value_14} @{productivity_shock_value_15}
-         @{productivity_shock_value_16} @{productivity_shock_value_17} @{productivity_shock_value_18} @{productivity_shock_value_19} @{productivity_shock_value_20}
-         @{productivity_shock_value_21} @{productivity_shock_value_22} @{productivity_shock_value_23} @{productivity_shock_value_24} @{productivity_shock_value_25}
-         @{productivity_shock_value_26} @{productivity_shock_value_27} @{productivity_shock_value_28} @{productivity_shock_value_29} @{productivity_shock_value_30}
-         @{productivity_shock_value_31} @{productivity_shock_value_32} @{productivity_shock_value_33} @{productivity_shock_value_34} @{productivity_shock_value_35}
-         @{productivity_shock_value_36} @{productivity_shock_value_37} @{productivity_shock_value_38} @{productivity_shock_value_39} @{productivity_shock_value_40}
-         @{productivity_shock_value_41} @{productivity_shock_value_42} @{productivity_shock_value_43} @{productivity_shock_value_44} @{productivity_shock_value_45}
-         @{productivity_shock_value_46} @{productivity_shock_value_47} @{productivity_shock_value_48} @{productivity_shock_value_49} @{productivity_shock_value_50};
-
+  periods @{productivity_shock_period_1} @{productivity_shock_period_2} @{productivity_shock_period_3} @{productivity_shock_period_4} @{productivity_shock_period_5} @{productivity_shock_period_6} @{productivity_shock_period_7} @{productivity_shock_period_8} @{productivity_shock_period_9} @{productivity_shock_period_10} @{productivity_shock_period_11} @{productivity_shock_period_12} @{productivity_shock_period_13} @{productivity_shock_period_14} @{productivity_shock_period_15} @{productivity_shock_period_16} @{productivity_shock_period_17} @{productivity_shock_period_18} @{productivity_shock_period_19} @{productivity_shock_period_20} @{productivity_shock_period_21} @{productivity_shock_period_22} @{productivity_shock_period_23} @{productivity_shock_period_24} @{productivity_shock_period_25} @{productivity_shock_period_26} @{productivity_shock_period_27} @{productivity_shock_period_28} @{productivity_shock_period_29} @{productivity_shock_period_30} @{productivity_shock_period_31} @{productivity_shock_period_32} @{productivity_shock_period_33} @{productivity_shock_period_34} @{productivity_shock_period_35} @{productivity_shock_period_36} @{productivity_shock_period_37} @{productivity_shock_period_38} @{productivity_shock_period_39} @{productivity_shock_period_40} @{productivity_shock_period_41} @{productivity_shock_period_42} @{productivity_shock_period_43} @{productivity_shock_period_44} @{productivity_shock_period_45} @{productivity_shock_period_46} @{productivity_shock_period_47} @{productivity_shock_period_48} @{productivity_shock_period_49} @{productivity_shock_period_50};
+  values @{productivity_shock_value_1} @{productivity_shock_value_2} @{productivity_shock_value_3} @{productivity_shock_value_4} @{productivity_shock_value_5} @{productivity_shock_value_6} @{productivity_shock_value_7} @{productivity_shock_value_8} @{productivity_shock_value_9} @{productivity_shock_value_10} @{productivity_shock_value_11} @{productivity_shock_value_12} @{productivity_shock_value_13} @{productivity_shock_value_14} @{productivity_shock_value_15} @{productivity_shock_value_16} @{productivity_shock_value_17} @{productivity_shock_value_18} @{productivity_shock_value_19} @{productivity_shock_value_20} @{productivity_shock_value_21} @{productivity_shock_value_22} @{productivity_shock_value_23} @{productivity_shock_value_24} @{productivity_shock_value_25} @{productivity_shock_value_26} @{productivity_shock_value_27} @{productivity_shock_value_28} @{productivity_shock_value_29} @{productivity_shock_value_30} @{productivity_shock_value_31} @{productivity_shock_value_32} @{productivity_shock_value_33} @{productivity_shock_value_34} @{productivity_shock_value_35} @{productivity_shock_value_36} @{productivity_shock_value_37} @{productivity_shock_value_38} @{productivity_shock_value_39} @{productivity_shock_value_40} @{productivity_shock_value_41} @{productivity_shock_value_42} @{productivity_shock_value_43} @{productivity_shock_value_44} @{productivity_shock_value_45} @{productivity_shock_value_46} @{productivity_shock_value_47} @{productivity_shock_value_48} @{productivity_shock_value_49} @{productivity_shock_value_50};
   var CapitalStockInnovation;
-  periods @{capital_shock_period_1} @{capital_shock_period_2} @{capital_shock_period_3} @{capital_shock_period_4} @{capital_shock_period_5}
-          @{capital_shock_period_6} @{capital_shock_period_7} @{capital_shock_period_8} @{capital_shock_period_9} @{capital_shock_period_10}
-          @{capital_shock_period_11} @{capital_shock_period_12} @{capital_shock_period_13} @{capital_shock_period_14} @{capital_shock_period_15}
-          @{capital_shock_period_16} @{capital_shock_period_17} @{capital_shock_period_18} @{capital_shock_period_19} @{capital_shock_period_20}
-          @{capital_shock_period_21} @{capital_shock_period_22} @{capital_shock_period_23} @{capital_shock_period_24} @{capital_shock_period_25}
-          @{capital_shock_period_26} @{capital_shock_period_27} @{capital_shock_period_28} @{capital_shock_period_29} @{capital_shock_period_30}
-          @{capital_shock_period_31} @{capital_shock_period_32} @{capital_shock_period_33} @{capital_shock_period_34} @{capital_shock_period_35}
-          @{capital_shock_period_36} @{capital_shock_period_37} @{capital_shock_period_38} @{capital_shock_period_39} @{capital_shock_period_40}
-          @{capital_shock_period_41} @{capital_shock_period_42} @{capital_shock_period_43} @{capital_shock_period_44} @{capital_shock_period_45}
-          @{capital_shock_period_46} @{capital_shock_period_47} @{capital_shock_period_48} @{capital_shock_period_49} @{capital_shock_period_50};
-  values @{capital_shock_value_1} @{capital_shock_value_2} @{capital_shock_value_3} @{capital_shock_value_4} @{capital_shock_value_5}
-         @{capital_shock_value_6} @{capital_shock_value_7} @{capital_shock_value_8} @{capital_shock_value_9} @{capital_shock_value_10}
-         @{capital_shock_value_11} @{capital_shock_value_12} @{capital_shock_value_13} @{capital_shock_value_14} @{capital_shock_value_15}
-         @{capital_shock_value_16} @{capital_shock_value_17} @{capital_shock_value_18} @{capital_shock_value_19} @{capital_shock_value_20}
-         @{capital_shock_value_21} @{capital_shock_value_22} @{capital_shock_value_23} @{capital_shock_value_24} @{capital_shock_value_25}
-         @{capital_shock_value_26} @{capital_shock_value_27} @{capital_shock_value_28} @{capital_shock_value_29} @{capital_shock_value_30}
-         @{capital_shock_value_31} @{capital_shock_value_32} @{capital_shock_value_33} @{capital_shock_value_34} @{capital_shock_value_35}
-         @{capital_shock_value_36} @{capital_shock_value_37} @{capital_shock_value_38} @{capital_shock_value_39} @{capital_shock_value_40}
-         @{capital_shock_value_41} @{capital_shock_value_42} @{capital_shock_value_43} @{capital_shock_value_44} @{capital_shock_value_45}
-         @{capital_shock_value_46} @{capital_shock_value_47} @{capital_shock_value_48} @{capital_shock_value_49} @{capital_shock_value_50};
+  periods @{capital_shock_period_1} @{capital_shock_period_2} @{capital_shock_period_3} @{capital_shock_period_4} @{capital_shock_period_5} @{capital_shock_period_6} @{capital_shock_period_7} @{capital_shock_period_8} @{capital_shock_period_9} @{capital_shock_period_10} @{capital_shock_period_11} @{capital_shock_period_12} @{capital_shock_period_13} @{capital_shock_period_14} @{capital_shock_period_15} @{capital_shock_period_16} @{capital_shock_period_17} @{capital_shock_period_18} @{capital_shock_period_19} @{capital_shock_period_20} @{capital_shock_period_21} @{capital_shock_period_22} @{capital_shock_period_23} @{capital_shock_period_24} @{capital_shock_period_25} @{capital_shock_period_26} @{capital_shock_period_27} @{capital_shock_period_28} @{capital_shock_period_29} @{capital_shock_period_30} @{capital_shock_period_31} @{capital_shock_period_32} @{capital_shock_period_33} @{capital_shock_period_34} @{capital_shock_period_35} @{capital_shock_period_36} @{capital_shock_period_37} @{capital_shock_period_38} @{capital_shock_period_39} @{capital_shock_period_40} @{capital_shock_period_41} @{capital_shock_period_42} @{capital_shock_period_43} @{capital_shock_period_44} @{capital_shock_period_45} @{capital_shock_period_46} @{capital_shock_period_47} @{capital_shock_period_48} @{capital_shock_period_49} @{capital_shock_period_50};
+  values @{capital_shock_value_1} @{capital_shock_value_2} @{capital_shock_value_3} @{capital_shock_value_4} @{capital_shock_value_5} @{capital_shock_value_6} @{capital_shock_value_7} @{capital_shock_value_8} @{capital_shock_value_9} @{capital_shock_value_10} @{capital_shock_value_11} @{capital_shock_value_12} @{capital_shock_value_13} @{capital_shock_value_14} @{capital_shock_value_15} @{capital_shock_value_16} @{capital_shock_value_17} @{capital_shock_value_18} @{capital_shock_value_19} @{capital_shock_value_20} @{capital_shock_value_21} @{capital_shock_value_22} @{capital_shock_value_23} @{capital_shock_value_24} @{capital_shock_value_25} @{capital_shock_value_26} @{capital_shock_value_27} @{capital_shock_value_28} @{capital_shock_value_29} @{capital_shock_value_30} @{capital_shock_value_31} @{capital_shock_value_32} @{capital_shock_value_33} @{capital_shock_value_34} @{capital_shock_value_35} @{capital_shock_value_36} @{capital_shock_value_37} @{capital_shock_value_38} @{capital_shock_value_39} @{capital_shock_value_40} @{capital_shock_value_41} @{capital_shock_value_42} @{capital_shock_value_43} @{capital_shock_value_44} @{capital_shock_value_45} @{capital_shock_value_46} @{capital_shock_value_47} @{capital_shock_value_48} @{capital_shock_value_49} @{capital_shock_value_50};
 end;
 
 perfect_foresight_setup(periods=@{periods});
-perfect_foresight_solver;
+oo_ = mit_shock_solver(M_, options_, oo_);

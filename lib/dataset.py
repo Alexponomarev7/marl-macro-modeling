@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 import torch
 from scipy.stats import kurtosis, skew
 from sklearn.neighbors import NearestNeighbors
@@ -137,6 +138,50 @@ class Tokenizer:
         "MeetingRate",
         "MonetaryShock",
         "LoggedConsumption",
+        "TermsOfTrade",
+        "LogTermsOfTrade",
+        # Found missing via an end-to-end pipeline smoke test across all active dynare models
+        # (Faia_Monacelli_2008, Aguiar_Gopinath_2007) - genuinely distinct concepts, not aliases.
+        "BondPrice",
+        "ConsumptionF",
+        "ConsumptionForeign",
+        "ConsumptionH",
+        "DepreciationRate",
+        "InflationCPI",
+        "InflationForeign",
+        "InflationH",
+        "Lambda",
+        "LogInflationH",
+        "LogRealExchangeRate",
+        "NominalExchangeRate",
+        "OutputForeign",
+        "PriceRatioH",
+        "RealExchangeRate",
+        "TrendGrowthShock",
+        "LoggedOutput",
+        "LoggedLabor",
+        "LoggedWage",
+        "LoggedInvestment",
+        "LaborProductivity",  # output per hour
+        "PublicGoodPreference",
+        "CapitalDestruction",
+        "TFPNews1",  # TFP news hitting in 1..8 periods
+        "TFPNews2",
+        "TFPNews3",
+        "TFPNews4",
+        "TFPNews5",
+        "TFPNews6",
+        "TFPNews7",
+        "TFPNews8",
+        "CostPushShock",
+        "WelfareRelevantOutputGap",
+        "FinancialConditions",
+        "EnforcementMultiplier",
+        "FirmValue",
+        "NominalDepreciationRate",
+        "Land",
+        "LandPrice",
+        *(f"LQState{i}" for i in range(1, 9)),  # lib/lq_tasks.py
     )
 
     # State aliases for canonicalization across environments
@@ -201,7 +246,61 @@ class Tokenizer:
         "Monetary Policy Shock": "MonetaryShock",
         "capital (log)": "LoggedCapital",
         "TFP (log)": "LoggedProductivity",
-        "consumption (log)'": "LoggedConsumption",
+        "consumption (log)": "LoggedConsumption",
+        "output (log)": "LoggedOutput",
+        "hours worked (log)": "LoggedLabor",
+        "real wage (log)": "LoggedWage",
+        "investment (log)": "LoggedInvestment",
+    }
+
+    # .mod symbol -> state token, for tokenization only (STATE_ALIASES also renames CSV columns)
+    SYMBOL_TO_CANONICAL: dict[str, str] = {
+        "AnnualInflation": "Annualized Inflation Rate",
+        "AnnualInterestRate": "Annualized Interest Rate",
+        "AnnualNominalRate": "Annualized Nominal Interest Rate",
+        "ConsumptionGrowth": "Consumption Growth Rate",
+        "ExpectedReturnCapital": "Expected Return On Capital",
+        "ExpectedSDF": "Expected Stochastic Discount Factor",
+        "InvestmentGrowth": "Investment Growth Rate",
+        "LogConsumption": "LoggedConsumption",
+        "LogProductivity": "LoggedProductivity",
+        "MarginalCost": "Marginal Costs",
+        "PriceMarkup": "Markup",
+        "RiskFreeRate": "Risk-Free Rate",
+        "TradeBalanceToOutput": "Trade Balance to Output Ratio",
+        # Hansen_1985, SGU_2003/2004, McCandless_2008_Chapter_9/13
+        "c": "Consumption",
+        "w": "Wage",
+        "r": "Real Return On Capital",
+        "y": "Output",
+        "h": "HoursWorked",
+        "k": "Capital",
+        "invest": "Investment",
+        "lambda": "Productivity",
+        "productivity": "LaborProductivity",
+        "m": "Money Stock",
+        "p": "Price Level",
+        "g": "Growth Rate Of Money Stock",
+        "d": "Debt",
+        "tb_y": "Trade Balance to Output Ratio",
+        "ca_y": "Current Account To Output Ratio",
+        "pstar": "Foreign Price Level",
+        "b": "Foreign Bonds",
+        "rf": "Foreign Interest Rate",
+        "e": "Exchange Rate",
+        "x": "Net Exports",
+        # Gali_2008_chapter_2
+        "A": "AR(1) Technology Process",
+        "W_real": "Real Wage",
+        "Pi": "Inflation",
+        "R": "Nominal Interest Rate",
+        "realinterest": "Real Interest Rate",
+        "Y": "Output",
+        "m_growth_ann": "Money Growth",
+        "C": "Consumption",
+        "N": "HoursWorked",
+        "util": "Utility",      # SGU_2003
+        "NaturalWage": "Natural Real Wage",  # Born_Pfeifer_2018_MP
     }
 
     ACTION_TOKENS: tuple[str, ...] = (
@@ -227,28 +326,39 @@ class Tokenizer:
         "leisure",
         "money_supply_change",
         "tax_rate_change",
+        "LoggedConsumption",
+        "LoggedLabor",
+        "Debt",
+        "Dividends",
+        "Land",
+        *(f"LQAction{j}" for j in range(1, 4)),  # lib/lq_tasks.py
     )
 
     ACTION_ALIASES: dict[str, str] = {
         "Real Consumption": "Consumption",
         "Capital": "Savings",  # In OLG models: (1 + n) * (1 + g) * Capital = Savings
+        "c": "Consumption",    # Hansen_1985, McCandless_2008_Chapter_9/13
+        "h": "HoursWorked",    # Hansen_1985, McCandless_2008_Chapter_9/13
+        "C": "Consumption",    # Gali_2008_chapter_2
+        "N": "HoursWorked",    # Gali_2008_chapter_2
     }
 
+    # Keys must match the dynare model_name exactly (dynare/docker/dynare_models/*.mod stem).
     ENV_MAPPING: dict[str, int] = {
         "Born_Pfeifer_2018_MP": 0,
         "Aguiar_Gopinath_2007": 1,
-        "RBC_news_shock_model": 2,
+        "RBC_news_shock_model_pf": 2,
         "Hansen_1985": 3,
-        "GarciaCicco_et_al_2010": 4,
+        "GarciaCicco_2010": 4,
         "Caldara_et_al_2012": 5,
-        "RBC_capitalstock_shock": 6,
+        "RBC_capital_stock_shock_pf": 6,
         "SGU_2003": 7,
         "Gali_2008_chapter_2": 8,
-        "Collard_2001_example1": 9,
+        "Collard_2001": 9,
         "McCandless_2008_Chapter_13": 10,
         "FV_et_al_2007_ABCD": 11,
-        "RBC_baseline": 12,
-        "RBC_state_dependent_GIRF": 13,
+        "Faia_Monacelli_2008": 12,
+        "RBC_state_dependent_GIRF_household": 13,
         "SGU_2004": 14,
         "Faia_2008": 15,
         "McCandless_2008_Chapter_9": 16,
@@ -259,6 +369,27 @@ class Tokenizer:
         "OLG": 21,
         "RBC_baseline_pf": 22,
         "RBC_baseline_stoch": 23,
+        "RBC_capital_stock_shock_stoch": 24,
+        "RBC_news_shock_model_stoch": 25,
+        "RBC_state_dependent_GIRF_government": 26,
+        # Python-simulated envs (lib/envs/*.py), keyed by class name — this is also the
+        # single source of truth for AbstractEconomicEnv.task_id (see lib/envs/environment_base.py).
+        "RBCEnv": 27,
+        "RamseyEnv": 28,
+        "GarciaCiccoEnv": 29,
+        "NCGEnv": 30,
+        "RBCEconomyWithPolicyEnv": 31,
+        "RBCPriorityBasedWeightedContractEnv": 32,
+        "Gali_2015_chapter_3": 33,
+        "Gali_2015_chapter_5_discretion": 34,
+        "Gali_2015_chapter_5_commitment": 35,
+        "Jermann_Quadrini_2012": 36,
+        "Gali_Monacelli_2005": 37,
+        "Ireland_2004": 38,
+        "Gali_2010": 39,
+        "Jermann_1998": 40,
+        "Kiyotaki_Moore_1997": 41,
+        "LQ_random": 42,
     }
 
     def __init__(self):
@@ -314,6 +445,11 @@ class Tokenizer:
         # Try exact match in aliases
         if name in self.STATE_ALIASES:
             return self.STATE_ALIASES[name]
+
+        # Try exact match in symbol->canonical aliases (kept separate from STATE_ALIASES; see
+        # SYMBOL_TO_CANONICAL's docstring for why)
+        if name in self.SYMBOL_TO_CANONICAL:
+            return self.SYMBOL_TO_CANONICAL[name]
 
         # Try normalized match in state tokens
         normalized_name = self._normalize_key(name)
@@ -402,12 +538,17 @@ class Tokenizer:
         )
 
     def decode_env_name(self, env_name: str) -> int:
-        """Decode an environment name to its ID."""
+        """Decode an environment name to its ID. Raises if the model is unmapped, instead of
+        silently colliding it with task 0 (this previously corrupted task conditioning whenever
+        a model was renamed or added without updating ENV_MAPPING)."""
         prefix = env_name.rsplit('_', 1)[0]
         if prefix.endswith('_config'):
             prefix = prefix.removesuffix('_config')
         if prefix not in self.ENV_MAPPING:
-            return 0  # Default to 0 if not found
+            raise KeyError(
+                f"Unknown env '{env_name}' (model '{prefix}') not in ENV_MAPPING. "
+                f"Add it to Tokenizer.ENV_MAPPING."
+            )
         return self.ENV_MAPPING[prefix]
 
     def state_encoder(self, x):
@@ -448,6 +589,26 @@ class Tokenizer:
 # Create a default tokenizer instance for use across the module
 _default_tokenizer = Tokenizer()
 
+# states that real data does not observe (shocks, TFP and its news)
+LATENT_STATES = (
+    "TechnologyShock", "PreferenceShock", "CostPushShock", "MonetaryShock", "LoggedProductivity",
+    "Productivity", "LogTFP", "LogProductivity", "AR(1) Technology Process", "TrendGrowthShock",
+    "TechGrowthRate", "LoggedVolatility", "PublicGoodPreference", "FinancialConditions",
+    "CountryPremiumShock", "Government Spending Shock", "CapitalDestruction",
+    *(f"TFPNews{h}" for h in range(1, 9)),
+)
+
+
+def latent_token_ids(names=LATENT_STATES) -> set[int]:
+    ids = set()
+    for name in names:
+        try:
+            ids.add(_default_tokenizer.state_token_id(name))
+        except KeyError:
+            pass
+    return ids
+
+
 class EconomicsDataset(Dataset):
     """
     A PyTorch Dataset for loading and processing economic episodes data.
@@ -462,7 +623,9 @@ class EconomicsDataset(Dataset):
 
     def __init__(
         self, data_path: Path, max_state_dim: int, max_action_dim: int,
-        max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int
+        max_endogenous_dim: int, max_model_params_dim: int, max_seq_len: int,
+        random_window: bool = True, state_dropout: float = 0.0, state_noise: float = 0.0,
+        hide_latent: float = 0.0,
     ):
         """
         Initialize the dataset with the given parameters.
@@ -470,13 +633,24 @@ class EconomicsDataset(Dataset):
         Args:
             data_path (Path): Path to the directory containing episode data files and metadata
             max_state_dim (int): Maximum dimension for state vectors after padding/truncation
-            max_seq_len (int): Maximum sequence length for episodes (default: 512)
+            max_seq_len (int): Length of the window drawn from each episode
+            random_window (bool): A fresh random window per access (training); otherwise a fixed
+                window per episode.
+            state_dropout (float): Probability of hiding each state variable of an episode.
+            state_noise (float): Std of Gaussian noise added to states, relative to each variable's
+                std in the window.
+            hide_latent (float): Probability of hiding all LATENT_STATES of an episode.
         """
         self.max_state_dim = max_state_dim
         self.max_action_dim = max_action_dim
         self.max_endogenous_dim = max_endogenous_dim
         self.max_seq_len = max_seq_len
         self.max_model_params_dim = max_model_params_dim
+        self.random_window = random_window
+        self.state_dropout = state_dropout
+        self.state_noise = state_noise
+        self.hide_latent = hide_latent
+        self.latent_ids = torch.tensor(sorted(latent_token_ids()), dtype=torch.long)
 
         metadata_path = data_path / "metadata.json"
         with open(metadata_path) as f:
@@ -555,6 +729,25 @@ class EconomicsDataset(Dataset):
             padding = torch.zeros(*sequence.shape[:-1], padding_size, dtype=sequence.dtype)
             return torch.cat([sequence, padding], dim=-1)
 
+    def _perturb_states(self, states: torch.Tensor, states_info: torch.Tensor, n: int) -> torch.Tensor:
+        """Hide state variables (value 0, padding token; states_info in place) and add noise."""
+        if self.hide_latent > 0 and torch.rand(1).item() < self.hide_latent:
+            hidden = torch.nonzero(torch.isin(states_info[:n], self.latent_ids)).flatten()
+            states[:, hidden] = 0.0
+            states_info[hidden] = 0
+        if self.state_dropout > 0 and n > 1:
+            drop = torch.rand(n) < self.state_dropout
+            if drop.all():
+                drop[torch.randint(n, (1,))] = False
+            hidden = torch.nonzero(drop).flatten()
+            states[:, hidden] = 0.0
+            states_info[hidden] = 0
+        if self.state_noise > 0 and n > 0:
+            kept = (states_info[:n] != 0).to(states.dtype)
+            noise = self.state_noise * states[:, :n].std(0, keepdim=True) * torch.randn_like(states[:, :n])
+            states[:, :n] = states[:, :n] + noise * kept
+        return states
+
     def __getitem__(self, idx: int):
         """
         Get a single processed episode from the dataset.
@@ -576,15 +769,53 @@ x
                 - task_id (torch.Tensor): Task identifier [scalar]
                 - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
-        data = pd.read_parquet(self.metadata[idx]["output_dir"])
+        path = self.metadata[idx]["output_dir"]
+        parquet = pq.ParquetFile(path)
+        # executed actions differ from the target (optimal) ones in behavior-noise episodes
+        behavior = "behavior_action" in parquet.schema_arrow.names
+        # info repeats on every row: read only its first row
+        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"] + ["behavior_action"] * behavior)
+        desc_keys = ["state_description", "action_description", "endogenous_description"]
+        first_row = next(parquet.iter_batches(
+            batch_size=1, columns=["info"] + [k for k in desc_keys if k in parquet.schema_arrow.names]
+        )).to_pylist()[0]
+        # descriptions: in info (python envs) or top-level columns (Dynare)
+        info = dict(first_row["info"])
+        for k in desc_keys:
+            if info.get(k) is None:
+                info[k] = first_row.get(k) or []
 
-        states = torch.tensor(data['state'].tolist(), dtype=torch.float32)
-        endogenous = torch.tensor(data['endogenous'].tolist(), dtype=torch.float32)
-        actions = torch.tensor(data['action'].tolist(), dtype=torch.float32)
+        stack = lambda col: torch.from_numpy(np.stack(data[col].values).astype(np.float32).reshape(len(data), -1))
+        states, endogenous, actions = stack('state'), stack('endogenous'), stack('action')
         rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
-        info = data.iloc[0]["info"]
+        # step t sees (s_t, a_{t-1}, r_{t-1}) and predicts a_t
+        executed = stack('behavior_action') if behavior else actions
+        prev_actions = torch.cat([torch.zeros_like(executed[:1]), executed[:-1]], dim=0)
+        prev_rewards = torch.cat([torch.zeros_like(rewards[:1]), rewards[:-1]], dim=0)
+
+        # per-episode action scale for the loss (not a model input), floored at 1% of the level
+        action_scale = torch.maximum(
+            actions.std(dim=0, unbiased=False), 1e-2 * actions.abs().mean(dim=0) + 1e-4
+        )
+        # the episode's first step (a_{-1} = 0) is scaled by the action level
+        cold_start_scale = torch.maximum(actions.abs().mean(dim=0), action_scale)
+
+        n_steps = len(states)
+        n_starts = max(n_steps - self.max_seq_len + 1, 1)
+        if self.random_window:
+            # 10% of windows start at the episode's first step
+            start = 0 if torch.rand(1).item() < 0.1 else int(torch.randint(n_starts, (1,)))
+        else:
+            start = (idx * 2654435761) % n_starts
+        window = slice(start, start + self.max_seq_len)
+        states, endogenous, actions, rewards = states[window], endogenous[window], actions[window], rewards[window]
+        prev_actions, prev_rewards = prev_actions[window], prev_rewards[window]
+        action_scale = action_scale.expand(len(actions), -1).clone()
+        if start == 0:
+            action_scale[0] = cold_start_scale
+
         model_params = info["model_params"]
 
         sorted_model_params = list(sorted(model_params.items()))
@@ -593,20 +824,27 @@ x
 
         # Pad states to max_state_dim
         states = self.pad_dim(states, self.max_state_dim)
-        state_description = data.iloc[0]["info"]["state_description"]
-        action_description = data.iloc[0]["info"]["action_description"]
-        endogenous_description = data.iloc[0]["info"]["endogenous_description"]
-        # Truncate descriptions if they exceed max dimensions, then pad to max dimensions
-        state_description = state_description[:self.max_state_dim]
-        action_description = action_description[:self.max_action_dim]
-        endogenous_description = endogenous_description[:self.max_endogenous_dim]
+        state_description = info["state_description"]
+        action_description = info["action_description"]
+        endogenous_description = info["endogenous_description"]
+        for kind, desc, limit in [("state", state_description, self.max_state_dim),
+                                  ("action", action_description, self.max_action_dim),
+                                  ("endogenous", endogenous_description, self.max_endogenous_dim)]:
+            if len(desc) > limit:
+                raise ValueError(
+                    f"{path}: {len(desc)} {kind} variables exceed max_{kind}_dim={limit}; "
+                    f"raise train.max_{kind}_dim"
+                )
         states_info = torch.tensor([self.tokenizer.state_token_id(state) for state in state_description] + [0] * (self.max_state_dim - len(state_description)), dtype=torch.long)
+        states = self._perturb_states(states, states_info, len(state_description))
         actions_info = torch.tensor([self.tokenizer.action_token_id(action) for action in action_description] + [0] * (self.max_action_dim - len(action_description)), dtype=torch.long)
         endogenous_info = torch.tensor([self.tokenizer.state_token_id(endogenous) for endogenous in endogenous_description] + [0] * (self.max_endogenous_dim - len(endogenous_description)), dtype=torch.long)
         assert len(states_info) == self.max_state_dim, f"states_info length is {len(states_info)} but max_state_dim is {self.max_state_dim}"
         assert len(actions_info) == self.max_action_dim, f"actions_info length is {len(actions_info)} but max_action_dim is {self.max_action_dim}"
         # Pad actions to max_actions_dim
+        action_scale = self.pad_dim(action_scale - 1.0, self.max_action_dim) + 1.0  # pad with 1s
         actions = self.pad_dim(actions, self.max_action_dim)
+        prev_actions = self.pad_dim(prev_actions, self.max_action_dim)
         endogenous = self.pad_dim(endogenous, self.max_endogenous_dim)
 
         # Get original sequence length
@@ -615,24 +853,34 @@ x
         # Pad sequences to max_seq_len
         states = self.pad_sequence(states, self.max_seq_len)
         actions = self.pad_sequence(actions, self.max_seq_len)
+        action_scale = self.pad_sequence(action_scale - 1.0, self.max_seq_len) + 1.0  # pad with 1s
+        prev_actions = self.pad_sequence(prev_actions, self.max_seq_len)
         rewards = self.pad_sequence(rewards, self.max_seq_len)
+        prev_rewards = self.pad_sequence(prev_rewards, self.max_seq_len)
         endogenous = self.pad_sequence(endogenous, self.max_seq_len)
 
-        # Create attention mask
+        # Create attention mask. pad_sequence left-pads (padding first, real data last), so the
+        # valid positions are the LAST valid_len entries, not the first (matters once orig_seq_len
+        # < max_seq_len; a no-op when episodes are truncated instead, since valid_len == max_seq_len).
         attention_mask = torch.zeros(self.max_seq_len, dtype=torch.bool)
-        attention_mask[:min(orig_seq_len, self.max_seq_len)] = True
+        valid_len = min(orig_seq_len, self.max_seq_len)
+        attention_mask[self.max_seq_len - valid_len:] = True
 
         return {
             'states': states,  # [max_seq_len, max_state_dim]
             'states_info': states_info,  # [max_state_dim]
-            'actions': actions,  # [max_seq_len, action_dim]
+            'actions': actions,  # [max_seq_len, action_dim] - prediction targets a_t
+            'prev_actions': prev_actions,  # [max_seq_len, action_dim] - model input a_{t-1}
+            'action_scale': action_scale,  # [max_seq_len, action_dim] - loss weighting only
             'actions_info': actions_info,  # [action_dim]
             'endogenous': endogenous,  # [max_seq_len, max_endogenous_dim]
             'endogenous_info': endogenous_info,  # [max_endogenous_dim]
             'reward': rewards,  # [max_seq_len, 1]
+            'prev_reward': prev_rewards,  # [max_seq_len, 1] - model input r_{t-1}
             'task_id': task_id,  # scalar
             'model_params': model_params_values,
-            'attention_mask': attention_mask  # [max_seq_len]
+            'attention_mask': attention_mask,  # [max_seq_len]
+            'window_start': torch.tensor(start, dtype=torch.long),  # episode step of the window's first position
         }
 
 

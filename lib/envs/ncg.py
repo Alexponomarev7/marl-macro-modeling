@@ -1,5 +1,7 @@
 from typing import Any
+import gymnasium as gym
 import numpy as np
+from lib.dataset import Tokenizer
 from lib.utility_funcs import crra
 from lib.production_funcs import cobb_douglas
 from lib.envs.environment_base import AbstractEconomicEnv
@@ -33,16 +35,17 @@ class NCGEnv(AbstractEconomicEnv):
         self.initial_capital = initial_capital
         self.deprecation = deprecation
         self.current_step = 0
+        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
 
-    def step(self, action) -> tuple[float, float, bool, dict]:
+    def step(self, action) -> tuple[dict, float, bool, bool, dict]:
         assert action >= 0 and action <= 1, "action must be in [0, 1]"
         consumption = self.capital * action
 
         self.capital -= consumption
-        self.capital = self.capital * self.deprecation + cobb_douglas(self.capital, 1)
+        self.capital = self.capital * (1 - self.deprecation) + cobb_douglas(self.capital, 1)
 
         reward = crra(consumption)
-        return self.capital, reward, False, False, {}
+        return self._get_state(), reward, False, False, {}
 
     def analytical_step(self) -> tuple[float, float, bool, bool, dict]:
         """
@@ -71,9 +74,9 @@ class NCGEnv(AbstractEconomicEnv):
             reward = crra(c_star)
             return K_t, reward, False, False, {"note": "capital near zero"}
 
-        # We want to solve δx + cobb_douglas(x,1) - K_t = 0
+        # We want to solve (1-δ)x + cobb_douglas(x,1) - K_t = 0
         def steady_state_eq(x):
-            return self.deprecation * x + cobb_douglas(x, 1) - K_t
+            return (1 - self.deprecation) * x + cobb_douglas(x, 1) - K_t
 
         # We bracket the solution between 0 and K_t (leftover cannot exceed total capital)
         # But to be safe, you might guess upper bound as K_t or slightly more
@@ -127,6 +130,10 @@ class NCGEnv(AbstractEconomicEnv):
         """Clean up resources"""
         # included for compatibility with the Gymnasium API
         pass
+
+    @property
+    def task_id(self) -> int:
+        return Tokenizer.ENV_MAPPING["NCGEnv"]
 
     @property
     def params(self) -> dict[str, Any]:

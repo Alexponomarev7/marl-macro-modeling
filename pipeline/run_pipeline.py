@@ -4,6 +4,7 @@ from typing import (
     Optional,
     cast,
 )
+import math
 from pathlib import Path
 
 import hydra
@@ -24,6 +25,7 @@ from lib.my_utils import (
     get_run_id,
 )
 from lib.dataset import EconomicsDataset, Tokenizer
+from lib.models.transformer import UNIT_LEVEL_FLOOR, causal_zscore, symlog
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
     DatasetGenerator,
@@ -61,7 +63,8 @@ class DataModule(L.LightningDataModule):
     def __init__(
         self, data_root: Path, state_max_dim: int, action_max_dim: int,
         endogenous_max_dim: int, model_params_max_dim: int, max_seq_len: int,
-        batch_size: int = 32
+        batch_size: int = 32, state_dropout: float = 0.0, state_noise: float = 0.0,
+        hide_latent: float = 0.0,
     ):
         """
         Initialize DataModule.
@@ -78,6 +81,9 @@ class DataModule(L.LightningDataModule):
         self.endogenous_max_dim = endogenous_max_dim
         self.model_params_max_dim = model_params_max_dim
         self.max_seq_len = max_seq_len
+        self.state_dropout = state_dropout
+        self.state_noise = state_noise
+        self.hide_latent = hide_latent
 
     def setup(self, stage: Optional[str] = None):
         """Set up datasets for different stages."""
@@ -89,6 +95,10 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=True,
+                state_dropout=self.state_dropout,
+                state_noise=self.state_noise,
+                hide_latent=self.hide_latent,
             )
             self.val_dataset = EconomicsDataset(
                 self.data_root / "val",
@@ -97,6 +107,7 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=False,
             )
         if stage == "test":
             self.test_dataset = EconomicsDataset(
@@ -106,6 +117,7 @@ class DataModule(L.LightningDataModule):
                 self.endogenous_max_dim,
                 self.model_params_max_dim,
                 self.max_seq_len,
+                random_window=False,
             )
 
     def train_dataloader(self):
@@ -131,6 +143,28 @@ class DataModule(L.LightningDataModule):
         )
 
 
+def decay_param_groups(module: torch.nn.Module) -> list[dict]:
+    """Optimizer parameter groups: weight decay on matrices, none on biases, norms and embedding tables."""
+    embeddings = {id(m.weight) for m in module.modules() if isinstance(m, torch.nn.Embedding)}
+    params = [p for p in module.parameters() if p.requires_grad]
+    return [
+        {"params": [p for p in params if p.ndim >= 2 and id(p) not in embeddings]},
+        {"params": [p for p in params if p.ndim < 2 or id(p) in embeddings], "weight_decay": 0.0},
+    ]
+
+
+def next_state_loss(pred: torch.Tensor, states: torch.Tensor, attention_mask: torch.Tensor,
+                    states_info: torch.Tensor) -> torch.Tensor:
+    """Mean squared error of the predicted s_{t+1} - s_t over positions whose next step is in the window,
+    in units of each window's RMS state change (a loss scale, not a model input)."""
+    change = states[:, 1:] - states[:, :-1]
+    ok = attention_mask.bool()
+    pair = ((ok[:, 1:] & ok[:, :-1]).unsqueeze(-1) & (states_info != 0).unsqueeze(1)).to(change.dtype)
+    rms = torch.sqrt((change ** 2 * pair).sum(1, keepdim=True) / pair.sum(1, keepdim=True).clamp(min=1))
+    scale = rms + UNIT_LEVEL_FLOOR * states.abs().mean(1, keepdim=True) + 1e-12
+    return (((pred[:, :-1] - change) / scale) ** 2 * pair).sum() / pair.sum().clamp(min=1)
+
+
 class EconomicPolicyModel(L.LightningModule):
     """PyTorch Lightning module for training economic policies."""
 
@@ -146,6 +180,7 @@ class EconomicPolicyModel(L.LightningModule):
         test_envs: list[tuple[str, AbstractEconomicEnv]] = [],
         val_episodes: int = 10,
         val_steps: int = 1000,
+        dynamics_weight: float = 0.1,
     ):
         """
         Initialize the policy model.
@@ -157,22 +192,26 @@ class EconomicPolicyModel(L.LightningModule):
             test_envs: List of test environments for validation
             val_episodes: Number of episodes for environment validation
             val_steps: Number of steps within validation episode
+            dynamics_weight: Weight of the next-state loss of the model's dynamics head
         """
         super().__init__()
         self.save_hyperparameters(ignore=['test_envs'])
 
         self.model = hydra.utils.instantiate(model_cfg)
-        self.criterion = hydra.utils.instantiate(criterion_cfg)
+        # elementwise, for masking
+        self.criterion = hydra.utils.instantiate(criterion_cfg, reduction="none")
         self.optimizer_cfg = optimizer_cfg
         self.scheduler_cfg = scheduler_cfg
         self.test_envs = test_envs
         self.val_episodes = val_episodes
         self.val_steps = val_steps
+        self.dynamics_weight = dynamics_weight
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
         self.endogenous_max_dim = endogenous_max_dim
 
-    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params):
+    def forward(self, states, states_info, actions, actions_info, rewards, task_ids, model_params,
+                first_step=None, attention_mask=None):
         """Forward pass matching the transformer's interface"""
         return self.model(
             states=states,
@@ -182,91 +221,86 @@ class EconomicPolicyModel(L.LightningModule):
             rewards=rewards,
             task_ids=task_ids,
             model_params=model_params,
+            first_step=first_step,
+            attention_mask=attention_mask,
         )
 
     def configure_optimizers(self):
-        """Configure optimizer for training."""
-        optimizer = hydra.utils.instantiate(
-            self.optimizer_cfg,
-            params=self.parameters()
+        """Optimizer from config (see decay_param_groups), with a per-step linear warmup then cosine
+        decay to eta_min."""
+        optimizer = hydra.utils.instantiate(self.optimizer_cfg, _partial_=True)(decay_param_groups(self))
+        warmup = int(self.scheduler_cfg["warmup_steps"])
+        total = max(int(self.trainer.estimated_stepping_batches), warmup + 1)
+        floor = float(self.scheduler_cfg["eta_min"]) / optimizer.defaults["lr"]
+
+        def lr_factor(step: int) -> float:
+            if step < warmup:
+                return (step + 1) / warmup
+            progress = min((step - warmup) / (total - warmup), 1.0)
+            return floor + (1.0 - floor) * 0.5 * (1.0 + math.cos(math.pi * progress))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_factor)
+        return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
+
+    @staticmethod
+    def _sanitize(x: torch.Tensor, bound: float = 1000.0) -> torch.Tensor:
+        return torch.clamp(torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0), min=-bound, max=bound)
+
+    def _masked_loss(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        per_elem = self.criterion(pred, target)
+        mask = mask.to(per_elem.dtype)
+        return (per_elem * mask).sum() / mask.sum().clamp(min=1.0)
+
+    def _shared_step(self, batch, stage: str):
+        causal = self.model.input_normalization == "causal"
+        bound = 1e9 if causal else 1000.0
+        first_step = batch['window_start'] == 0
+        # step t sees (s_t, a_{t-1}, r_{t-1}) and is scored on a_t
+        predicted_actions, aux = self(
+            states=self._sanitize(batch['states'], bound),
+            states_info=batch['states_info'],
+            actions=self._sanitize(batch['prev_actions'], bound),
+            actions_info=batch['actions_info'],
+            rewards=self._sanitize(batch['prev_reward'], bound),
+            task_ids=batch['task_id'],
+            model_params=batch['model_params'],
+            first_step=first_step,
+            attention_mask=batch['attention_mask'],
         )
-        scheduler = hydra.utils.instantiate(self.scheduler_cfg, optimizer=optimizer)
-        return [optimizer], [scheduler]
 
-    def training_step(self, batch, batch_idx):
-        """Updated training step to handle the new batch format"""
-        states = batch['states']
-        actions = batch['actions']
-        rewards = batch['reward']
-        task_ids = batch['task_id']
-        model_params = batch['model_params']
-        states_info = batch['states_info']
-        actions_info = batch['actions_info']
+        valid_steps = batch['attention_mask'].unsqueeze(-1)  # [bs, seq, 1]
+        if causal:
+            # the episode's first action is not scored in causal mode
+            _, valid_steps = self.model._observed_steps(batch['states'], first_step, batch['attention_mask'])
+        action_mask = valid_steps & (batch['actions_info'] != 0).unsqueeze(1)
+        # NMSE: errors in units of each episode's action scale
+        scale = batch['action_scale']  # [bs, seq, action_dim]
+        loss = self._masked_loss(predicted_actions / scale, self._sanitize(batch['actions'], bound) / scale, action_mask)
+        self.log(f'{stage}_action_loss', loss, on_step=(stage == 'train'), on_epoch=True)
 
-        # weird bug with nan values
-        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
+        if 'pinn' in aux and (batch['endogenous_info'] != 0).any():
+            endo_mask = valid_steps & (batch['endogenous_info'] != 0).unsqueeze(1)
+            endogenous = self._sanitize(batch['endogenous'], bound)
+            target = causal_zscore(endogenous, batch['attention_mask']) if causal else symlog(endogenous)
+            pinn_loss = self._masked_loss(aux['pinn'], target, endo_mask)
+            self.log(f'{stage}_pinn_loss', pinn_loss, on_step=(stage == 'train'), on_epoch=True)
+            loss = loss + pinn_loss
 
-        predicted_actions, pinn_preds = self(
-            states=states,
-            states_info=states_info,
-            actions=actions,
-            actions_info=actions_info,
-            rewards=rewards,
-            task_ids=task_ids,
-            model_params=model_params,
-        )
-
-        # predicted_actions shape should be [batch_size, seq_length - 1, action_dim]
-        # actions shape: [batch_size, seq_length, action_dim]
-        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
-        self.log('train_action_loss', loss, on_step=True, on_epoch=True)
-        if "endogenous" in batch and pinn_preds is not None:
-            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
-            self.log('train_pinn_loss', pinn_loss, on_step=True, on_epoch=True)
-            loss += pinn_loss
+        if 'dynamics' in aux:
+            dynamics_loss = next_state_loss(aux['dynamics'], self._sanitize(batch['states'], bound), batch['attention_mask'],
+                                            batch['states_info'])
+            self.log(f'{stage}_dynamics_loss', dynamics_loss, on_step=(stage == 'train'), on_epoch=True)
+            loss = loss + self.dynamics_weight * dynamics_loss
 
         assert not torch.isnan(loss)
-        self.log('train_loss', loss, on_step=True, on_epoch=True)
+        self.log(f'{stage}_loss', loss, on_step=(stage == 'train'), on_epoch=True)
         return loss
+
+    def training_step(self, batch, batch_idx):
+        return self._shared_step(batch, 'train')
 
     def validation_step(self, batch, batch_idx):
-        """Updated validation step to match training step"""
-        states = batch['states']
-        actions = batch['actions']
-        rewards = batch['reward']
-        task_ids = batch['task_id']
-        states_info = batch['states_info']
-        actions_info = batch['actions_info']
-        model_params = batch['model_params']
-
-        # weird bug with nan values
-        states = torch.clamp(torch.nan_to_num(states, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        actions = torch.clamp(torch.nan_to_num(actions, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-        rewards = torch.clamp(torch.nan_to_num(rewards, nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-
-        predicted_actions, pinn_preds = self(
-            states=states,
-            actions=actions,
-            rewards=rewards,
-            task_ids=task_ids,
-            states_info=states_info,
-            actions_info=actions_info,
-            model_params=model_params,
-        )
-
-        loss = self.criterion(predicted_actions[:, :-1, :], actions[:, 1:, :])
-        self.log('val_action_loss', loss, on_epoch=True)
-        if "endogenous" in batch and pinn_preds is not None:
-            endogenous = torch.clamp(torch.nan_to_num(batch["endogenous"], nan=0.0, posinf=0.0, neginf=0.0), min=-1000.0, max=1000.0)
-            pinn_loss = self.criterion(pinn_preds[:, :-1, :], endogenous[:, 1:, :])
-            self.log('val_pinn_loss', pinn_loss, on_epoch=True)
-            loss += pinn_loss
-
-        self.log('val_loss', loss, on_epoch=True)
-        return loss
+        return self._shared_step(batch, 'val')
 
 
 @hydra.main(config_name='pipeline.yaml', config_path="configs", version_base=None)
@@ -311,6 +345,7 @@ def main(hydra_cfg: DictConfig) -> None:
         state_max_dim=cfg['train']['max_state_dim'],
         action_max_dim=cfg['train']['max_action_dim'],
         endogenous_max_dim=cfg['train']['max_endogenous_dim'],
+        dynamics_weight=cfg['train'].get('dynamics_weight', 0.1),
     )
 
     data_module = DataModule(
@@ -321,21 +356,24 @@ def main(hydra_cfg: DictConfig) -> None:
         model_params_max_dim=cfg['train']['max_model_params_dim'],
         max_seq_len=cfg['train']['max_seq_len'],
         batch_size=cfg['train'].get('batch_size', 32),
+        state_dropout=cfg['train'].get('state_dropout', 0.0),
+        state_noise=cfg['train'].get('state_noise', 0.0),
+        hide_latent=cfg['train'].get('hide_latent', 0.0),
     )
 
     checkpoint_dir = Path('checkpoints') / metadata['run_id']
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     trainer = L.Trainer(
         max_epochs=cfg['train']['epochs'],
-        accelerator='gpu' if torch.cuda.is_available() else 'cpu',
+        gradient_clip_val=cfg['train']['gradient_clip_val'],
+        accelerator=cfg['train'].get('device', 'auto'),
         devices=1,
-        strategy=L.pytorch.strategies.DDPStrategy(find_unused_parameters=True), # type: ignore
         callbacks=[
             ModelCheckpoint(
                 dirpath=str(checkpoint_dir),
                 filename='model-{epoch:03d}',
                 save_top_k=3,
-                monitor='val_loss',
+                monitor='val_action_loss',
                 save_last=True
             )
         ],

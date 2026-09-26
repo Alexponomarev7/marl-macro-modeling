@@ -1,6 +1,8 @@
+import hashlib
 import importlib
-import shutil
+import random
 import tempfile
+import time
 from typing import Callable, Optional, cast
 from multiprocessing import Pool, cpu_count
 from collections import deque
@@ -131,7 +133,16 @@ def _generate_all_shocks(
     Args:
         shocks_config: Dictionary where keys are shock names and values are settings.
         periods: Total simulation periods.
-        max_shocks_per_type: Maximum number of shocks per type.
+        max_shocks_per_type: Maximum number of shocks per type. Must be >= the highest
+            `<prefix>_shock_period_N`/`_value_N` slot each .mod file's `shocks;` block
+            references. RBC_baseline_pf/RBC_capital_stock_shock_pf/RBC_news_shock_model_pf
+            all reference slots up to 50 there, even though their `@#if !defined(...)`
+            sections only default slots 1-5 - passing fewer than 50 leaves slots 6-50
+            genuinely undefined and Dynare's macro preprocessor fails outright ("Unknown
+            variable productivity_shock_period_6"). Verified via an actual end-to-end
+            pipeline run; a previous attempt to lower this to 5 (assuming the extra slots
+            were merely unused/wasteful) broke all three models. Don't lower this without
+            re-running the full pipeline to confirm every shock-using model still succeeds.
 
     Returns:
         Dictionary with all shock parameters for Dynare.
@@ -233,12 +244,30 @@ def get_reward_object(reward_object_path: str) -> Optional[Callable]:
     return reward_object
 
 
+# commands that draw random shocks
+_STOCH_SIMUL_RE = re.compile(r"^([ \t]*)(?:stoch_simul|discretionary_policy)\s*\(", re.MULTILINE)
+
+
+def _seed_for(parameters: list[str]) -> int:
+    """Deterministic per-draw Dynare RNG seed (distinct draws -> distinct seeds)."""
+    digest = hashlib.md5(" ".join(parameters).encode()).hexdigest()
+    return int(digest[:8], 16) % (2**31 - 2) + 1
+
+
+def _inject_dynare_seed(mod_text: str, seed: int) -> str:
+    # dynare resets its RNG on every call: seed each draw explicitly
+    return _STOCH_SIMUL_RE.sub(
+        lambda m: f"{m.group(1)}set_dynare_seed({seed});\n{m.group(0)}", mod_text, count=1
+    )
+
+
 def run_model(
     input_file: Path,
     output_file: Path,
     output_params_file: Path,
     parameters: list[str],
-    max_retries: int = 3,
+    max_retries: int = 1,
+    seed: int | None = None,
 ) -> None:
     """Run a Dynare model with specified parameters and save results.
 
@@ -247,8 +276,11 @@ def run_model(
         output_file: Path to save the output CSV
         periods: Number of simulation periods
         parameters: List of parameter strings to pass to Dynare
-        max_retries: Maximum number of retry attempts
+        max_retries: Attempts with these exact parameters
+        seed: Dynare RNG seed for stoch_simul; defaults to one derived from `parameters`.
     """
+    if seed is None:
+        seed = _seed_for(parameters)
     if "DYNARE_PATH" not in os.environ:
         raise RuntimeError(
             "DYNARE_PATH environment variable is not set. "
@@ -263,7 +295,7 @@ def run_model(
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 input_tmp_file = Path(tmp_dir) / input_file.name
-                shutil.copy(input_file, input_tmp_file)
+                input_tmp_file.write_text(_inject_dynare_seed(input_file.read_text(), seed))
 
                 # Run Dynare model
                 cmd: list[str] = [
@@ -271,6 +303,7 @@ def run_model(
                     "--eval",
                     f"""
                     addpath {os.environ["DYNARE_PATH"]};
+                    addpath {input_file.parent};
                     cd {input_tmp_file.parent};
                     dynare {input_tmp_file.name} {' '.join(parameters)};
                     oo_simul = oo_.endo_simul';
@@ -312,6 +345,21 @@ def run_model(
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
+            # Dynare exits 0 even when the Blanchard-Kahn/order condition fails for this
+            # parameter draw (too many unstable eigenvalues for the forward-looking variables) -
+            # it just prints a warning and produces an empty oo_.endo_simul, which silently
+            # becomes a near-empty (1-row) CSV and later an empty transitions parquet. Treat it
+            # as a failure so it's logged and skipped like any other bad draw, instead of wasting
+            # a downstream processing pass on a file with no usable data.
+            if "order condition is NOT verified" in process.stdout or "order condition is NOT verified" in process.stderr:
+                error_msg = (
+                    "Dynare succeeded (return code 0) but the Blanchard-Kahn order condition "
+                    "was not verified for this parameter draw - no valid simulation exists, "
+                    f"output would be empty. Parameters: {' '.join(parameters)}"
+                )
+                logger.warning(error_msg)
+                raise RuntimeError(error_msg)
+
             print(f"Model {input_file} completed successfully.")
             return
 
@@ -336,29 +384,35 @@ def run_model(
 
 
 def process_model_combination(args):
-    """Process a single model combination, returning success status instead of raising on failure."""
-    _, input_file, base_name, combination, values, raw_data_dir = args
+    """Run one parameter draw, resampling parameters up to `max_draws` times if the draw fails.
+    Returns a success status instead of raising."""
+    _, input_file, base_name, combination, values, raw_data_dir, model_settings, task_seed, max_draws = args
     output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
     output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
-    config_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_config.yml")
+    # reseed per task: forked workers inherit the parent's RNG state
+    np.random.seed(task_seed)
 
-    try:
-        run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
-        print(f"Output saved to {output_file}")
-        print(f"Config saved to {config_file}")
-        print(f"Params saved to {output_params_file}")
-        return {"success": True, "model": base_name, "output_file": output_file}
-    except Exception as e:
-        error_msg = f"Failed to process model {base_name}: {str(e)}"
-        print(f"\n{'='*80}")
-        print(f"ERROR: {error_msg}")
-        print(f"Continuing with remaining models...")
-        print(f"{'='*80}\n")
-        logger.error(error_msg)
-        return {"success": False, "model": base_name, "error": str(e)}
+    errors = []
+    for draw in range(max_draws):
+        if draw > 0:
+            combination = generate_parameter_combinations(model_settings, 1)[0][0]
+        started = time.monotonic()
+        try:
+            run_model(Path(input_file), Path(output_file), Path(output_params_file), combination)
+            elapsed = time.monotonic() - started
+            logger.info(f"{base_name}: done in {elapsed:.1f}s (draw {draw + 1})")
+            return {"success": True, "model": base_name, "output_file": output_file, "draws": draw + 1}
+        except Exception as e:
+            errors.append(str(e))
+            logger.warning(f"{base_name}: draw {draw + 1}/{max_draws} failed, resampling parameters")
+
+    error_msg = f"Failed to process model {base_name} after {max_draws} parameter draws: {errors[-1]}"
+    print(f"\n{'='*80}\nERROR: {error_msg}\n{'='*80}\n")
+    logger.error(error_msg)
+    return {"success": False, "model": base_name, "error": errors[-1], "draws": max_draws}
 
 
-def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
+def run_models(config: dict, raw_data_dir: Path, max_draws: int = 4, resume: bool = False) -> list[tuple[Path, Path]]:
     output_files = []
     tasks = []
     task_to_output = {}  # Map base_name to output file paths
@@ -380,14 +434,31 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             output_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_raw.csv")
             output_params_file = os.path.join(os.getcwd(), raw_data_dir, base_name + "_params.yaml")
             task_to_output[base_name] = (Path(output_file), Path(output_params_file))
-            task = (model_name, input_file, base_name, combination, values, raw_data_dir)
+            task_seed = int(np.random.randint(0, 2**31 - 1))
+            task = (model_name, input_file, base_name, combination, values, raw_data_dir,
+                    model_settings, task_seed, max_draws)
             tasks.append(task)
+
+    if resume:
+        # skip draws already written (the params file is written last)
+        done = [t for t in tasks if all(f.exists() and f.stat().st_size > 0 for f in task_to_output[t[2]])]
+        output_files.extend(task_to_output[t[2]] for t in done)
+        tasks = [t for t in tasks if t not in done]
+        print(f"Resuming: {len(done)} draws already generated, {len(tasks)} left")
+        if not tasks:
+            return output_files
 
     num_processes = min(min(cpu_count(), len(tasks)), 32)
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
 
+    # shuffle so slow models spread across workers
+    random.Random(0).shuffle(tasks)
+    results = []
     with Pool(processes=num_processes) as pool:
-        results = pool.map(process_model_combination, tasks)
+        for i, result in enumerate(pool.imap_unordered(process_model_combination, tasks, chunksize=1), 1):
+            results.append(result)
+            if i % 50 == 0 or i == len(tasks):
+                logger.info(f"Dynare progress: {i}/{len(tasks)} tasks done")
 
     # Process results and filter out failed tasks
     successful = []
@@ -400,12 +471,14 @@ def run_models(config: dict, raw_data_dir: Path) -> list[tuple[Path, Path]]:
             failed.append(result)
 
     # Print summary
+    extra_draws = sum(r["draws"] - 1 for r in results)
     print(f"\n{'='*80}")
     print(f"DYNARE EXECUTION SUMMARY")
     print(f"{'='*80}")
     print(f"Total tasks: {len(tasks)}")
     print(f"Successful: {len(successful)}")
     print(f"Failed: {len(failed)}")
+    print(f"Resampled draws (infeasible parameters replaced): {extra_draws}")
 
     if failed:
         print(f"\nFailed models:")
@@ -501,7 +574,10 @@ def dynare_trajectories2rl_transitions(
         try:
             mod_text = mod_file_path.read_text(errors="ignore")
             sym_tex_to_long = _parse_mod_symbol_tex_to_long(mod_text)
-            # Map long_name -> canonical, applying full alias chain
+            # Map long_name -> canonical, applying full alias chain. Deliberately exact-match
+            # only, no Tokenizer fuzzy fallback - see the sibling resolve_canonical() in
+            # process_model_data for why a fallback here is unsafe (verified regression via
+            # a full pipeline run, reverted).
             def resolve_canonical(name: str) -> str:
                 """Resolve to canonical name, applying full alias chain."""
                 seen = set()
@@ -618,21 +694,14 @@ def dynare_trajectories2rl_transitions(
     _resolve_accessor_columns(endogenous_accessor)
     action_columns = [_resolve_column_name(c) for c in action_columns]
 
-    # Resolve reward kwargs that refer to dataframe columns (reward fns use these to index `data`)
+    # reward kwargs naming dataframe columns: every *_column value that is not a parameter name
     reward_kwargs = dict(reward_kwargs)
-    for key in (
-        "target_column",
-        "consumption_column",
-        "labor_column",
-        "consumption_young_column",
-        "consumption_old_column",
-    ):
-        if key in reward_kwargs and isinstance(reward_kwargs[key], str):
-            reward_kwargs[key] = _resolve_column_name(reward_kwargs[key])
-    if "sigma_column" in reward_kwargs and isinstance(reward_kwargs["sigma_column"], str):
-        # sigma_column can be either a param name (in model_params) or a column name in `data`
-        if reward_kwargs["sigma_column"] not in model_params:
-            reward_kwargs["sigma_column"] = _resolve_column_name(reward_kwargs["sigma_column"])
+    reward_column_keys = [
+        k for k, v in reward_kwargs.items()
+        if k.endswith("_column") and isinstance(v, str) and v not in model_params
+    ]
+    for key in reward_column_keys:
+        reward_kwargs[key] = _resolve_column_name(reward_kwargs[key])
 
     # Check for missing columns and provide helpful error messages
     all_required_columns: set[str] = set()
@@ -647,16 +716,7 @@ def dynare_trajectories2rl_transitions(
 
     # Also check columns needed by reward function (unless it uses target_indices)
     if "target_indices" not in reward_kwargs:
-        for key in (
-            "target_column",
-            "consumption_column",
-            "labor_column",
-            "consumption_young_column",
-            "consumption_old_column",
-            "sigma_column",
-        ):
-            if key in reward_kwargs and isinstance(reward_kwargs[key], str) and reward_kwargs[key] not in model_params:
-                all_required_columns.add(reward_kwargs[key])
+        all_required_columns.update(reward_kwargs[key] for key in reward_column_keys)
 
     missing_columns = all_required_columns - data_cols
     if missing_columns:
@@ -814,6 +874,14 @@ def process_model_data(
 
                 If the name is already a canonical name (in canonical_names set),
                 return it as-is without applying aliases.
+
+                Deliberately case-sensitive/exact-match only (no Tokenizer fallback): this
+                feeds `data.rename()`, actually mutating DataFrame columns. A fuzzy fallback
+                here renamed symbols like 'ExpectedReturnCapital' to a differently-worded
+                canonical token ('Expected Return On Capital'), breaking configs whose
+                state/action/endogenous_columns request the raw symbol name directly (caught
+                via an actual end-to-end pipeline run on Caldara_et_al_2012 - do not re-add
+                without re-running the full pipeline to check for regressions).
                 """
                 # If name is already canonical, don't apply aliases
                 if name in canonical_names:
@@ -905,7 +973,15 @@ def process_model_data(
                     # 1. Column name differs from target name
                     # 2. Current column is NOT already a canonical name (prevent canonical -> something else)
                     if c != target_name:
-                        # Check if current column is already canonical
+                        # Check if current column is already canonical. Deliberately also skips
+                        # the rename when `c` isn't itself a STATE_ALIASES key: dynare/conf/config.yaml
+                        # consistently requests state/action/endogenous_columns by the .mod file's raw
+                        # symbol name (e.g. "ExpectedReturnCapital"), not its long_name/canonical form
+                        # ("Expected Return On Capital") - renaming the raw symbol away breaks that
+                        # config's column resolution even though it looks like a no-op on paper.
+                        # Verified via an actual end-to-end pipeline run on Caldara_et_al_2012: removing
+                        # this `or` clause (looked like a bug in isolation) broke it. Don't remove without
+                        # re-running the full pipeline to check for regressions across all active models.
                         is_current_canonical = c in canonical_names or c not in _COLUMN_ALIASES
 
                         # Never rename a canonical name to something else
@@ -977,6 +1053,9 @@ def process_model_data(
     state_accessor = StateAccessor(rl_env_conf["input"]["state_columns"])
     endogenous_columns = rl_env_conf["input"].get("endogenous_columns", [])
     endogenous_accessor = StateAccessor(endogenous_columns)
+    # descriptions use the requested names, not the raw columns they resolve to
+    original_state_columns = [c[0] if isinstance(c, list) else c for c in rl_env_conf["input"]["state_columns"]]
+    original_endogenous_columns = [c[0] if isinstance(c, list) else c for c in endogenous_columns]
 
     reward_fn = get_reward_object(rl_env_conf["reward"])
     mod_file_path = PathStorage().dynare_configs_root / f"{model_name}.mod"
@@ -993,6 +1072,14 @@ def process_model_data(
         mod_file_path=mod_file_path,
     )
     logger.info("Transitions successfully generated.")
+
+    if transitions.empty:
+        logger.warning(
+            f"[{model_name}] Produced 0 transitions from {raw_data_path} (raw data had too "
+            "few rows, e.g. a Blanchard-Kahn/order-condition failure); skipping, not writing "
+            "an empty parquet."
+        )
+        return
 
     logger.info("Saving data...")
 
@@ -1096,14 +1183,29 @@ def process_model_data(
 
         return short_names
 
-    # Use short names (symbols) from .mod files for descriptions if available, otherwise use long names
-    state_columns = state_accessor.get_columns()
+    # Use short names (symbols) from .mod files for descriptions if available, otherwise use long names.
+    state_columns = original_state_columns
     action_columns = rl_env_conf["input"]["action_columns"]
-    endogenous_columns = endogenous_accessor.get_columns()
+    endogenous_columns = original_endogenous_columns
 
-    transitions["action_description"] = pd.Series([_map_columns_to_short_names(action_columns)] * len(transitions))
-    transitions["state_description"] = pd.Series([_map_columns_to_short_names(state_columns)] * len(transitions))
-    transitions["endogenous_description"] = pd.Series([_map_columns_to_short_names(endogenous_columns)] * len(transitions))
+    action_description = _map_columns_to_short_names(action_columns)
+    state_description = _map_columns_to_short_names(state_columns)
+    endogenous_description = _map_columns_to_short_names(endogenous_columns)
+    # fail at generation time on names the Tokenizer does not know
+    unknown = []
+    for kind, names, to_id in [("state", state_description, _tokenizer.state_token_id),
+                               ("endogenous", endogenous_description, _tokenizer.state_token_id),
+                               ("action", action_description, _tokenizer.action_token_id)]:
+        for name in names:
+            try:
+                to_id(name)
+            except KeyError:
+                unknown.append(f"{kind}:{name}")
+    if unknown:
+        raise KeyError(f"{model_name}: descriptions unknown to the Tokenizer: {unknown}")
+    transitions["action_description"] = pd.Series([action_description] * len(transitions))
+    transitions["state_description"] = pd.Series([state_description] * len(transitions))
+    transitions["endogenous_description"] = pd.Series([endogenous_description] * len(transitions))
 
     transitions.to_parquet(output_path)
 
@@ -1129,40 +1231,65 @@ def extract_model_name(filename: str) -> str:
 @hydra.main(config_path="../dynare/conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     config = cast(dict, OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True))
+    metadata = config["metadata"]
 
-    path_storage = PathStorage(data_folder=config["metadata"]["data_folder"])
+    if metadata.get("seed") is not None:
+        np.random.seed(int(metadata["seed"]))
+
+    only_models = metadata.get("only_models")
+    if only_models:
+        unknown = sorted(set(only_models) - set(config["models"]))
+        if unknown:
+            raise KeyError(f"metadata.only_models has models not in config: {unknown}")
+        config["models"] = {k: v for k, v in config["models"].items() if k in only_models}
+
+    path_storage = PathStorage(data_folder=metadata["data_folder"])
     path_storage.raw_root.mkdir(parents=True, exist_ok=True)
     path_storage.processed_root.mkdir(parents=True, exist_ok=True)
     logger.info("Running models...")
-    output_files = run_models(config["models"], path_storage.raw_root)
+    output_files = run_models(config["models"], path_storage.raw_root, resume=bool(metadata.get("resume")))
     logger.info("Models run successfully.")
 
     # Ensure output directory exists
     os.makedirs(path_storage.raw_root, exist_ok=True)
     os.makedirs(path_storage.processed_root, exist_ok=True)
+    tasks = []
     for raw_data_file, params_file in output_files:
-        with open(params_file, 'r') as f:
-            model_params = yaml.load(f, Loader=yaml.FullLoader)
-
         model_name = extract_model_name(raw_data_file.stem)
-
         if model_name not in config["models"]:
             logger.warning(f"Model {model_name} not found in config")
             continue
+        tasks.append((model_name, config["models"][model_name], raw_data_file, params_file,
+                      path_storage.processed_root))
 
-        try:
-            process_model_data(
-                model_name=model_name,
-                model_config=config["models"][model_name],
-                model_params=model_params,
-                raw_data_path=raw_data_file,
-                output_dir=path_storage.processed_root,
-            )
-        except Exception as e:
-            logger.error(f"Error processing {model_name}: {e}")
-            logger.error(traceback.format_exc())
-            continue
+    num_processes = max(1, min(cpu_count(), len(tasks), 32))
+    with Pool(processes=num_processes) as pool:
+        processed = sum(pool.imap_unordered(_process_output, tasks, chunksize=4))
+    logger.info(f"Processed {processed}/{len(tasks)} episodes")
 
+
+def _process_output(args) -> bool:
+    model_name, model_config, raw_data_file, params_file, output_dir = args
+    with open(params_file, 'r') as f:
+        model_params = yaml.load(f, Loader=yaml.FullLoader)
+    # drop non-numeric / non-finite parameters (unassigned ones print as NaN)
+    model_params = {
+        k: v for k, v in model_params.items()
+        if isinstance(v, (int, float)) and np.isfinite(v)
+    }
+    try:
+        process_model_data(
+            model_name=model_name,
+            model_config=model_config,
+            model_params=model_params,
+            raw_data_path=raw_data_file,
+            output_dir=output_dir,
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error processing {model_name}: {e}")
+        logger.error(traceback.format_exc())
+        return False
 
 if __name__ == "__main__":
     main()

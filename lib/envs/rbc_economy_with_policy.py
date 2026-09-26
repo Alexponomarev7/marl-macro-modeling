@@ -11,6 +11,7 @@ from typing import (
     Union,
 )
 
+from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.utility_funcs import (
     log_utility,
@@ -111,8 +112,8 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
 
         labor_supply = 1 - leisure
 
-        # Technology shock
-        self.technology += (
+        # Technology shock: AR(1) in logs
+        self.technology = (
                 self.technology_shock_persistence * self.technology
                 + np.random.normal(0, self.technology_shock_variance)
         )
@@ -172,6 +173,10 @@ class RBCEconomyWithPolicyEnv(AbstractEconomicEnv):
     def close(self):
         # todo: implement
         pass
+
+    @property
+    def task_id(self) -> int:
+        return Tokenizer.ENV_MAPPING["RBCEconomyWithPolicyEnv"]
 
     def _get_state(self) -> Dict:
         return {

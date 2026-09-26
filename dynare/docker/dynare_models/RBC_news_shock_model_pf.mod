@@ -26,7 +26,15 @@ var Output              $Output$ (long_name='output (log)')
     LoggedProductivity  $LoggedProductivity$ (long_name='TFP (log)')
     AnnualInterestRate  $AnnualInterestRate$ (long_name='annualized interest rate')
     Wage                $Wage$ (long_name='real wage (log)')
-    Investment          $Investment$ (long_name='investment (log)');
+    Investment          $Investment$ (long_name='investment (log)')
+    TFPNews8             $TFPNews8$ (long_name='TFP news hitting in 8 periods')
+    TFPNews7             $TFPNews7$ (long_name='TFP news hitting in 7 periods')
+    TFPNews6             $TFPNews6$ (long_name='TFP news hitting in 6 periods')
+    TFPNews5             $TFPNews5$ (long_name='TFP news hitting in 5 periods')
+    TFPNews4             $TFPNews4$ (long_name='TFP news hitting in 4 periods')
+    TFPNews3             $TFPNews3$ (long_name='TFP news hitting in 3 periods')
+    TFPNews2             $TFPNews2$ (long_name='TFP news hitting in 2 periods')
+    TFPNews1             $TFPNews1$ (long_name='TFP news hitting in 1 period');
 
 varexo NewsShock        $NewsShock$ (long_name='anticipated TFP shock')
        SurpriseShock    $SurpriseShock$ (long_name='unanticipated TFP shock');
@@ -221,7 +229,18 @@ exp(Wage) = (1 - alpha) * exp(Output) / exp(Labor);
 AnnualInterestRate = 4 * alpha * exp(Output) / exp(Capital(-1));
 
 [name='TFP process with news shock']
-LoggedProductivity = rhoz * LoggedProductivity(-1) + SurpriseShock + NewsShock(-8);
+LoggedProductivity = rhoz * LoggedProductivity(-1) + SurpriseShock + TFPNews1(-1);  % = NewsShock(-8), via the explicit news pipeline
+
+[name='News pipeline (observable state)']
+% TFPNewsH: announced news that hits TFP in H periods
+TFPNews8 = NewsShock;
+TFPNews7 = TFPNews8(-1);
+TFPNews6 = TFPNews7(-1);
+TFPNews5 = TFPNews6(-1);
+TFPNews4 = TFPNews5(-1);
+TFPNews3 = TFPNews4(-1);
+TFPNews2 = TFPNews3(-1);
+TFPNews1 = TFPNews2(-1);
 
 end;
 
@@ -236,6 +255,14 @@ initval;
   Consumption = log(exp(Output) - exp(Investment));
   Wage = log((1 - alpha) * exp(Output) / exp(Labor));
   AnnualInterestRate = 4 * alpha * exp(Output) / exp(Capital);
+  TFPNews8 = 0;
+  TFPNews7 = 0;
+  TFPNews6 = 0;
+  TFPNews5 = 0;
+  TFPNews4 = 0;
+  TFPNews3 = 0;
+  TFPNews2 = 0;
+  TFPNews1 = 0;
 end;
 
 endval;
@@ -249,53 +276,25 @@ endval;
   Labor = log(l_ss);
   Wage = log(w_ss);
   AnnualInterestRate = r_ss;
+  TFPNews8 = 0;
+  TFPNews7 = 0;
+  TFPNews6 = 0;
+  TFPNews5 = 0;
+  TFPNews4 = 0;
+  TFPNews3 = 0;
+  TFPNews2 = 0;
+  TFPNews1 = 0;
 end;
 
+% unanticipated shocks: agents re-plan when each shock arrives (mit_shock_solver.m)
 shocks;
   var NewsShock;
-  periods @{news_shock_period_1} @{news_shock_period_2} @{news_shock_period_3} @{news_shock_period_4} @{news_shock_period_5}
-          @{news_shock_period_6} @{news_shock_period_7} @{news_shock_period_8} @{news_shock_period_9} @{news_shock_period_10}
-          @{news_shock_period_11} @{news_shock_period_12} @{news_shock_period_13} @{news_shock_period_14} @{news_shock_period_15}
-          @{news_shock_period_16} @{news_shock_period_17} @{news_shock_period_18} @{news_shock_period_19} @{news_shock_period_20}
-          @{news_shock_period_21} @{news_shock_period_22} @{news_shock_period_23} @{news_shock_period_24} @{news_shock_period_25}
-          @{news_shock_period_26} @{news_shock_period_27} @{news_shock_period_28} @{news_shock_period_29} @{news_shock_period_30}
-          @{news_shock_period_31} @{news_shock_period_32} @{news_shock_period_33} @{news_shock_period_34} @{news_shock_period_35}
-          @{news_shock_period_36} @{news_shock_period_37} @{news_shock_period_38} @{news_shock_period_39} @{news_shock_period_40}
-          @{news_shock_period_41} @{news_shock_period_42} @{news_shock_period_43} @{news_shock_period_44} @{news_shock_period_45}
-          @{news_shock_period_46} @{news_shock_period_47} @{news_shock_period_48} @{news_shock_period_49} @{news_shock_period_50};
-  values @{news_shock_value_1} @{news_shock_value_2} @{news_shock_value_3} @{news_shock_value_4} @{news_shock_value_5}
-         @{news_shock_value_6} @{news_shock_value_7} @{news_shock_value_8} @{news_shock_value_9} @{news_shock_value_10}
-         @{news_shock_value_11} @{news_shock_value_12} @{news_shock_value_13} @{news_shock_value_14} @{news_shock_value_15}
-         @{news_shock_value_16} @{news_shock_value_17} @{news_shock_value_18} @{news_shock_value_19} @{news_shock_value_20}
-         @{news_shock_value_21} @{news_shock_value_22} @{news_shock_value_23} @{news_shock_value_24} @{news_shock_value_25}
-         @{news_shock_value_26} @{news_shock_value_27} @{news_shock_value_28} @{news_shock_value_29} @{news_shock_value_30}
-         @{news_shock_value_31} @{news_shock_value_32} @{news_shock_value_33} @{news_shock_value_34} @{news_shock_value_35}
-         @{news_shock_value_36} @{news_shock_value_37} @{news_shock_value_38} @{news_shock_value_39} @{news_shock_value_40}
-         @{news_shock_value_41} @{news_shock_value_42} @{news_shock_value_43} @{news_shock_value_44} @{news_shock_value_45}
-         @{news_shock_value_46} @{news_shock_value_47} @{news_shock_value_48} @{news_shock_value_49} @{news_shock_value_50};
-
+  periods @{news_shock_period_1} @{news_shock_period_2} @{news_shock_period_3} @{news_shock_period_4} @{news_shock_period_5} @{news_shock_period_6} @{news_shock_period_7} @{news_shock_period_8} @{news_shock_period_9} @{news_shock_period_10} @{news_shock_period_11} @{news_shock_period_12} @{news_shock_period_13} @{news_shock_period_14} @{news_shock_period_15} @{news_shock_period_16} @{news_shock_period_17} @{news_shock_period_18} @{news_shock_period_19} @{news_shock_period_20} @{news_shock_period_21} @{news_shock_period_22} @{news_shock_period_23} @{news_shock_period_24} @{news_shock_period_25} @{news_shock_period_26} @{news_shock_period_27} @{news_shock_period_28} @{news_shock_period_29} @{news_shock_period_30} @{news_shock_period_31} @{news_shock_period_32} @{news_shock_period_33} @{news_shock_period_34} @{news_shock_period_35} @{news_shock_period_36} @{news_shock_period_37} @{news_shock_period_38} @{news_shock_period_39} @{news_shock_period_40} @{news_shock_period_41} @{news_shock_period_42} @{news_shock_period_43} @{news_shock_period_44} @{news_shock_period_45} @{news_shock_period_46} @{news_shock_period_47} @{news_shock_period_48} @{news_shock_period_49} @{news_shock_period_50};
+  values @{news_shock_value_1} @{news_shock_value_2} @{news_shock_value_3} @{news_shock_value_4} @{news_shock_value_5} @{news_shock_value_6} @{news_shock_value_7} @{news_shock_value_8} @{news_shock_value_9} @{news_shock_value_10} @{news_shock_value_11} @{news_shock_value_12} @{news_shock_value_13} @{news_shock_value_14} @{news_shock_value_15} @{news_shock_value_16} @{news_shock_value_17} @{news_shock_value_18} @{news_shock_value_19} @{news_shock_value_20} @{news_shock_value_21} @{news_shock_value_22} @{news_shock_value_23} @{news_shock_value_24} @{news_shock_value_25} @{news_shock_value_26} @{news_shock_value_27} @{news_shock_value_28} @{news_shock_value_29} @{news_shock_value_30} @{news_shock_value_31} @{news_shock_value_32} @{news_shock_value_33} @{news_shock_value_34} @{news_shock_value_35} @{news_shock_value_36} @{news_shock_value_37} @{news_shock_value_38} @{news_shock_value_39} @{news_shock_value_40} @{news_shock_value_41} @{news_shock_value_42} @{news_shock_value_43} @{news_shock_value_44} @{news_shock_value_45} @{news_shock_value_46} @{news_shock_value_47} @{news_shock_value_48} @{news_shock_value_49} @{news_shock_value_50};
   var SurpriseShock;
-  periods @{surprise_shock_period_1} @{surprise_shock_period_2} @{surprise_shock_period_3} @{surprise_shock_period_4} @{surprise_shock_period_5}
-          @{surprise_shock_period_6} @{surprise_shock_period_7} @{surprise_shock_period_8} @{surprise_shock_period_9} @{surprise_shock_period_10}
-          @{surprise_shock_period_11} @{surprise_shock_period_12} @{surprise_shock_period_13} @{surprise_shock_period_14} @{surprise_shock_period_15}
-          @{surprise_shock_period_16} @{surprise_shock_period_17} @{surprise_shock_period_18} @{surprise_shock_period_19} @{surprise_shock_period_20}
-          @{surprise_shock_period_21} @{surprise_shock_period_22} @{surprise_shock_period_23} @{surprise_shock_period_24} @{surprise_shock_period_25}
-          @{surprise_shock_period_26} @{surprise_shock_period_27} @{surprise_shock_period_28} @{surprise_shock_period_29} @{surprise_shock_period_30}
-          @{surprise_shock_period_31} @{surprise_shock_period_32} @{surprise_shock_period_33} @{surprise_shock_period_34} @{surprise_shock_period_35}
-          @{surprise_shock_period_36} @{surprise_shock_period_37} @{surprise_shock_period_38} @{surprise_shock_period_39} @{surprise_shock_period_40}
-          @{surprise_shock_period_41} @{surprise_shock_period_42} @{surprise_shock_period_43} @{surprise_shock_period_44} @{surprise_shock_period_45}
-          @{surprise_shock_period_46} @{surprise_shock_period_47} @{surprise_shock_period_48} @{surprise_shock_period_49} @{surprise_shock_period_50};
-  values @{surprise_shock_value_1} @{surprise_shock_value_2} @{surprise_shock_value_3} @{surprise_shock_value_4} @{surprise_shock_value_5}
-         @{surprise_shock_value_6} @{surprise_shock_value_7} @{surprise_shock_value_8} @{surprise_shock_value_9} @{surprise_shock_value_10}
-         @{surprise_shock_value_11} @{surprise_shock_value_12} @{surprise_shock_value_13} @{surprise_shock_value_14} @{surprise_shock_value_15}
-         @{surprise_shock_value_16} @{surprise_shock_value_17} @{surprise_shock_value_18} @{surprise_shock_value_19} @{surprise_shock_value_20}
-         @{surprise_shock_value_21} @{surprise_shock_value_22} @{surprise_shock_value_23} @{surprise_shock_value_24} @{surprise_shock_value_25}
-         @{surprise_shock_value_26} @{surprise_shock_value_27} @{surprise_shock_value_28} @{surprise_shock_value_29} @{surprise_shock_value_30}
-         @{surprise_shock_value_31} @{surprise_shock_value_32} @{surprise_shock_value_33} @{surprise_shock_value_34} @{surprise_shock_value_35}
-         @{surprise_shock_value_36} @{surprise_shock_value_37} @{surprise_shock_value_38} @{surprise_shock_value_39} @{surprise_shock_value_40}
-         @{surprise_shock_value_41} @{surprise_shock_value_42} @{surprise_shock_value_43} @{surprise_shock_value_44} @{surprise_shock_value_45}
-         @{surprise_shock_value_46} @{surprise_shock_value_47} @{surprise_shock_value_48} @{surprise_shock_value_49} @{surprise_shock_value_50};
+  periods @{surprise_shock_period_1} @{surprise_shock_period_2} @{surprise_shock_period_3} @{surprise_shock_period_4} @{surprise_shock_period_5} @{surprise_shock_period_6} @{surprise_shock_period_7} @{surprise_shock_period_8} @{surprise_shock_period_9} @{surprise_shock_period_10} @{surprise_shock_period_11} @{surprise_shock_period_12} @{surprise_shock_period_13} @{surprise_shock_period_14} @{surprise_shock_period_15} @{surprise_shock_period_16} @{surprise_shock_period_17} @{surprise_shock_period_18} @{surprise_shock_period_19} @{surprise_shock_period_20} @{surprise_shock_period_21} @{surprise_shock_period_22} @{surprise_shock_period_23} @{surprise_shock_period_24} @{surprise_shock_period_25} @{surprise_shock_period_26} @{surprise_shock_period_27} @{surprise_shock_period_28} @{surprise_shock_period_29} @{surprise_shock_period_30} @{surprise_shock_period_31} @{surprise_shock_period_32} @{surprise_shock_period_33} @{surprise_shock_period_34} @{surprise_shock_period_35} @{surprise_shock_period_36} @{surprise_shock_period_37} @{surprise_shock_period_38} @{surprise_shock_period_39} @{surprise_shock_period_40} @{surprise_shock_period_41} @{surprise_shock_period_42} @{surprise_shock_period_43} @{surprise_shock_period_44} @{surprise_shock_period_45} @{surprise_shock_period_46} @{surprise_shock_period_47} @{surprise_shock_period_48} @{surprise_shock_period_49} @{surprise_shock_period_50};
+  values @{surprise_shock_value_1} @{surprise_shock_value_2} @{surprise_shock_value_3} @{surprise_shock_value_4} @{surprise_shock_value_5} @{surprise_shock_value_6} @{surprise_shock_value_7} @{surprise_shock_value_8} @{surprise_shock_value_9} @{surprise_shock_value_10} @{surprise_shock_value_11} @{surprise_shock_value_12} @{surprise_shock_value_13} @{surprise_shock_value_14} @{surprise_shock_value_15} @{surprise_shock_value_16} @{surprise_shock_value_17} @{surprise_shock_value_18} @{surprise_shock_value_19} @{surprise_shock_value_20} @{surprise_shock_value_21} @{surprise_shock_value_22} @{surprise_shock_value_23} @{surprise_shock_value_24} @{surprise_shock_value_25} @{surprise_shock_value_26} @{surprise_shock_value_27} @{surprise_shock_value_28} @{surprise_shock_value_29} @{surprise_shock_value_30} @{surprise_shock_value_31} @{surprise_shock_value_32} @{surprise_shock_value_33} @{surprise_shock_value_34} @{surprise_shock_value_35} @{surprise_shock_value_36} @{surprise_shock_value_37} @{surprise_shock_value_38} @{surprise_shock_value_39} @{surprise_shock_value_40} @{surprise_shock_value_41} @{surprise_shock_value_42} @{surprise_shock_value_43} @{surprise_shock_value_44} @{surprise_shock_value_45} @{surprise_shock_value_46} @{surprise_shock_value_47} @{surprise_shock_value_48} @{surprise_shock_value_49} @{surprise_shock_value_50};
 end;
 
 perfect_foresight_setup(periods=@{periods});
-perfect_foresight_solver;
+oo_ = mit_shock_solver(M_, options_, oo_);

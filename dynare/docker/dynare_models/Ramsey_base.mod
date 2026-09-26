@@ -1,5 +1,5 @@
 % Ramsey Model - Basic Version
-% 
+%
 % Timing convention:
 %   - Capital_t is end-of-period capital (result of investment at t)
 %   - Production at t uses Capital_{t-1}
@@ -40,6 +40,11 @@ delta = @{delta};
 start_capital = @{start_capital};
 
 k_ss = ((1 / beta - (1 - delta)) / alpha) ^ (1 / (alpha - 1));
+
+% initial capital = start_capital_ratio * steady-state capital
+@#if defined(start_capital_ratio)
+start_capital = @{start_capital_ratio} * k_ss;
+@#endif
 y_ss = k_ss^alpha;
 i_ss = delta * k_ss;
 c_ss = y_ss - i_ss;

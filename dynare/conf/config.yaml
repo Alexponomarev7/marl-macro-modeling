@@ -2,12 +2,15 @@ metadata:
   data_folder: data
   periods: 1000
   num_samples: 6000
+  seed: null  # set an int for a reproducible dataset (parameter draws + Dynare shock seeds)
+  only_models: null  # e.g. metadata.only_models=[Hansen_1985,SGU_2004] to run a subset
+  resume: false  # true: keep draws already written to data_folder/raw, generate the rest
 
 models:
 
   Ramsey_base:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 200
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 1.0  # actual = int(base * coefficient)
@@ -17,8 +20,8 @@ models:
         - Output
         - Investment
       parameter_ranges:
-        start_capital: [0.5, 3.0]
-        alpha: [0.33, 0.66]
+        start_capital_ratio: [0.3, 1.7]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.15]
 
@@ -41,7 +44,7 @@ models:
 
   Ramsey_crra:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 250
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 0.5  # actual = int(base * coefficient)
@@ -51,9 +54,9 @@ models:
         - OutputPerCapita
         - InvestmentPerCapita
       parameter_ranges:
-        start_capital: [0.5, 3.0]
+        start_capital_ratio: [0.3, 1.7]
         start_labor: [1.0, 1.0]
-        alpha: [0.33, 0.66]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.15]
         sigma: [0.5, 3.0]
@@ -69,7 +72,10 @@ models:
         state_columns:
           - [CapitalPerCapita, -1]
           - OutputPerCapita
-          - Labor
+          # Labor here is the raw population level (Labor_t = (1+n)*Labor_{t-1}, .mod's own
+          # equation), not a decision-relevant quantity - deterministic given t and n, and it
+          # explodes to 1e6-1e7+ over periods=1000 while every other state stays O(1-100),
+          # dwarfing them for the model. Dropped; per-capita vars already normalize it out.
         action_columns:
           - ConsumptionPerCapita
         endogenous_columns:
@@ -80,7 +86,7 @@ models:
 
   Ramsey_cara:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 300
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 0.5  # actual = int(base * coefficient)
@@ -90,9 +96,9 @@ models:
         - OutputPerCapita
         - InvestmentPerCapita
       parameter_ranges:
-        start_capital: [0.5, 3.0]
+        start_capital_ratio: [0.3, 1.7]
         start_labor: [1.0, 1.0]
-        alpha: [0.33, 0.66]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.15]
         sigma: [0.5, 3.0]
@@ -108,7 +114,8 @@ models:
         state_columns:
           - [CapitalPerCapita, -1]
           - OutputPerCapita
-          - Labor
+          # Labor dropped - see the same note in Ramsey_crra above (raw population level,
+          # explodes to 1e6-1e7+ over periods=1000, not decision-relevant).
         action_columns:
           - ConsumptionPerCapita
         endogenous_columns:
@@ -119,19 +126,13 @@ models:
 
   Ramsey_upgrade:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 150
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 0.35  # actual = int(base * coefficient)
-      column_names:
-        - ConsumptionPerCapita
-        - CapitalPerCapita
-        - OutputPerCapita
-        - InvestmentPerCapita
       parameter_ranges:
-        start_capital: [0.5, 1.5]
-        start_labor: [1.0, 1.0]
-        alpha: [0.33, 0.66]
+        start_capital_ratio: [0.3, 1.7]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.15]
         sigma: [0.5, 3.0]
@@ -141,13 +142,19 @@ models:
       discount_factor_param: beta
       reward: lib.rewards.crra_reward
       reward_kwargs:
-        target_column: ConsumptionPerCapita
+        # Per-effective-labor (stationary), matching action_columns/state_columns below.
+        # ConsumptionPerCapita grows unboundedly with Technology (g=0.02/period compounded
+        # over periods=1000 => ~10^8x by episode end) and would blow up the reward scale.
+        target_column: ConsumptionPerEffectiveLabor
         sigma_column: sigma
       input:
         state_columns:
           - [CapitalPerEffectiveLabor, -1]
-          - Productivity
-          - Labor
+          # Productivity and Labor dropped: Ramsey_upgrade.mod's Technology/Labor are raw
+          # levels (Technology_t=(1+g)*Technology_{t-1}, Labor_t=(1+n)*Labor_{t-1}, no
+          # logged/per-capita variant declared for either), both exploding to 1e5-1e8+ over
+          # periods=1000 - deterministic given t/g/n, not decision-relevant, and swamps the
+          # scale of every genuinely stationary state variable.
           - InterestRate
         action_columns:
           - ConsumptionPerEffectiveLabor
@@ -165,29 +172,32 @@ models:
       periods: ${metadata.periods}
       num_samples:
         base: ${metadata.num_samples}
-        coefficient: 1.5  # actual = int(base * coefficient)
+        coefficient: 1.0  # actual = int(base * coefficient)
       parameter_ranges:
-        start_capital: [0.5, 1.5]
         alpha: [0.3, 0.4]
-        beta: [0.4, 0.6]
-        delta: [0.8, 0.9]
-        n: [0.05, 0.1]
-        g: [0.2, 0.3]
+        beta: [0.4, 0.6]  # discounting between youth and old age (one period ~ a generation)
+        delta: [0.8, 0.9]  # generational depreciation
+        n: [0.05, 0.1]  # population growth per generation
+        g: [0.2, 0.3]  # technology growth per generation
+        sigma: [0.5, 3.0]  # CRRA curvature
+        rho_z: [0.0, 0.5]  # generational TFP persistence
+        productivity_shock_stderr: [0.05, 0.15]
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.olg_log_utility_reward
+      reward: lib.rewards.olg_lifetime_utility_reward
       reward_kwargs:
         consumption_young_column: ConsYoung
         consumption_old_column: ConsOld
         beta_column: beta
+        sigma_column: sigma
       input:
         state_columns:
           - [Capital, -1]
+          - LoggedProductivity
           - Output
           - Wage
           - InterestRate
-          - Savings
         action_columns:
           - Savings
         endogenous_columns:
@@ -199,13 +209,13 @@ models:
 
   RBC_baseline_pf:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 300
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 0.75  # actual = int(base * coefficient)
       parameter_ranges:
-        start_capital: [0.5, 1.5]
-        alpha: [0.33, 0.66]
+        start_capital_ratio: [0.7, 1.3]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.05]
         rho: [0.7, 0.9]
@@ -244,7 +254,7 @@ models:
         base: ${metadata.num_samples}
         coefficient: 0.75  # actual = int(base * coefficient)
       parameter_ranges:
-        alpha: [0.33, 0.66]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.05]
         rho: [0.7, 0.9]
@@ -274,13 +284,13 @@ models:
 
   RBC_capital_stock_shock_pf:
     dynare_model_settings:
-      periods: ${metadata.periods}
+      periods: 250
       num_samples:
         base: ${metadata.num_samples}
         coefficient: 0.5  # actual = int(base * coefficient)
       parameter_ranges:
-        start_capital: [0.05, 3.0]
-        alpha: [0.3, 0.66]
+        start_capital_ratio: [0.7, 1.3]
+        alpha: [0.28, 0.40]
         beta: [0.95, 0.99]
         delta: [0.02, 0.05]
         rho: [0.7, 0.9]
@@ -311,6 +321,7 @@ models:
           - [Capital, -1]
           - LoggedProductivity
           - Productivity
+          - CapitalDestruction
         action_columns:
           - Consumption
           - Labor
@@ -354,6 +365,7 @@ models:
           - [Capital, -1]
           - LoggedProductivity
           - Productivity
+          - CapitalDestruction
         action_columns:
           - Consumption
           - Labor
@@ -401,17 +413,28 @@ models:
         sigma_column: sigma
         A_column: psi
         eta_default: 1.0
+        # RBC_news_shock_model_pf.mod stores Consumption/Labor as their (log), not the level -
+        # C**(1-sigma) on a raw log value is negative-base/NaN roughly half the time.
+        log_inputs: true
       input:
         state_columns:
-          - [Capital, -1]
+          - [LoggedCapital, -1]
           - LoggedProductivity
+          - TFPNews8
+          - TFPNews7
+          - TFPNews6
+          - TFPNews5
+          - TFPNews4
+          - TFPNews3
+          - TFPNews2
+          - TFPNews1
         action_columns:
-          - Consumption
-          - Labor
+          - LoggedConsumption
+          - LoggedLabor
         endogenous_columns:
-          - Output
-          - Investment
-          - Wage
+          - LoggedOutput
+          - LoggedInvestment
+          - LoggedWage
           - AnnualInterestRate
       output:
         data_path: ./data/interim/RBC_news_shock_pf
@@ -437,20 +460,33 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.crra_reward
+      reward: lib.rewards.ces_utility_reward
       reward_kwargs:
-        target_column: Consumption
+        consumption_column: Consumption
+        labor_column: Labor
+        sigma_column: sigma
+        A_column: psi
+        eta_default: 1.0
+        log_inputs: True
       input:
         state_columns:
-          - [Capital, -1]
+          - [LoggedCapital, -1]
           - LoggedProductivity
+          - TFPNews8
+          - TFPNews7
+          - TFPNews6
+          - TFPNews5
+          - TFPNews4
+          - TFPNews3
+          - TFPNews2
+          - TFPNews1
         action_columns:
-          - Consumption
-          - Labor
+          - LoggedConsumption
+          - LoggedLabor
         endogenous_columns:
-          - Output
-          - Investment
-          - Wage
+          - LoggedOutput
+          - LoggedInvestment
+          - LoggedWage
           - AnnualInterestRate
       output:
         data_path: ./data/interim/RBC_news_shock_stoch
@@ -477,18 +513,20 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.stability_reward
+      reward: lib.rewards.ces_utility_reward
       reward_kwargs:
-        target_column: Consumption
+        consumption_column: Consumption
+        labor_column: Labor
         sigma_column: sigma
+        A_column: psi
       input:
         state_columns:
           - [Capital, -1]
           - LoggedProductivity
           - LoggedGovSpending
-          - Labor
         action_columns:
           - Consumption
+          - Labor
         endogenous_columns:
           - Output
           - Investment
@@ -516,31 +554,28 @@ models:
         rho_g: [0.90, 0.99]
         gshare: [0.15, 0.30]
         productivity_shock_stderr: [0.005, 0.010]
-        gov_spending_shock_stderr: [0.008, 0.015]
+        public_good_preference_shock_stderr: [0.008, 0.015]
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.government_welfare
+      reward: lib.rewards.public_good_welfare_reward
       reward_kwargs:
         consumption_column: Consumption
         labor_column: Labor
-        output_column: Output
         gov_spending_column: GovSpending
-        sigma_column: sigma
-        lambda_utility: 1.0
-        lambda_output_gap: 0.1
-        lambda_smoothing: 0.05
+        preference_column: PublicGoodPreference
       input:
         state_columns:
           - [Capital, -1]
           - LoggedProductivity
-          - Output
-          - Consumption
-          - Labor
+          - PublicGoodPreference
         action_columns:
           - GovSpending
         endogenous_columns:
           - LoggedGovSpending
+          - Output
+          - Consumption
+          - Labor
           - Investment
           - Wage
           - InterestRate
@@ -557,15 +592,19 @@ models:
       parameter_ranges:
         beta: [0.95, 0.99]                            # Discount rate (beta)
         sigma: [1.5, 2.0]                             # Risk aversion (sigma)
-        persistence_gov_spending: [0.7, 0.95]         # Persistence of gov spending (rho_G)
+        persistence_trend_growth: [0.0, 0.3]  # Persistence of trend growth shock (rho_G; paper: 0.01)
         persistence_productivity: [0.7, 0.95]         # Persistence of productivity (rho_A)
-        capital_share: [0.3, 0.4]                     # Capital share (alpha_K)
-        labor_share: [0.3, 0.4]                       # Labor share (alpha_N)
+        # Aguiar_Gopinath_2007.mod's production function is Capital^(1-capital_share) * Labor^capital_share
+        # (capital_share is applied to LABOR, matching its own default of 0.68 -> capital gets 1-0.68=0.32,
+        # standard). Sampling capital_share directly in [0.3, 0.4] as if it were capital's own exponent
+        # inverted this: capital would get 0.6-0.7 of output and labor 0.3-0.4, backwards from calibration.
+        capital_share: [0.6, 0.7]                     # Applied as labor's exponent; capital gets 1-this ~ [0.3, 0.4]
+        labor_share: [0.3, 0.4]                       # Separate Cobb-Douglas utility weight (consumption vs. leisure), unrelated to production
         depreciation: [0.02, 0.05]                    # Depreciation rate (delta)
         capital_adjustment_cost: [2.0, 6.0]           # Capital adjustment cost (phi_K)
-        elasticity_substitution: [0.0005, 0.002]      # Elasticity of substitution (eta)
+        debt_elastic_premium: [0.0005, 0.002]  # Debt-elastic interest rate premium (psi)
         debt_share: [0.05, 0.15]                      # Debt share (alpha_D)
-        shock_gov_spending_stderr: [0.02, 0.04]       # Std dev of gov spending shock
+        trend_growth_shock_stderr: [0.02, 0.04]  # Std dev of trend growth shock
         shock_productivity_stderr: [0.003, 0.006]     # Std dev of productivity shock
 
     rl_env_settings:
@@ -578,7 +617,7 @@ models:
           - [Capital, -1]
           - [Debt, -1]
           - Productivity
-          - GovSpending
+          - TrendGrowthShock
         action_columns:
           - Consumption
           - Labor
@@ -613,7 +652,7 @@ models:
         rho_nu: [0.80, 0.90]
         rho_mu: [0.85, 0.95]
         productivity_shock_stderr: [0.020, 0.035]
-        tech_growth_shock_stderr: [0.020, 0.040]
+        tech_growth_shock_stderr: [0.020, 0.035]
         preference_shock_stderr: [0.0, 0.0]
         country_premium_shock_stderr: [0.0, 0.0]
 
@@ -629,12 +668,10 @@ models:
         omega_column: omega
       input:
         state_columns:
-          - Capital
-          - Debt
+          - [Capital, -1]
+          - [Debt, -1]
           - LoggedProductivity
           - TechGrowthRate
-          - PreferenceShock
-          - CountryPremiumShock
         action_columns:
           - Consumption
           - Labor
@@ -686,11 +723,11 @@ models:
         lambda_y: 0.5
       input:
         state_columns:
-          - PriceInflation
-          - OutputGap
-          - RealWageGap
+          - [Output, -1]
+          - [NominalInterestRate, -1]
+          - [RealWageGap, -1]
+          - [NaturalWage, -1]
           - TechnologyShock
-          - MonetaryShock
           - PreferenceShock
         action_columns:
           - NominalInterestRate
@@ -763,8 +800,8 @@ models:
         beta: [0.97, 0.995]
         delta: [0.02, 0.04]
         psi: [0.0, 1.0]
-        rho: [0.90, 0.98]
-        tau: [0.01, 0.05]
+        rho: [0.90, 0.96]
+        tau: [0.01, 0.03]
         phi: [0.05, 0.20]
         h_ss_target: [0.25, 0.40]
         technology_shock_stderr: [0.005, 0.015]
@@ -772,9 +809,13 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.log_reward
+      reward: lib.rewards.separable_utility_reward
       reward_kwargs:
-        target_column: Consumption
+        consumption_column: Consumption
+        labor_column: Labor
+        labor_form: power
+        labor_weight_column: sigma
+        frisch_column: psi
       input:
         state_columns:
           - [Capital, -1]
@@ -813,23 +854,22 @@ models:
 
     rl_env_settings:
       discount_factor_param: beta
-      reward: lib.rewards.stability_reward
+      # stability_reward just returns target_column verbatim - applied to InflationRate that
+      # rewards maximizing inflation forever, not stabilizing it. Faia_2008.mod declares no
+      # output-gap variable, so central_bank_loss's y_gap term is disabled (inflation-only loss).
+      reward: lib.rewards.central_bank_loss
       reward_kwargs:
-        target_column: InflationRate
+        inflation_column: InflationRate
+        output_gap_column: null
       input:
         state_columns:
           - [Employment, -1]
           - [Vacancies, -1]
           - [MeetingRate, -1]
           - [NominalInterestRate, -1]
+          - [GrossOutputB, -1]
           - LogTFP
           - GovernmentSpendingShock
-          - Consumption
-          - InflationRate
-          - UnemploymentRate
-          - MarginalCosts
-          - RealWage
-          - GrossOutputB
         action_columns:
           - NominalInterestRate
         endogenous_columns:
@@ -885,17 +925,10 @@ models:
       input:
         state_columns:
           - [TermsOfTrade, -1]
-          - [NominalExchangeRate, -1]
-          - [NominalInterestRate, -1]
           - [PriceRatioH, -1]
           - LogProductivity
           - OutputForeign
           - InflationForeign
-          - Consumption
-          - Output
-          - RealExchangeRate
-          - InflationCPI
-          - MarginalCost
         action_columns:
           - NominalInterestRate
         endogenous_columns:
@@ -1346,3 +1379,672 @@ models:
   #        - 'Capital'               # k (управляемая переменная)
   #    output:
   #      data_path: ./data/interim/SGU_2004  # Путь для сохранения обработанных данных
+
+
+  Hansen_1985:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        rho_a: [0.85, 0.97]  # AR(1) persistence of TFP (paper: 0.95)
+        A: [1.5, 3.0]  # Labor disutility parameter (paper: 2)
+        h_0: [0.25, 0.40]  # Target steady-state hours worked
+        sigma_eps: [0.004, 0.010]  # TFP shock std dev (paper: 0.00712)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: c
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+        action_columns:
+          - c
+          - h
+        endogenous_columns:
+          - y
+          - invest
+          - w
+          - r
+          - productivity
+      output:
+        data_path: ./data/interim/Hansen_1985
+
+
+  SGU_2003:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      model2: 1  # selects the debt-elastic interest-rate premium closing
+      parameter_ranges:
+        gamma_risk: [1.5, 3.0]  # Risk aversion (paper: 2)
+        omega: [1.2, 1.8]  # Frisch-elasticity-related labor curvature (paper: 1.455)
+        rho: [0.3, 0.6]  # TFP shock persistence (paper: 0.42)
+        sigma_tfp: [0.008, 0.018]  # TFP shock std dev (paper: 0.0129)
+        delta: [0.08, 0.12]  # Depreciation rate (paper: 0.1)
+        alpha: [0.28, 0.36]  # Capital's exponent despite the 'Labor Share' label in the .mod file (paper: 0.32)
+        phi: [0.01, 0.05]  # Capital adjustment cost (paper: 0.028)
+        psi_2: [0.0003, 0.0015]  # Debt-elastic risk premium coefficient (paper: 0.000742)
+        r_bar: [0.03, 0.05]  # Steady-state world interest rate (paper: 0.04)
+        d_bar: [0.5, 0.9]  # Steady-state debt (paper: 0.7442)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: util
+      input:
+        state_columns:
+          - [LoggedCapital, -1]
+          - LoggedProductivity
+          - [d, -1]
+        action_columns:
+          - LoggedConsumption
+          - LoggedLabor
+        endogenous_columns:
+          - LoggedOutput
+          - LoggedInvestment
+          - tb_y
+          - ca_y
+      output:
+        data_path: ./data/interim/SGU_2003
+
+
+  SGU_2004:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        BETTA: [0.92, 0.97]  # Discount factor (paper: 0.95)
+        ALFA: [0.25, 0.35]  # Capital share (paper: 0.3)
+        RHO: [0.0, 0.3]  # TFP persistence (paper's own benchmark: 0, i.i.d.)
+        SIG: [1.5, 3.0]  # Intertemporal elasticity parameter (paper: 2)
+        technology_shock_stderr: [0.006, 0.015]
+
+    rl_env_settings:
+      discount_factor_param: BETTA
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: LoggedConsumption
+        sigma_column: SIG
+        log_input: true
+      input:
+        state_columns:
+          - [LoggedCapital, -1]
+          - LoggedProductivity
+        action_columns:
+          - LoggedConsumption
+        endogenous_columns: []
+      output:
+        data_path: ./data/interim/SGU_2004
+
+
+  Gali_2008_chapter_2:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.98, 0.999]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Risk aversion / inverse IES (paper: 1, log utility)
+        phi: [0.5, 3.0]  # Inverse Frisch elasticity (paper: 1)
+        rho: [0.7, 0.95]  # TFP shock persistence (paper: 0.9)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        eta: [2.0, 6.0]  # Semi-elasticity of money demand (paper: 4)
+        technology_shock_stderr: [0.006, 0.015]
+        monetary_shock_stderr: [0.0015, 0.004]
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: C
+        labor_column: N
+        sigma_column: siggma
+        labor_form: power
+        frisch_column: phi
+      input:
+        state_columns:
+          - A
+        action_columns:
+          - C
+          - N
+        endogenous_columns:
+          - Y
+          - Pi
+          - R
+          - realinterest
+          - W_real
+          - m_growth_ann
+      output:
+        data_path: ./data/interim/Gali_2008_chapter_2
+
+
+  McCandless_2008_Chapter_9:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        A: [1.2, 2.2]  # Labor disutility parameter
+        h_0: [0.25, 0.40]  # Target steady-state hours
+        rho_a: [0.90, 0.98]  # TFP persistence (paper: 0.95)
+        pi: [0.3, 0.7]  # Money growth AR(1) persistence, NOT inflation (paper: 0.48)
+        D: [0.005, 0.02]  # Real-balances utility weight
+        money_growth_shock_stderr: [0.005, 0.02]
+        productivity_shock_stderr: [0.005, 0.02]
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: Real Consumption
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+        labor_weight_scale: -1.0
+        money_column: mreal
+        money_weight_column: D
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+          - g
+        action_columns:
+          - Real Consumption
+          - h
+        endogenous_columns:
+          - y
+          - Real Wage
+          - r
+      output:
+        data_path: ./data/interim/McCandless_2008_Chapter_9
+
+
+  McCandless_2008_Chapter_13:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.97, 0.999]  # Discount factor (paper: 0.99)
+        delta: [0.015, 0.035]  # Depreciation rate (paper: 0.025)
+        theta: [0.30, 0.40]  # Capital share (paper: 0.36)
+        kappa: [0.2, 1.0]  # Capital adjustment cost
+        a: [0.005, 0.02]  # Debt-elastic risk premium sensitivity
+        B: [-3.5, -1.5]  # Composite labor disutility parameter, negative by construction
+        gamma_lambda: [0.90, 0.98]  # TFP persistence
+        gamma_g: [0.90, 0.98]  # Money growth persistence
+        gamma_pstar: [0.90, 0.98]  # Foreign price persistence
+        rstar: [0.01, 0.05]  # Foreign (world) interest rate
+        sigma_lambda: [0.005, 0.02]  # TFP shock scale
+        sigma_g: [0.005, 0.02]  # Money growth shock scale
+        sigma_pstar: [0.005, 0.02]  # Foreign price shock scale
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.separable_utility_reward
+      reward_kwargs:
+        consumption_column: Real Consumption
+        labor_column: h
+        labor_form: linear
+        labor_weight_column: B
+        labor_weight_scale: -1.0
+      input:
+        state_columns:
+          - [k, -1]
+          - lambda
+          - g
+          - pstar
+          - [b, -1]
+        action_columns:
+          - Real Consumption
+          - h
+        endogenous_columns:
+          - Real Wage
+          - r
+          - x
+          - rf
+      output:
+        data_path: ./data/interim/McCandless_2008_Chapter_13
+
+
+  Gali_2015_chapter_3:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1, log utility)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # 1 - labor share in production (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        phi_y: [0.0, 0.25]  # Taylor rule output response (paper: 0.125)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        rho_nu: [0.3, 0.7]  # Policy shock persistence (paper: 0.5)
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        monetary_shock_stderr: [0.15, 0.35]  # percent (paper IRF: 25bp)
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - TechnologyShock
+          - PreferenceShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - NaturalInterestRate
+          - HoursWorked
+          - RealWage
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_3
+
+
+  Gali_2015_chapter_5_discretion:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        rho_u: [0.0, 0.8]  # Cost-push persistence (paper: 0 and 0.8 cases)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        cost_push_shock_stderr: [0.1, 0.3]  # percent
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: WelfareRelevantOutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - CostPushShock
+          - TechnologyShock
+          - PreferenceShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WelfareRelevantOutputGap
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - HoursWorked
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_5_discretion
+
+
+  Gali_2015_chapter_5_commitment:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        siggma: [0.5, 2.0]  # Inverse EIS (paper: 1)
+        varphi: [2.0, 6.0]  # Inverse Frisch elasticity (paper: 5)
+        theta: [0.6, 0.85]  # Calvo price stickiness (paper: 0.75)
+        alppha: [0.2, 0.35]  # (paper: 1/4)
+        epsilon: [6.0, 11.0]  # Goods demand elasticity (paper: 9)
+        eta: [3.0, 4.5]  # Semi-elasticity of money demand (paper: 3.77)
+        rho_u: [0.0, 0.8]  # Cost-push persistence (paper: 0 and 0.8 cases)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_z: [0.3, 0.7]  # Preference shock persistence (paper: 0.5)
+        cost_push_shock_stderr: [0.1, 0.3]  # percent
+        technology_shock_stderr: [0.4, 1.0]  # percent
+        preference_shock_stderr: [0.3, 0.7]  # percent
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: WelfareRelevantOutputGap
+        lambda_y: 0.02
+      input:
+        state_columns:
+          - CostPushShock
+          - TechnologyShock
+          - PreferenceShock
+          - [WelfareRelevantOutputGap, -1]
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WelfareRelevantOutputGap
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - RealInterestRate
+          - HoursWorked
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Gali_2015_chapter_5_commitment
+
+
+  Jermann_Quadrini_2012:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        theta: [0.32, 0.40]  # Capital share (paper: 0.36)
+        betta: [0.975, 0.99]  # Discount factor (paper: 0.9825)
+        delta: [0.02, 0.03]  # Depreciation (paper: 0.025)
+        tau: [0.30, 0.40]  # Tax advantage of debt (paper: 0.35)
+        kappa: [0.10, 0.20]  # Equity-payout adjustment cost (paper: 0.146)
+        xi_ss: [0.14, 0.19]  # Steady-state enforcement tightness (paper-implied: 0.1634 <-> debt/output 3.36)
+        A11: [0.92, 0.97]  # TFP persistence in the (z, xi) VAR (paper: 0.9457)
+        A22: [0.95, 0.98]  # Financial-condition persistence (paper: 0.9703)
+        productivity_shock_stderr: [0.003, 0.006]  # (paper: 0.0045)
+        financial_shock_stderr: [0.007, 0.013]  # (paper: 0.0098)
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.stability_reward
+      reward_kwargs:
+        target_column: Dividends
+      input:
+        state_columns:
+          - [Capital, -1]
+          - [Debt, -1]
+          - Productivity
+          - FinancialConditions
+        action_columns:
+          - Investment
+          - Debt
+          - Dividends
+        endogenous_columns:
+          - Output
+          - Consumption
+          - Labor
+          - Wage
+          - InterestRate
+          - EnforcementMultiplier
+          - FirmValue
+      output:
+        data_path: ./data/interim/Jermann_Quadrini_2012
+
+
+  Gali_Monacelli_2005:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        sigma: [0.8, 2.0]  # Inverse EIS (paper: 1)
+        eta: [0.8, 1.5]  # Home/foreign substitution (paper: 1)
+        gamma_f: [0.8, 1.5]  # Substitution across foreign countries (paper: 1)
+        phi: [1.0, 5.0]  # Inverse Frisch elasticity (paper: 3)
+        epsilon: [4.0, 8.0]  # Variety elasticity (paper: 6)
+        theta: [0.6, 0.85]  # Calvo (paper: 0.75)
+        beta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        alpha: [0.2, 0.5]  # Openness (paper: 0.4)
+        phi_pi: [1.2, 2.5]  # CPI Taylor rule inflation response (paper: 1.5)
+        rhoa: [0.6, 0.9]  # TFP persistence (paper: 0.66)
+        rhoy: [0.8, 0.9]  # World output persistence (paper: 0.86)
+        technology_shock_stderr: [0.5, 1.0]  # percent (paper: 0.71)
+        world_output_shock_stderr: [0.5, 1.0]  # percent (paper: 0.78)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: InflationH
+        output_gap_column: OutputGap
+        lambda_y: 0.057
+      input:
+        state_columns:
+          - TechnologyShock
+          - OutputForeign
+          - [TermsOfTrade, -1]
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - InflationH
+          - InflationCPI
+          - OutputGap
+          - TermsOfTrade
+          - NominalDepreciationRate
+          - NetExports
+          - Employment
+          - ConsumptionH
+      output:
+        data_path: ./data/interim/Gali_Monacelli_2005
+
+
+  Ireland_2004:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        beta: [0.985, 0.995]  # Discount factor (paper: 0.99, calibrated)
+        psi: [0.05, 0.2]  # Phillips-curve slope (paper: 0.1, calibrated)
+        omega: [0.0, 0.15]  # Preference-shock weight in the output gap (estimates 0.00001-0.06)
+        alpha_x: [0.0, 0.4]  # Backward-looking share, IS curve (estimates 0.00001-0.20)
+        alpha_pi: [0.0, 0.4]  # Backward-looking share, Phillips curve (estimates ~0)
+        rho_pi: [0.2, 0.6]  # Rule: inflation feedback (estimates 0.31-0.39)
+        rho_g: [0.1, 0.6]  # Rule: output-growth feedback (estimates 0.24-0.40)
+        rho_x: [0.0, 0.3]  # Rule: output-gap feedback (estimates 0.00001-0.17)
+        rho_a: [0.85, 0.97]  # Preference shock persistence (estimates 0.90-0.99)
+        rho_e: [0.5, 0.99]  # Cost-push persistence (estimates 0.54-0.99)
+        preference_shock_stderr: [1.0, 5.0]  # percent (estimates 3.0 post-1980 - 15.4 pre-1980)
+        cost_push_shock_stderr: [0.02, 0.35]  # percent (estimates 0.02-0.35)
+        technology_shock_stderr: [0.7, 1.1]  # percent (estimates 0.89-1.09)
+        monetary_shock_stderr: [0.2, 0.35]  # percent (estimates 0.28-0.33)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputGap
+        lambda_y: 0.25
+      input:
+        state_columns:
+          - [NominalInterestRate, -1]
+          - [OutputDeviationFromSteadyState, -1]
+          - [OutputGap, -1]
+          - [PriceInflation, -1]
+          - PreferenceShock
+          - CostPushShock
+          - TechnologyShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - OutputGap
+          - OutputDeviationFromSteadyState
+          - OutputGrowth
+          - AnnualNominalRate
+          - AnnualInflation
+      output:
+        data_path: ./data/interim/Ireland_2004
+
+
+  Gali_2010:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        betta: [0.985, 0.995]  # Discount factor (paper: 0.99)
+        alfa: [0.25, 0.4]  # 1 - labor exponent in production (paper: 1/3)
+        varphi: [2.0, 8.0]  # Inverse Frisch elasticity of labor effort (paper: 5)
+        theta_w: [0.6, 0.85]  # Calvo wage rigidity (paper: 0.75)
+        theta_p: [0.6, 0.85]  # Calvo price rigidity (paper: 0.75)
+        gammma: [0.5, 1.5]  # Hiring-cost elasticity to tightness (paper: 1)
+        Theta: [0.001, 0.004]  # Hiring costs / GDP (paper: 0.0014; target-consistent 0.0036)
+        xi: [0.03, 0.1]  # Worker bargaining power (paper low-psi case: 0.05)
+        U: [0.03, 0.06]  # Steady-state unemployment rate (paper: 0.03)
+        x: [0.6, 0.75]  # Steady-state job finding rate (paper: 0.7)
+        phi_pi: [1.2, 2.0]  # Taylor rule inflation response (paper: 1.5)
+        phi_y: [0.0, 0.25]  # Taylor rule output response (paper: 0.125)
+        rho_a: [0.8, 0.95]  # TFP persistence (paper: 0.9)
+        rho_nu: [0.3, 0.7]  # Policy shock persistence (paper: 0.5)
+        technology_shock_stderr: [0.5, 0.9]  # percent (paper IRF: 1)
+        monetary_shock_stderr: [0.15, 0.35]  # percent (paper IRF: 25bp)
+
+    rl_env_settings:
+      discount_factor_param: betta
+      reward: lib.rewards.central_bank_loss
+      reward_kwargs:
+        inflation_column: PriceInflation
+        output_gap_column: OutputDeviationFromSteadyState
+        lambda_y: 0.25
+      input:
+        state_columns:
+          - [Employment, -1]
+          - [RealWage, -1]
+          - TechnologyShock
+        action_columns:
+          - NominalInterestRate
+        endogenous_columns:
+          - PriceInflation
+          - WageInflation
+          - OutputDeviationFromSteadyState
+          - Consumption
+          - UnemploymentRate
+          - RealInterestRate
+          - Markup
+      output:
+        data_path: ./data/interim/Gali_2010
+
+
+  Jermann_1998:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        growth_factor: [1.0, 1.008]  # Gross trend growth gamma (paper: 1.005)
+        alpha: [0.3, 0.4]  # Capital share (paper: 0.36)
+        delta: [0.02, 0.03]  # Depreciation (paper: 0.025)
+        tau: [1.0, 5.0]  # Curvature / risk aversion (paper: 5)
+        h: [0.5, 0.85]  # Internal habit (paper: 0.82)
+        betastar: [0.985, 0.995]  # Discount factor (paper: gamma/1.011138 = 0.9939)
+        rho: [0.9, 0.99]  # TFP persistence (paper: 0.99)
+        xi: [0.1, 0.8]  # Elasticity of I/K to q (paper: 0.23); xi < 1
+        productivity_shock_stderr: [0.006, 0.012]  # (paper: 0.01)
+
+    rl_env_settings:
+      discount_factor_param: betastar
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: HabitAdjustedConsumption
+        sigma_column: tau
+      input:
+        state_columns:
+          - [Capital, -1]
+          - [Consumption, -1]
+          - LoggedProductivity
+        action_columns:
+          - Consumption
+          - Investment
+        endogenous_columns:
+          - Output
+          - RealWage
+          - MUConsumption
+          - RealReturnOnCapital
+          - RiskFreeRate
+          - ConsumptionGrowthRate
+          - OutputGrowthRate
+          - InvestmentGrowthRate
+      output:
+        data_path: ./data/interim/Jermann_1998
+
+
+  Kiyotaki_Moore_1997:
+    dynare_model_settings:
+      periods: ${metadata.periods}
+      num_samples:
+        base: ${metadata.num_samples}
+        coefficient: 1.0
+      parameter_ranges:
+        alpha: [0.25, 0.4]  # Gatherers' production exponent (notes: 1/3)
+        m: [0.3, 1.0]  # Population of gatherers (notes: 0.5)
+        beta: [0.95, 0.98]  # Farmers' discount factor (notes: 0.98)
+        betap: [0.985, 0.995]  # Gatherers' discount factor (notes: 0.99)
+        a: [0.5, 0.8]  # Tradable share of the farmers' fruit (notes: 0.7)
+        c: [0.2, 0.4]  # Non-tradable share, consumed by farmers (notes: 0.3)
+        z: [0.005, 0.02]  # Constant in the gatherers' technology (notes: 0.01)
+        productivity_shock_stderr: [0.0005, 0.0015]  # iid (notes: 0.0011)
+
+    rl_env_settings:
+      discount_factor_param: beta
+      reward: lib.rewards.crra_reward
+      reward_kwargs:
+        target_column: FarmerConsumption
+        sigma_default: 0.0
+      input:
+        state_columns:
+          - [Land, -1]
+          - [Debt, -1]
+          - TechnologyShock
+        action_columns:
+          - Land
+          - Debt
+        endogenous_columns:
+          - LandPrice
+          - EnforcementMultiplier
+          - Consumption
+          - Output
+      output:
+        data_path: ./data/interim/Kiyotaki_Moore_1997

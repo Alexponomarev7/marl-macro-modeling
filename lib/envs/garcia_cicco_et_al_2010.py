@@ -3,7 +3,8 @@ import warnings; warnings.filterwarnings("ignore")
 import numpy as np
 import gymnasium as gym
 
-from lib.envs.environment_base import ENV_TO_ID, AbstractEconomicEnv
+from lib.dataset import Tokenizer
+from lib.envs.environment_base import AbstractEconomicEnv
 
 
 class GarciaCiccoEnv(AbstractEconomicEnv):
@@ -85,9 +86,10 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
             "Spending": gym.spaces.Box(low=0.0, high=np.inf, shape=(1,), dtype=np.float32),
         })
 
+        # [Consumption, HoursWorked, Investment]
         self.action_space = gym.spaces.Box(
-            low=np.array([0.0, -np.inf]),
-            high=np.array([np.inf, np.inf]),
+            low=np.array([0.0, 0.0, -np.inf]),
+            high=np.array([np.inf, np.inf, np.inf]),
             dtype=np.float32,
         )
 
@@ -121,7 +123,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
 
         # Step 1: output from production function
         self.output = np.exp(self.productivity) * self.capital**self.alpha * (self.growth * self.hours)**(1 - self.alpha)
-        self.capital =  ((1 - self.delta) * self.capital + self.investment) / self.growth
+        self.capital = max(((1 - self.delta) * self.capital + self.investment) / self.growth, 0.0)
 
         self.trade_balance = np.exp(self.output - self.consumption - self.investment)
         self.debt = (self.debt * self.interest_rate / self.growth) + (self.consumption + self.investment - self.output)
@@ -168,7 +170,7 @@ class GarciaCiccoEnv(AbstractEconomicEnv):
 
     @property
     def task_id(self) -> int:
-        return ENV_TO_ID["GarciaCicco"]
+        return Tokenizer.ENV_MAPPING["GarciaCiccoEnv"]
 
     @property
     def params(self) -> dict[str, float]:

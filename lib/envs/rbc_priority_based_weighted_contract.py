@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import gymnasium as gym
 from typing import Optional, Dict, Tuple, Union
+from lib.dataset import Tokenizer
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.utility_funcs import log_utility, ces_utility
 
@@ -138,8 +139,10 @@ class RBCPriorityBasedWeightedContractEnv(AbstractEconomicEnv):
 
         for agent, action in actions.items():
             leisure = np.clip(action[1], 0, 1)
+            # equal split if both rates are 0
             investment_consumption = np.clip(action[[0, 2]], 0, 1)
-            investment_consumption = investment_consumption / np.sum(investment_consumption)
+            total_rate = np.sum(investment_consumption)
+            investment_consumption = investment_consumption / total_rate if total_rate > 0 else np.full(2, 0.5)
 
             investment_rate, consumption_rate = investment_consumption
             new_labor = 1 - leisure
@@ -200,6 +203,15 @@ class RBCPriorityBasedWeightedContractEnv(AbstractEconomicEnv):
         """Clean up resources"""
         # included for compatibility with the Gymnasium API
         pass
+
+    @property
+    def task_id(self) -> int:
+        return Tokenizer.ENV_MAPPING["RBCPriorityBasedWeightedContractEnv"]
+
+    @property
+    def agent_ids(self) -> list[str]:
+        """Keys step() expects in its per-agent actions dict."""
+        return list(self.agent_weights)
 
     @property
     def params(self) -> Dict[str, Union[float, str, dict]]:

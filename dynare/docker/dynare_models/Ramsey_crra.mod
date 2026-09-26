@@ -1,5 +1,5 @@
 % Ramsey Model with CRRA Utility and Population Growth
-% 
+%
 % Timing convention:
 %   - CapitalPerCapita_t is end-of-period capital per capita
 %   - Production at t uses CapitalPerCapita_{t-1}
@@ -24,8 +24,8 @@ var ConsumptionPerCapita    $ConsumptionPerCapita$ (long_name='consumption per c
     Capital                 $Capital$ (long_name='aggregate capital')
     Output                  $Output$ (long_name='aggregate output');
 
-parameters alpha beta delta sigma n 
-           k_ss c_ss y_ss i_ss 
+parameters alpha beta delta sigma n
+           k_ss c_ss y_ss i_ss
            start_capital start_labor;
 
 @#if !defined(alpha)
@@ -66,6 +66,11 @@ start_labor = @{start_labor};
 
 % Steady state calculations
 k_ss = ((1/beta - (1 - delta) / (1 + n)) / alpha)^(1/(alpha - 1));
+
+% initial capital = start_capital_ratio * steady-state capital
+@#if defined(start_capital_ratio)
+start_capital = @{start_capital_ratio} * k_ss;
+@#endif
 y_ss = k_ss^alpha;
 i_ss = k_ss * (delta + n) / (1 + n);
 c_ss = y_ss - i_ss;

@@ -115,11 +115,12 @@ def crra_reward(
     target_column: str | None = None,
     sigma_column: str | None = None,
     sigma_default: float = 1.0,
+    log_input: bool = False,
     **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CRRA (Constant Relative Risk Aversion) utility reward:
-    U(c) = c^(1-sigma)/(1-sigma) for sigma ≠ 1, or U(c) = ln(c) for sigma = 1
+    U(c) = (c^(1-sigma) - 1)/(1-sigma) for sigma ≠ 1, or U(c) = ln(c) for sigma = 1
 
     Args:
         data: DataFrame with state/action variables
@@ -127,11 +128,17 @@ def crra_reward(
         target_column: Column name for consumption
         sigma_column: Column name or parameter name for risk aversion coefficient
         sigma_default: Default value for sigma
+        log_input: set True when target_column holds log(c) rather than the level (some .mod
+            files, e.g. RBC_news_shock_model_stoch, are solved in log-deviations and only ever
+            store the log - feeding that straight into c**(1-sigma) raises a negative base to
+            a fractional power (NaN) roughly half the time). Exponentiates before computing utility.
         **kwargs: Additional parameters (ignored)
     """
     assert target_column is not None, "target_column must be provided"
 
     consumption = data[target_column]
+    if log_input:
+        consumption = np.exp(consumption)
 
     if sigma_column is not None and sigma_column in data.columns:
         sigma = data[sigma_column]
@@ -140,21 +147,74 @@ def crra_reward(
     else:
         sigma = sigma_default
 
+    # normalized: U(1) = 0 for every sigma
     if isinstance(sigma, (int, float)):
         if np.isclose(sigma, 1):
             utility = np.log(consumption)
         else:
-            utility = consumption ** (1 - sigma) / (1 - sigma)
+            utility = (consumption ** (1 - sigma) - 1) / (1 - sigma)
     else:
         utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(sigma, 1.0, atol=1e-6)
         utility[log_mask] = np.log(consumption[log_mask])
-        utility[~log_mask] = consumption[~log_mask] ** (1 - sigma[~log_mask])  / (1 - sigma[~log_mask])
+        utility[~log_mask] = (consumption[~log_mask] ** (1 - sigma[~log_mask]) - 1)  / (1 - sigma[~log_mask])
 
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
 
     return utility
+
+
+def separable_utility_reward(
+    data: pd.DataFrame,
+    parameters: dict[str, float],
+    consumption_column: str,
+    labor_column: str | None = None,
+    sigma_column: str | None = None,
+    sigma_default: float = 1.0,
+    labor_form: str = "power",
+    labor_weight_column: str | None = None,
+    labor_weight_default: float = 1.0,
+    labor_weight_scale: float = 1.0,
+    frisch_column: str | None = None,
+    frisch_default: float = 1.0,
+    money_column: str | None = None,
+    price_column: str | None = None,
+    money_weight_column: str | None = None,
+    **kwargs
+) -> pd.Series:
+    """
+    Separable period utility:
+
+        U = (C^(1-sigma) - 1)/(1-sigma)                  (log C at sigma = 1)
+            - chi * L^(1+phi)/(1+phi)                    labor_form="power"
+            - chi * L                                    labor_form="linear"
+            + D * log(M/P)                               with money_column (M/P, or M if no price_column)
+
+    chi = labor_weight_scale * parameters[labor_weight_column], phi = parameters[frisch_column].
+    """
+    C = data[consumption_column]
+    sigma = parameters.get(sigma_column, sigma_default) if sigma_column else sigma_default
+    utility = np.log(C) if np.isclose(sigma, 1.0) else (C ** (1 - sigma) - 1) / (1 - sigma)
+
+    if labor_column is not None:
+        L = data[labor_column]
+        weight = parameters[labor_weight_column] if labor_weight_column else labor_weight_default
+        chi = labor_weight_scale * weight
+        if labor_form == "power":
+            phi = parameters.get(frisch_column, frisch_default) if frisch_column else frisch_default
+            utility = utility - chi * L ** (1 + phi) / (1 + phi)
+        elif labor_form == "linear":
+            utility = utility - chi * L
+        else:
+            raise ValueError(f"unknown labor_form {labor_form!r}")
+
+    if money_column is not None:
+        real_money = data[money_column] if price_column is None else data[money_column] / data[price_column]
+        utility = utility + parameters[money_weight_column] * np.log(real_money)
+
+    utility = utility.replace([np.inf, -np.inf], np.nan)
+    return utility.fillna(-1e6)
 
 
 def cara_reward(
@@ -198,47 +258,28 @@ def cara_reward(
     return utility
 
 
-def olg_log_utility_reward(
+def olg_lifetime_utility_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     consumption_young_column: str = 'ConsYoung',
     consumption_old_column: str = 'ConsOld',
-    beta_column: str | None = None,
-    beta_default: float = 0.4,
-    **kwargs  # Accept any additional kwargs and ignore them
+    beta_column: str = 'beta',
+    sigma_column: str | None = None,
+    **kwargs
 ) -> pd.Series:
     """
-    OLG (Overlapping Generations) log utility reward:
-    U = log(c1_t) + beta * log(c2_{t+1})
-
-    Note: In OLG models, beta represents discounting between youth and old age,
-    not between periods as in Ramsey model.
-
-    Args:
-        data: DataFrame with consumption data
-        parameters: Model parameters including beta
-        consumption_young_column: Column name for young consumption
-        consumption_old_column: Column name for old consumption
-        beta_column: Column name or parameter name for discount factor
-        beta_default: Default value for beta
-        **kwargs: Additional parameters (ignored)
+    Lifetime utility of the generation young at t: U_t = u(c1_t) + beta * u(c2_{t+1}), CRRA u.
+    The last row uses c2_T for c2_{T+1}.
     """
-
     c1 = data[consumption_young_column]
-    c2 = data[consumption_old_column]
+    c2_next = data[consumption_old_column].shift(-1).fillna(data[consumption_old_column].iloc[-1])
+    beta = parameters[beta_column]
+    sigma = parameters[sigma_column] if sigma_column else 1.0
 
-    if beta_column is not None and beta_column in data.columns:
-        beta = data[beta_column]
-    elif beta_column is not None and beta_column in parameters:
-        beta = parameters[beta_column]
-    else:
-        beta = beta_default
-
-    utility = np.log(c1) + beta * np.log(c2)
+    u = np.log if np.isclose(sigma, 1.0) else (lambda c: (c ** (1 - sigma) - 1) / (1 - sigma))
+    utility = u(c1) + beta * u(c2_next)
     utility = utility.replace([np.inf, -np.inf], np.nan)
-    utility = utility.fillna(-1e6)
-
-    return utility
+    return utility.fillna(-1e6)
 
 
 def GarciaCicco(
@@ -274,18 +315,18 @@ def GarciaCicco(
         gamma_default: Default value for gamma
         theta_default: Default value for theta (typically 1.4 * omega)
         omega_default: Default value for omega
-    
+
     Returns:
         pd.Series with utility values for each period
     """
     C = data[consumption_column]
     H = data[labor_column]
-    
+
     if preference_shock_column and preference_shock_column in data.columns:
         nu = data[preference_shock_column]
     else:
         nu = 1.0
-    
+
     gamma = (
         data[gamma_column]
         if gamma_column and gamma_column in data.columns
@@ -293,7 +334,7 @@ def GarciaCicco(
         if gamma_column
         else parameters.get('gamma_c', gamma_default)
     )
-    
+
     theta = (
         data[theta_column]
         if theta_column and theta_column in data.columns
@@ -301,7 +342,7 @@ def GarciaCicco(
         if theta_column
         else parameters.get('theta', theta_default)
     )
-    
+
     omega = (
         data[omega_column]
         if omega_column and omega_column in data.columns
@@ -309,27 +350,40 @@ def GarciaCicco(
         if omega_column
         else parameters.get('omega', omega_default)
     )
-    
+
     consumption_equiv = C - (theta / omega) * (H ** omega)
-    consumption_equiv = np.maximum(consumption_equiv, 1e-10)
-    
+    # floor at 10% of the steady-state value: first-order paths can leave the utility's domain
+    c_ss, h_ss = parameters.get("c_ss"), parameters.get("h_ss")
+    if c_ss is not None and h_ss is not None and c_ss - theta / omega * h_ss ** omega > 0:
+        consumption_equiv = np.maximum(consumption_equiv, 0.1 * (c_ss - theta / omega * h_ss ** omega))
+    # GHH utility's exponent (1-gamma) is negative for the standard gamma>1 case, so clamping
+    # consumption_equiv to a tiny epsilon (as other reward fns do for a *positive* exponent)
+    # backfires here: eps**(negative exponent) explodes toward +inf, landing utility in the
+    # -1e9 to -1e14 range - finite, so it slips past the inf/nan guard below untouched, and
+    # dwarfs every other model's reward by 10+ orders of magnitude. Compute on a dummy safe
+    # value instead and directly substitute the -1e6 sentinel wherever consumption_equiv was
+    # actually invalid.
+    invalid = consumption_equiv <= 1e-8
+    consumption_equiv_safe = np.where(invalid, 1.0, consumption_equiv)
+
     if isinstance(gamma, (int, float)):
         if np.isclose(gamma, 1.0):
-            utility = nu * np.log(consumption_equiv)
+            utility = nu * np.log(consumption_equiv_safe)
         else:
-            utility = nu * (consumption_equiv ** (1 - gamma)) / (1 - gamma)
+            utility = nu * (consumption_equiv_safe ** (1 - gamma)) / (1 - gamma)
     else:
         utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(gamma, 1.0, atol=1e-6)
-        utility[log_mask] = nu * np.log(consumption_equiv[log_mask])
+        utility[log_mask] = nu * np.log(consumption_equiv_safe[log_mask])
         utility[~log_mask] = (
-            nu * (consumption_equiv[~log_mask] ** (1 - gamma[~log_mask])) 
+            nu * (consumption_equiv_safe[~log_mask] ** (1 - gamma[~log_mask]))
             / (1 - gamma[~log_mask])
         )
-    
+
+    utility = pd.Series(np.where(invalid, -1e6, utility), index=data.index)
     utility = utility.replace([np.inf, -np.inf], np.nan)
     utility = utility.fillna(-1e6)
-    
+
     return utility
 
 
@@ -383,11 +437,12 @@ def ces_utility_reward(
     sigma_default: float = 2.0,
     eta_default: float = 1.0,
     A_default: float = 1.0,
+    log_inputs: bool = False,
     **kwargs  # Accept any additional kwargs and ignore them
 ) -> pd.Series:
     """
     CES utility reward:
-    U(C,L) = C^(1-sigma)/(1-sigma) + A * (1-L)^(1-eta)/(1-eta)
+    U(C,L) = (C^(1-sigma) - 1)/(1-sigma) + A * ((1-L)^(1-eta) - 1)/(1-eta)
 
     Args:
         data: DataFrame with state/action variables
@@ -400,10 +455,18 @@ def ces_utility_reward(
         sigma_default: Default value for sigma
         eta_default: Default value for eta
         A_default: Default value for A
+        log_inputs: set True when consumption_column/labor_column hold log(C)/log(L) rather
+            than the level (some .mod files, e.g. RBC_news_shock_model_pf/_stoch, are solved
+            in log-deviations and only ever store the log - feeding that straight into
+            C**(1-sigma) raises a negative base to a fractional power (NaN) roughly half the
+            time). Exponentiates before computing utility.
         **kwargs: Additional parameters (ignored)
     """
     C = data[consumption_column]
     L = data[labor_column]
+    if log_inputs:
+        C = np.exp(C)
+        L = np.exp(L)
 
     sigma = (
         data[sigma_column]
@@ -429,17 +492,18 @@ def ces_utility_reward(
         else A_default
     )
 
+    # normalized: each term is 0 at C = 1 and leisure = 1
     if isinstance(sigma, (int, float)):
         if np.isclose(sigma, 1.0):
             consumption_utility = np.log(C)
         else:
-            consumption_utility = C ** (1 - sigma) / (1 - sigma)
+            consumption_utility = (C ** (1 - sigma) - 1) / (1 - sigma)
     else:
         consumption_utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(sigma, 1.0, atol=1e-6)
         consumption_utility[log_mask] = np.log(C[log_mask])
         consumption_utility[~log_mask] = (
-            C[~log_mask] ** (1 - sigma[~log_mask]) / (1 - sigma[~log_mask])
+            (C[~log_mask] ** (1 - sigma[~log_mask]) - 1) / (1 - sigma[~log_mask])
         )
 
     leisure = np.maximum(1 - L, 1e-10)
@@ -448,13 +512,13 @@ def ces_utility_reward(
         if np.isclose(eta, 1.0):
             leisure_utility = A * np.log(leisure)
         else:
-            leisure_utility = A * leisure ** (1 - eta) / (1 - eta)
+            leisure_utility = A * (leisure ** (1 - eta) - 1) / (1 - eta)
     else:
         leisure_utility = pd.Series(index=data.index, dtype=float)
         log_mask = np.isclose(eta, 1.0, atol=1e-6)
         leisure_utility[log_mask] = A * np.log(leisure[log_mask])
         leisure_utility[~log_mask] = (
-            A * leisure[~log_mask] ** (1 - eta[~log_mask]) / (1 - eta[~log_mask])
+            A * (leisure[~log_mask] ** (1 - eta[~log_mask]) - 1) / (1 - eta[~log_mask])
         )
 
     utility = consumption_utility + leisure_utility
@@ -464,112 +528,76 @@ def ces_utility_reward(
     return utility
 
 
-def government_welfare(
+def public_good_welfare_reward(
     data: pd.DataFrame,
     parameters: dict[str, float],
     consumption_column: str = 'Consumption',
     labor_column: str = 'Labor',
-    output_column: str = 'Output',
     gov_spending_column: str = 'GovSpending',
-    sigma_column: str | None = 'sigma',
-    lambda_utility: float = 1.0,
-    lambda_output_gap: float = 0.1,
-    lambda_smoothing: float = 0.05,
+    preference_column: str = 'PublicGoodPreference',
+    sigma_column: str = 'sigma',
+    psi_column: str = 'psi',
+    chi_column: str = 'chi_bar',
+    **kwargs
 ) -> pd.Series:
     """
-    Calculate government welfare function.
+    Benevolent government's period welfare: household utility including the public good,
 
-    Welfare = lambda_u * U(C,L) - lambda_y * (Y/Y_ss - 1)² - lambda_g * (ΔG/G_ss)²
-    
-    where:
-    - U(C,L) is household utility from consumption and leisure
-    - (Y/Y_ss - 1)² penalizes deviations from steady-state output
-    - (ΔG/G_ss)² penalizes volatile government spending changes
-    
-    Args:
-        data: DataFrame with simulation data
-        parameters: Model parameters from Dynare
-        consumption_column: Column name for consumption data
-        labor_column: Column name for labor data
-        output_column: Column name for output data
-        gov_spending_column: Column name for government spending data
-        sigma_column: Column name for CRRA parameter (or None for default=1)
-        lambda_utility: Weight for household utility component
-        lambda_output_gap: Weight for output stabilization penalty
-        lambda_smoothing: Weight for government spending smoothing penalty
-    
-    Returns:
-        pd.Series with welfare values for each time period
+        W = (C^(1-sigma) - 1)/(1-sigma) + psi*log(1-L) + chi_bar*exp(z)*log(G)   (log C at sigma=1)
+
+    where z is the public-good preference shock.
     """
     C = data[consumption_column]
     L = data[labor_column]
-    Y = data[output_column]
     G = data[gov_spending_column]
-    
-    if sigma_column and sigma_column in parameters:
-        sigma = parameters[sigma_column]
-    else:
-        sigma = 1.0
-    
-    psi = parameters.get('psi', 1.0)
-    y_ss = parameters.get('y_ss', Y.mean())
-    g_ss = parameters.get('g_ss', G.mean())
+    chi = parameters[chi_column] * np.exp(data[preference_column])
+    sigma = parameters[sigma_column]
 
     if np.isclose(sigma, 1.0):
         consumption_utility = np.log(C)
     else:
-        consumption_utility = (C ** (1 - sigma)) / (1 - sigma)
-    
-    leisure = np.maximum(1 - L, 1e-10)
-    leisure_utility = psi * np.log(leisure)
-    household_utility = consumption_utility + leisure_utility
+        consumption_utility = (C ** (1 - sigma) - 1) / (1 - sigma)
 
-    output_gap = ((Y - y_ss) / y_ss) ** 2
-
-    g_change = (G.diff().fillna(0) / g_ss) ** 2
-    
     welfare = (
-        lambda_utility * household_utility 
-        - lambda_output_gap * output_gap 
-        - lambda_smoothing * g_change
+        consumption_utility
+        + parameters[psi_column] * np.log(np.maximum(1 - L, 1e-10))
+        + chi * np.log(G)
     )
-    
     welfare = welfare.replace([np.inf, -np.inf], np.nan)
-    welfare = welfare.fillna(-1e6)
-    
-    return welfare
+    return welfare.fillna(-1e6)
 
 
 def central_bank_loss(
     data: pd.DataFrame,
     parameters: dict[str, float],
     inflation_column: str = 'price_inflation',
-    output_gap_column: str = 'output_gap',
+    output_gap_column: str | None = 'output_gap',
     lambda_y: float = 0.5,
     inflation_target: float = 0.0,
 ) -> pd.Series:
     """
     Central bank quadratic loss function.
-    
-    L = pi² + lambda_y * y_gap²
-    
+
+    L = pi² + lambda_y * y_gap²  (y_gap term dropped if the model has no output-gap variable)
+
     Returns -L as reward (minimizing loss = maximizing negative loss).
-    
+
     Args:
         data: DataFrame with simulation data
         parameters: Model parameters
         inflation_column: Column name for inflation
-        output_gap_column: Column name for output gap
+        output_gap_column: Column name for output gap, or None for inflation-only stabilization
         lambda_y: Weight on output gap stabilization
         inflation_target: Target inflation rate (usually 0 in linear models)
-    
+
     Returns:
         pd.Series with reward (negative loss) for each period
     """
     pi = data[inflation_column]
-    y_gap = data[output_gap_column]
-
-    loss = (pi - inflation_target)**2 + lambda_y * y_gap**2
+    loss = (pi - inflation_target)**2
+    if output_gap_column is not None:
+        y_gap = data[output_gap_column]
+        loss = loss + lambda_y * y_gap**2
     reward = -loss
 
     reward = reward.replace([np.inf, -np.inf], np.nan)
@@ -587,7 +615,7 @@ def epstein_zin_utility(
     """
     Period utility for Epstein-Zin preferences.
     u(C, L) = C^nu * (1-L)^(1-nu)
-    This is the flow utility component before Epstein-Zin aggregation.
+    This is the flow utility before the recursive aggregation; nu is read from `parameters`.
     """
     C = data[consumption_column]
     L = data[labor_column]
@@ -619,10 +647,10 @@ def soe_welfare_reward(
 ) -> pd.Series:
     """
     Small Open Economy welfare reward from Faia & Monacelli (2008).
-    
+
     Welfare: W = U(C) - V(L) = C^(1-sigma)/(1-sigma) - L^(1+phi)/(1+phi)
     For sigma=1: U(C) = log(C)
-    
+
     Args:
         data: DataFrame with Consumption and Labor columns
         parameters: Model parameters
@@ -633,33 +661,33 @@ def soe_welfare_reward(
         sigma_default: Default value for sigma
         phi_default: Default value for phi
         **kwargs: Additional parameters (ignored)
-    
+
     Returns:
         Series of welfare values
     """
     C = data[consumption_column]
     L = data[labor_column]
-    
+
     if sigma_column is not None and sigma_column in parameters:
         sigma = parameters[sigma_column]
     else:
         sigma = sigma_default
-    
+
     if phi_column is not None and phi_column in parameters:
         phi = parameters[phi_column]
     else:
         phi = phi_default
-    
+
     if np.isclose(sigma, 1.0):
         utility_c = np.log(C)
     else:
         utility_c = (C ** (1 - sigma) - 1) / (1 - sigma)
-    
+
     disutility_l = L ** (1 + phi) / (1 + phi)
-    
+
     welfare = utility_c - disutility_l
-    
+
     welfare = welfare.replace([np.inf, -np.inf], np.nan)
     welfare = welfare.fillna(-1e6)
-    
+
     return welfare

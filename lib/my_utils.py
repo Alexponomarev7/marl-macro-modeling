@@ -11,6 +11,7 @@ def set_global_seed(seed: int):
     logger.info(f"setting global seed: {seed}")
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 def get_run_id():
