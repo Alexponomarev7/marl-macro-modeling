@@ -15,6 +15,7 @@ max_seq_len: 50
 state_dropout: 0.0  # training: probability of hiding each state variable of an episode
 state_noise: 0.0  # training: state noise std relative to each variable's std
 hide_latent: 0.0  # training: probability of hiding all latent states (shocks, TFP) of an episode
+dynamics_weight: 0.1  # training: weight of the next-state loss (model.dynamics_head)
 
 model:
   _target_: lib.models.transformer.AlgorithmDistillationTransformer
@@ -32,6 +33,7 @@ model:
   ridge_channel: true  # in-context ridge estimate as an action input (causal only)
   ridge_windows: []  # extra ridge estimates over the last k steps each
   ridge_skip: true  # output a_{t-1} + a learned mix of the ridge estimates + a gated correction
+  dynamics_head: true  # also predict s_{t+1} - s_t (causal only)
 optimizer:
   _target_: torch.optim.AdamW
   lr: 1.0e-4  # peak, after warmup (symlog inputs need 3.0e-5)

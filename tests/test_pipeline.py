@@ -106,13 +106,13 @@ def _batch(ds, n=3):
     return {k: torch.stack([ds[i][k] for i in range(n)]) for k in ds[0]}
 
 
-def _forward(model, b, **override):
+def _forward(model, b, out=0, **override):
     args = dict(states=b["states"], states_info=b["states_info"], actions=b["prev_actions"],
                 actions_info=b["actions_info"], rewards=b["prev_reward"], task_ids=b["task_id"],
                 model_params=b["model_params"])
     args.update(override)
     with torch.no_grad():
-        return model(**args)[0]
+        return model(**args)[out]
 
 
 def test_residual_head_starts_at_persistence(episode_dir, tmp_path):
@@ -176,6 +176,34 @@ def test_causal_mode_is_causal_and_ignores_placeholders(episode_dir, tmp_path):
     actions[:, 0], rewards_[:, 0] = 123.0, -7.0
     moved = _forward(model, b, actions=actions, rewards=rewards_, first_step=start)
     assert torch.allclose(moved[:, 1:], base[:, 1:], atol=1e-6)
+
+
+def test_dynamics_head_predicts_state_changes_in_state_units(episode_dir, tmp_path):
+    torch.manual_seed(0)
+    model = _model(input_normalization="causal", dynamics_head=True)
+    torch.nn.init.normal_(model.dynamics_head[-1].weight, std=0.1)
+    b = _batch(EconomicsDataset(_index(episode_dir, tmp_path), **DIMS, max_seq_len=L, random_window=False))
+    base = _forward(model, b, out=1)["dynamics"]
+    states = b["states"].clone(); states[..., 0] *= 1000.0
+    moved = _forward(model, b, out=1, states=states)["dynamics"]
+    assert torch.allclose(moved[..., 0], 1000.0 * base[..., 0], rtol=1e-4, atol=1e-6)
+    assert torch.allclose(moved[..., 1], base[..., 1], rtol=1e-4, atol=1e-8)
+
+
+def test_next_state_loss_scores_only_real_next_steps():
+    from pipeline.run_pipeline import next_state_loss
+    g = torch.Generator().manual_seed(0)
+    states = torch.randn(2, L, 3, generator=g).cumsum(1)
+    states[..., 2] = 0.0
+    info = torch.tensor([[5, 6, 0], [5, 6, 0]])  # the third slot is padding
+    mask = torch.ones(2, L, dtype=torch.bool)
+    mask[1, :10] = False  # left padding in the second window
+    perfect = torch.cat([states[:, 1:] - states[:, :-1], torch.zeros(2, 1, 3)], 1)
+    wrong = perfect.clone()
+    wrong[:, -1], wrong[..., 2], wrong[1, :10] = 99.0, 99.0, 99.0  # no next step, padded slot, padded steps
+    assert next_state_loss(perfect, states, mask, info) < 1e-10
+    assert next_state_loss(wrong, states, mask, info) < 1e-10
+    assert next_state_loss(perfect + 0.1, states, mask, info) > 0
 
 
 def test_ridge_channel_matches_the_oracle_and_the_model_stays_causal(episode_dir, tmp_path):

@@ -25,7 +25,7 @@ from lib.my_utils import (
     get_run_id,
 )
 from lib.dataset import EconomicsDataset, Tokenizer
-from lib.models.transformer import causal_zscore, symlog
+from lib.models.transformer import UNIT_LEVEL_FLOOR, causal_zscore, symlog
 from lib.envs.environment_base import AbstractEconomicEnv
 from lib.generate_dataset import (
     DatasetGenerator,
@@ -153,6 +153,18 @@ def decay_param_groups(module: torch.nn.Module) -> list[dict]:
     ]
 
 
+def next_state_loss(pred: torch.Tensor, states: torch.Tensor, attention_mask: torch.Tensor,
+                    states_info: torch.Tensor) -> torch.Tensor:
+    """Mean squared error of the predicted s_{t+1} - s_t over positions whose next step is in the window,
+    in units of each window's RMS state change (a loss scale, not a model input)."""
+    change = states[:, 1:] - states[:, :-1]
+    ok = attention_mask.bool()
+    pair = ((ok[:, 1:] & ok[:, :-1]).unsqueeze(-1) & (states_info != 0).unsqueeze(1)).to(change.dtype)
+    rms = torch.sqrt((change ** 2 * pair).sum(1, keepdim=True) / pair.sum(1, keepdim=True).clamp(min=1))
+    scale = rms + UNIT_LEVEL_FLOOR * states.abs().mean(1, keepdim=True) + 1e-12
+    return (((pred[:, :-1] - change) / scale) ** 2 * pair).sum() / pair.sum().clamp(min=1)
+
+
 class EconomicPolicyModel(L.LightningModule):
     """PyTorch Lightning module for training economic policies."""
 
@@ -168,6 +180,7 @@ class EconomicPolicyModel(L.LightningModule):
         test_envs: list[tuple[str, AbstractEconomicEnv]] = [],
         val_episodes: int = 10,
         val_steps: int = 1000,
+        dynamics_weight: float = 0.1,
     ):
         """
         Initialize the policy model.
@@ -179,6 +192,7 @@ class EconomicPolicyModel(L.LightningModule):
             test_envs: List of test environments for validation
             val_episodes: Number of episodes for environment validation
             val_steps: Number of steps within validation episode
+            dynamics_weight: Weight of the next-state loss of the model's dynamics head
         """
         super().__init__()
         self.save_hyperparameters(ignore=['test_envs'])
@@ -191,6 +205,7 @@ class EconomicPolicyModel(L.LightningModule):
         self.test_envs = test_envs
         self.val_episodes = val_episodes
         self.val_steps = val_steps
+        self.dynamics_weight = dynamics_weight
         self.state_max_dim = state_max_dim
         self.action_max_dim = action_max_dim
         self.endogenous_max_dim = endogenous_max_dim
@@ -241,7 +256,7 @@ class EconomicPolicyModel(L.LightningModule):
         bound = 1e9 if causal else 1000.0
         first_step = batch['window_start'] == 0
         # step t sees (s_t, a_{t-1}, r_{t-1}) and is scored on a_t
-        predicted_actions, pinn_preds = self(
+        predicted_actions, aux = self(
             states=self._sanitize(batch['states'], bound),
             states_info=batch['states_info'],
             actions=self._sanitize(batch['prev_actions'], bound),
@@ -263,13 +278,19 @@ class EconomicPolicyModel(L.LightningModule):
         loss = self._masked_loss(predicted_actions / scale, self._sanitize(batch['actions'], bound) / scale, action_mask)
         self.log(f'{stage}_action_loss', loss, on_step=(stage == 'train'), on_epoch=True)
 
-        if pinn_preds is not None and (batch['endogenous_info'] != 0).any():
+        if 'pinn' in aux and (batch['endogenous_info'] != 0).any():
             endo_mask = valid_steps & (batch['endogenous_info'] != 0).unsqueeze(1)
             endogenous = self._sanitize(batch['endogenous'], bound)
             target = causal_zscore(endogenous, batch['attention_mask']) if causal else symlog(endogenous)
-            pinn_loss = self._masked_loss(pinn_preds, target, endo_mask)
+            pinn_loss = self._masked_loss(aux['pinn'], target, endo_mask)
             self.log(f'{stage}_pinn_loss', pinn_loss, on_step=(stage == 'train'), on_epoch=True)
             loss = loss + pinn_loss
+
+        if 'dynamics' in aux:
+            dynamics_loss = next_state_loss(aux['dynamics'], self._sanitize(batch['states'], bound), batch['attention_mask'],
+                                            batch['states_info'])
+            self.log(f'{stage}_dynamics_loss', dynamics_loss, on_step=(stage == 'train'), on_epoch=True)
+            loss = loss + self.dynamics_weight * dynamics_loss
 
         assert not torch.isnan(loss)
         self.log(f'{stage}_loss', loss, on_step=(stage == 'train'), on_epoch=True)
@@ -324,6 +345,7 @@ def main(hydra_cfg: DictConfig) -> None:
         state_max_dim=cfg['train']['max_state_dim'],
         action_max_dim=cfg['train']['max_action_dim'],
         endogenous_max_dim=cfg['train']['max_endogenous_dim'],
+        dynamics_weight=cfg['train'].get('dynamics_weight', 0.1),
     )
 
     data_module = DataModule(

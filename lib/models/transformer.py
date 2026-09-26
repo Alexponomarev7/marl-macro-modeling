@@ -178,6 +178,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         ridge_windows: tuple[int, ...] = (),
         ridge_skip: bool = False,
         ridge_penalty: float = RIDGE_PENALTY,
+        dynamics_head: bool = False,
     ):
         """context_only: hide the task id and the model parameters.
         input_normalization: "symlog" or "causal" (scale-free running statistics, see causal_features).
@@ -185,12 +186,14 @@ class AlgorithmDistillationTransformer(nn.Module):
         ridge_windows: also add the estimate over each of these last numbers of steps.
         ridge_skip: predict a_{t-1} plus a learned convex mix of no change and the ridge estimates,
             plus a gated correction from the head.
+        dynamics_head: also predict s_{t+1} - s_t in units of each state's running RMS of changes
+            (causal mode only).
         """
         super().__init__()
         if input_normalization not in ("symlog", "causal"):
             raise ValueError(f"input_normalization must be 'symlog' or 'causal', got {input_normalization!r}")
-        if ridge_channel and input_normalization != "causal":
-            raise ValueError("ridge_channel needs input_normalization='causal'")
+        if (ridge_channel or dynamics_head) and input_normalization != "causal":
+            raise ValueError("ridge_channel and dynamics_head need input_normalization='causal'")
         if (ridge_windows or ridge_skip) and not ridge_channel:
             raise ValueError("ridge_windows and ridge_skip need ridge_channel")
         self.state_dim = state_dim
@@ -254,6 +257,9 @@ class AlgorithmDistillationTransformer(nn.Module):
                 nn.ReLU(),
                 nn.Linear(self.d_model // 2, pinn_output_dim)
             )
+        self.dynamics_head = nn.Sequential(
+            nn.Linear(self.d_model, self.d_model // 2), nn.ReLU(), nn.Linear(self.d_model // 2, state_dim)
+        ) if dynamics_head else None
 
     @staticmethod
     def _observed_steps(states: torch.Tensor, first_step: torch.Tensor | None, attention_mask: torch.Tensor | None):
@@ -286,7 +292,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         model_params: torch.Tensor,
         first_step: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """
         Forward pass creating sequences of states, actions, and rewards, and predicts actions for each timestep.
 
@@ -299,7 +305,8 @@ class AlgorithmDistillationTransformer(nn.Module):
             attention_mask: [batch_size, seq_length] bool, non-padding positions (causal mode only)
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor | None]: Predicted actions and optional PINN predictions
+            tuple[torch.Tensor, dict[str, torch.Tensor]]: Predicted actions and the predictions of the
+                enabled auxiliary heads ("pinn", "dynamics")
         """
         seq_length = states.shape[1]
         bound = 1e9 if self.input_normalization == "causal" else 1000.0
@@ -311,7 +318,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         if self.input_normalization == "causal":
             valid, prev_valid = self._observed_steps(states, first_step, attention_mask)
             after = lambda ok: ok & torch.cat([torch.zeros_like(ok[:, :1]), ok[:, :-1]], 1)  # at t and t-1
-            state_channels, _ = causal_features(states, valid, after(valid), lagged=True)
+            state_channels, state_unit = causal_features(states, valid, after(valid), lagged=True)
             action_channels, action_unit = causal_features(prev_actions, prev_valid, after(prev_valid))
             if self.ridge_channel:
                 ridges = [(in_context_ridge_change(states, prev_actions, after(valid), after(prev_valid), window, self.ridge_penalty)
@@ -361,12 +368,12 @@ class AlgorithmDistillationTransformer(nn.Module):
             residual = residual * action_unit
         actions_pred = prev_actions + residual  # [bs, seq_length, action_dim]
 
-        # Optional PINN predictions
-        pinn_pred = None
+        aux = {}
         if self.has_pinn:
-            pinn_pred = self.pinn_head(encoded) # [bs, seq_length-1, pinn_output_dim]
-
-        return actions_pred, pinn_pred
+            aux["pinn"] = self.pinn_head(encoded)  # [bs, seq_length, pinn_output_dim]
+        if self.dynamics_head is not None:
+            aux["dynamics"] = self.dynamics_head(encoded) * state_unit  # s_{t+1} - s_t, [bs, seq_length, state_dim]
+        return actions_pred, aux
 
     def _get_state_info(self, state: dict) -> tuple[torch.Tensor, torch.Tensor]:
         state_values, state_ids = [], []
