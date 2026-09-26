@@ -318,6 +318,22 @@ def test_in_context_ridge_recovers_a_linear_policy():
     assert (((pred - a) ** 2).mean(-1)[:, 10:] / a.var()).max() < 1e-3
 
 
+def test_in_context_ridge_ignores_rounding_noise():
+    """A state that so far moved only by rounding error must not blow up the estimate when it first moves."""
+    from lib.evaluation import _in_context_ridge
+    from lib.models.transformer import in_context_ridge_change
+    g = torch.Generator().manual_seed(0)
+    s = torch.randn(1, L, 2, generator=g, dtype=torch.float64).cumsum(1)
+    s[..., 1] = 1e-18 * torch.randn(1, L, generator=g, dtype=torch.float64)
+    s[:, 10:, 1] += 0.5
+    a = 5.0 + 2.0 * s[..., :1]
+    pa = torch.cat([a[:, :1], a[:, :-1]], 1)
+    first = torch.arange(L).view(1, L, 1) > 0
+    for pred in (_in_context_ridge(s, pa, a, torch.ones(1, L, dtype=torch.bool)).double(),
+                 pa + in_context_ridge_change(s, pa, first, first)):
+        assert (pred - a)[:, 5:].abs().max() < 0.1
+
+
 def test_oracle_change_is_clamped():
     from lib.evaluation import ORACLE_CLAMP, _in_context_ridge
     g = torch.Generator().manual_seed(0)

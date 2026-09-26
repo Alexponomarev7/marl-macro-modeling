@@ -66,14 +66,17 @@ def causal_features(x: torch.Tensor, level_ok: torch.Tensor, delta_ok: torch.Ten
     return torch.stack(channels, -1).clamp(-10.0, 10.0).float(), unit.float()
 
 
-RIDGE_PENALTY = 1e-2  # on standardized features
+RIDGE_PENALTY = 1e-4  # on features normalized by their sum of squares over the context
+RIDGE_MIN_PAIRS = 3
+RIDGE_MOVE_FLOOR = 1e-10  # a state whose changes in the context have a smaller root sum of squares is constant
 
 
 def in_context_ridge_change(states: torch.Tensor, prev_actions: torch.Tensor, state_delta_ok: torch.Tensor,
-                            action_delta_ok: torch.Tensor, window: int | None = None) -> torch.Tensor:
+                            action_delta_ok: torch.Tensor, window: int | None = None,
+                            penalty: float = RIDGE_PENALTY) -> torch.Tensor:
     """In-context ridge estimate of a_t - a_{t-1}: regress a_tau - a_{tau-1} on s_tau - s_{tau-1}
     over tau < t (the last `window` pairs if given) and evaluate at s_t - s_{t-1}; 0 until there
-    are two more pairs than moving states. The pair of step tau is complete at position tau + 1.
+    are RIDGE_MIN_PAIRS pairs. The pair of step tau is complete at position tau + 1.
 
     states [B, L, S], prev_actions [B, L, A]; *_delta_ok [B, L, 1]. Returns [B, L, A].
     Runs on the CPU: batched linalg.solve is slow on MPS.
@@ -92,12 +95,12 @@ def in_context_ridge_change(states: torch.Tensor, prev_actions: torch.Tensor, st
     xtx = total(x.unsqueeze(-1) * x.unsqueeze(-2))                    # [B, L, S, S], pairs completed by t
     xty = total(x.unsqueeze(-1) * y.unsqueeze(-2))                    # [B, L, S, A]
     scale = torch.diagonal(xtx, dim1=-2, dim2=-1).sqrt()               # [B, L, S]
-    moving = scale > 0
+    moving = scale > RIDGE_MOVE_FLOOR
     scale = torch.where(moving, scale, 1.0)
-    gram = xtx / (scale.unsqueeze(-1) * scale.unsqueeze(-2)) + RIDGE_PENALTY * torch.eye(states.shape[-1], dtype=torch.float64)
+    gram = xtx / (scale.unsqueeze(-1) * scale.unsqueeze(-2)) + penalty * torch.eye(states.shape[-1], dtype=torch.float64)
     coef = torch.linalg.solve(gram, xty / scale.unsqueeze(-1))        # standardized G_hat
     change = torch.einsum("bls,blsa->bla", torch.where(moving, ds / scale, 0.0), coef)
-    enough = total(pair_ok) >= moving.sum(-1, keepdim=True) + 2
+    enough = total(pair_ok) >= RIDGE_MIN_PAIRS
     return torch.where(enough, change, 0.0).to(device=device, dtype=dtype)
 
 
@@ -173,6 +176,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         input_normalization: str = "symlog",
         ridge_channel: bool = False,
         ridge_windows: tuple[int, ...] = (),
+        ridge_penalty: float = RIDGE_PENALTY,
     ):
         """context_only: hide the task id and the model parameters.
         input_normalization: "symlog" or "causal" (scale-free running statistics, see causal_features).
@@ -196,6 +200,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.input_normalization = input_normalization
         self.ridge_channel = ridge_channel
         self.ridge_windows = tuple(ridge_windows)
+        self.ridge_penalty = ridge_penalty
 
         self.tokenizer = Tokenizer()
         # slot = [variable-name embedding | numeric channels]
@@ -297,7 +302,7 @@ class AlgorithmDistillationTransformer(nn.Module):
             state_channels, _ = causal_features(states, valid, after(valid), lagged=True)
             action_channels, action_unit = causal_features(prev_actions, prev_valid, after(prev_valid))
             if self.ridge_channel:
-                ridges = [(in_context_ridge_change(states, prev_actions, after(valid), after(prev_valid), window)
+                ridges = [(in_context_ridge_change(states, prev_actions, after(valid), after(prev_valid), window, self.ridge_penalty)
                            / action_unit).clamp(-10.0, 10.0).float() for window in (None, *self.ridge_windows)]  # in action units
                 action_channels = torch.cat([action_channels] + [r.unsqueeze(-1) for r in ridges], -1)
             reward_channels, _ = causal_features(rewards, prev_valid, after(prev_valid))
