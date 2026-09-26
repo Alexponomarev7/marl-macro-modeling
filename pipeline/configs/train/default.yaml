@@ -31,7 +31,7 @@ model:
   context_only: true  # hide the task id and the model parameters
   input_normalization: causal  # symlog | causal (scale-free; inference() then needs initial_action)
   ridge_channel: true  # in-context ridge estimate as an action input (causal only)
-  ridge_windows: []  # extra ridge estimates over the last k steps each
+  ridge_windows: [10]  # extra ridge estimates over the last k steps each
   ridge_skip: true  # output a_{t-1} + a learned mix of the ridge estimates + a gated correction
   dynamics_head: true  # also predict s_{t+1} - s_t (causal only)
 optimizer:
