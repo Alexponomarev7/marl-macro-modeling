@@ -3,7 +3,7 @@ defaults:
   - _self_
 
 data_root: ${dataset.workdir}
-epochs: 100
+epochs: 600
 val_freq: 10
 gradient_clip_val: 1.0
 device: auto  # Lightning accelerator: auto, cpu, mps, gpu
