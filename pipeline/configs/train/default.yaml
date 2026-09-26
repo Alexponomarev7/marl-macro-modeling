@@ -26,7 +26,7 @@ model:
   nhead: 4
   max_seq_len: ${train.max_seq_len}
   model_params_dim: ${train.max_model_params_dim}
-  has_pinn: true
+  has_pinn: false
   context_only: true  # hide the task id and the model parameters
   input_normalization: causal  # symlog | causal (scale-free; inference() then needs initial_action)
   ridge_channel: true  # in-context ridge estimate as an action input (causal only)
