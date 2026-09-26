@@ -109,7 +109,7 @@ def evaluate(
     with tempfile.TemporaryDirectory() as index_dir:
         run_generation_batch_dynare(Path(data_dir), Path(index_dir))
         dataset = EconomicsDataset(
-            Path(index_dir), model.state_dim, model.action_dim, model.pinn_head[-1].out_features if model.has_pinn else 1,
+            Path(index_dir), model.state_dim, model.action_dim, model.pinn_output_dim,
             model.model_params_dim, model.max_seq_len, random_window=True,
         )
         env_of_task = {v: k for k, v in Tokenizer.ENV_MAPPING.items()}

@@ -198,6 +198,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.max_seq_len = max_seq_len
         self.d_model = d_model * (1 + state_dim + action_dim + 1)
         self.has_pinn = has_pinn
+        self.pinn_output_dim = pinn_output_dim
         self.model_params_dim = model_params_dim
         self.context_only = context_only
         self.input_normalization = input_normalization

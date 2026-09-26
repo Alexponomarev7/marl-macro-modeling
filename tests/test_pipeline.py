@@ -98,7 +98,7 @@ def test_random_windows_cover_the_episode(episode_dir, tmp_path):
 def _model(**kw):
     return AlgorithmDistillationTransformer(
         state_dim=30, action_dim=5, num_tasks=Tokenizer().num_tasks, d_model=48, nhead=4, num_layers=2,
-        max_seq_len=L, model_params_dim=36, pinn_output_dim=16, has_pinn=True, **kw,
+        max_seq_len=L, model_params_dim=36, pinn_output_dim=16, has_pinn=kw.pop("has_pinn", True), **kw,
     ).eval()
 
 
@@ -338,6 +338,16 @@ def test_evaluation_persistence_baseline(episode_dir, tmp_path):
     assert np.isclose(row.model_nmse, row.persistence_nmse)
     hidden = evaluate(_model(), episode_dir, windows_per_episode=2, seed=0, hidden_states=("Capital",)).iloc[0]
     assert np.isclose(hidden.model_nmse, hidden.persistence_nmse)
+
+
+def test_evaluation_without_pinn_head(episode_dir):
+    for f in episode_dir.glob("*.parquet"):
+        df = pd.read_parquet(f)
+        df["endogenous"] = [np.zeros(3, np.float32)] * len(df)
+        df["endogenous_description"] = [["Output", "Investment", "Wage"]] * len(df)
+        df.to_parquet(f)
+    row = evaluate(_model(has_pinn=False), episode_dir, windows_per_episode=2, seed=0).iloc[0]
+    assert np.isclose(row.model_nmse, row.persistence_nmse)
 
 
 def test_in_context_ridge_recovers_a_linear_policy():
