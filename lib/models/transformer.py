@@ -176,20 +176,23 @@ class AlgorithmDistillationTransformer(nn.Module):
         input_normalization: str = "symlog",
         ridge_channel: bool = False,
         ridge_windows: tuple[int, ...] = (),
+        ridge_skip: bool = False,
         ridge_penalty: float = RIDGE_PENALTY,
     ):
         """context_only: hide the task id and the model parameters.
         input_normalization: "symlog" or "causal" (scale-free running statistics, see causal_features).
         ridge_channel: add in_context_ridge_change to each action slot (causal mode only).
         ridge_windows: also add the estimate over each of these last numbers of steps.
+        ridge_skip: predict a_{t-1} plus a learned convex mix of no change and the ridge estimates,
+            plus a gated correction from the head.
         """
         super().__init__()
         if input_normalization not in ("symlog", "causal"):
             raise ValueError(f"input_normalization must be 'symlog' or 'causal', got {input_normalization!r}")
         if ridge_channel and input_normalization != "causal":
             raise ValueError("ridge_channel needs input_normalization='causal'")
-        if ridge_windows and not ridge_channel:
-            raise ValueError("ridge_windows needs ridge_channel")
+        if (ridge_windows or ridge_skip) and not ridge_channel:
+            raise ValueError("ridge_windows and ridge_skip need ridge_channel")
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.max_seq_len = max_seq_len
@@ -200,6 +203,7 @@ class AlgorithmDistillationTransformer(nn.Module):
         self.input_normalization = input_normalization
         self.ridge_channel = ridge_channel
         self.ridge_windows = tuple(ridge_windows)
+        self.ridge_skip = ridge_skip
         self.ridge_penalty = ridge_penalty
 
         self.tokenizer = Tokenizer()
@@ -234,6 +238,13 @@ class AlgorithmDistillationTransformer(nn.Module):
         # zero-init residual head: training starts from persistence, a_t = a_{t-1}
         nn.init.zeros_(self.action_head.weight)
         nn.init.zeros_(self.action_head.bias)
+        if ridge_skip:
+            # per action: logits of no change and of each ridge estimate, then the correction's gate
+            self.ridge_gate = nn.Linear(self.d_model, action_dim * (3 + len(self.ridge_windows)), dtype=torch.float32)
+            nn.init.zeros_(self.ridge_gate.weight)
+            nn.init.zeros_(self.ridge_gate.bias)
+            with torch.no_grad():
+                self.ridge_gate.bias.view(action_dim, -1)[:, 1] = 4.0  # start near the full-window estimate
 
         # Optional PINN head for predicting additional data
         if self.has_pinn:
@@ -341,6 +352,10 @@ class AlgorithmDistillationTransformer(nn.Module):
         encoded = self.transformer(sequence.transpose(0, 1), mask=mask).transpose(0, 1)  # [batch_size, seq_len, d_model]
 
         residual = self.action_head(encoded)
+        if self.ridge_skip:
+            gates = self.ridge_gate(encoded).view(*residual.shape, -1)
+            options = torch.stack([torch.zeros_like(residual)] + ridges, -1)
+            residual = (gates[..., :-1].softmax(-1) * options).sum(-1) + torch.sigmoid(gates[..., -1]) * residual
         if self.input_normalization == "causal":
             residual = residual * action_unit
         actions_pred = prev_actions + residual  # [bs, seq_length, action_dim]

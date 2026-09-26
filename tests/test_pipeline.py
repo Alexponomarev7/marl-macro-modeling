@@ -213,6 +213,26 @@ def test_windowed_ridge_uses_only_the_last_pairs():
     assert torch.allclose(windowed, in_context_ridge_change(s[:, cut], pa[:, cut], ok(w + 2), ok(w + 2))[:, -1], atol=1e-5)
 
 
+def test_ridge_skip_can_output_the_ridge_estimate():
+    from lib.models.transformer import in_context_ridge_change
+    g = torch.Generator().manual_seed(0)
+    s = torch.randn(2, L, 3, generator=g).cumsum(1)
+    a = 5.0 + torch.einsum("bls,bsa->bla", s, torch.randn(2, 3, 2, generator=g))
+    pa = torch.cat([a[:, :1] - 0.1, a[:, :-1]], 1)
+    model = _model(input_normalization="causal", ridge_channel=True, ridge_skip=True)
+    torch.manual_seed(0)
+    torch.nn.init.normal_(model.action_head.weight, std=0.1)
+    with torch.no_grad():
+        model.ridge_gate.bias.view(-1, 3)[:, 1] = 30.0   # the full-window estimate
+        model.ridge_gate.bias.view(-1, 3)[:, 2] = -30.0  # no correction
+        pad = lambda x, d: torch.nn.functional.pad(x, (0, d - x.shape[-1]))
+        pred = model(states=pad(s, 30), states_info=torch.ones(2, 30, dtype=torch.long), actions=pad(pa, 5),
+                     actions_info=torch.ones(2, 5, dtype=torch.long), rewards=torch.zeros(2, L, 1),
+                     task_ids=torch.zeros(2, dtype=torch.long), model_params=torch.zeros(2, 36))[0]
+    first = (torch.arange(L).view(1, L, 1) > 0).expand(2, L, 1)
+    assert torch.allclose(pred[..., :2], pa + in_context_ridge_change(s, pa, first, first), atol=1e-4)
+
+
 def test_observed_steps_skip_padding_and_the_episode_start_placeholder():
     mask = torch.tensor([[False, False, True, True], [True, True, True, True], [True, True, True, True]])
     first = torch.tensor([True, True, False])
