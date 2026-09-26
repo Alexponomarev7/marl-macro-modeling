@@ -31,7 +31,7 @@ model:
   input_normalization: causal  # symlog | causal (scale-free; inference() then needs initial_action)
   ridge_channel: true  # in-context ridge estimate as an action input (causal only)
   ridge_windows: []  # extra ridge estimates over the last k steps each
-  ridge_skip: false  # output a_{t-1} + a learned mix of the ridge estimates + a gated correction
+  ridge_skip: true  # output a_{t-1} + a learned mix of the ridge estimates + a gated correction
 optimizer:
   _target_: torch.optim.AdamW
   lr: 1.0e-4  # peak, after warmup (symlog inputs need 3.0e-5)
