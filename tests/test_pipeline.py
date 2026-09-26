@@ -202,6 +202,17 @@ def test_ridge_channel_matches_the_oracle_and_the_model_stays_causal(episode_dir
     assert torch.allclose(moved[:, :t], base[:, :t], atol=1e-6) and not torch.allclose(moved[:, t:], base[:, t:])
 
 
+def test_windowed_ridge_uses_only_the_last_pairs():
+    from lib.models.transformer import in_context_ridge_change
+    g = torch.Generator().manual_seed(1)
+    s, pa = torch.randn(2, L, 3, generator=g).cumsum(1), torch.randn(2, L, 2, generator=g).cumsum(1)
+    ok = lambda n: (torch.arange(n).view(1, n, 1) > 0).expand(2, n, 1)
+    w, t = 12, 40
+    windowed = in_context_ridge_change(s, pa, ok(L), ok(L), window=w)[:, t]
+    cut = slice(t - w - 1, t + 1)
+    assert torch.allclose(windowed, in_context_ridge_change(s[:, cut], pa[:, cut], ok(w + 2), ok(w + 2))[:, -1], atol=1e-5)
+
+
 def test_observed_steps_skip_padding_and_the_episode_start_placeholder():
     mask = torch.tensor([[False, False, True, True], [True, True, True, True], [True, True, True, True]])
     first = torch.tensor([True, True, False])
