@@ -324,6 +324,19 @@ def test_lq_tasks(tmp_path):
     assert np.allclose(item["actions"][:, :m].numpy(), A[start:start + L], atol=1e-5)
 
 
+def test_discounted_riccati_gives_a_stabilizing_optimal_policy():
+    from lib.lq_tasks import discounted_riccati, random_task
+    rng = np.random.default_rng(1)
+    for _ in range(5):
+        task = random_task(rng)
+        A, B, Q, R, beta = (task[k] for k in ("A", "B", "Q", "R", "beta"))
+        P = discounted_riccati(A, B, Q, R, beta)
+        K = beta * np.linalg.solve(R + beta * B.T @ P @ B, B.T @ P @ A)
+        assert np.allclose(P, Q + beta * A.T @ P @ (A - B @ K), rtol=1e-9, atol=1e-9)
+        assert np.allclose(task["K"], K)
+        assert max(abs(np.linalg.eigvals(np.sqrt(beta) * (A - B @ K)))) < 1
+
+
 def test_dataset_stage_adds_lq_tasks(episode_dir, tmp_path):
     from lib.generate_dataset import run_generation_batch_dynare
     index = tmp_path / "index"

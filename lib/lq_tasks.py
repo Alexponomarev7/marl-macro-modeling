@@ -12,10 +12,22 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.linalg import solve_discrete_are
 
 MAX_STATES, MAX_ACTIONS = 8, 3
 ENV_NAME = "LQ_random"
+
+
+def discounted_riccati(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray, beta: float,
+                       tol: float = 1e-12, max_iter: int = 100_000) -> np.ndarray:
+    """Value matrix P of the discounted LQ problem by Riccati iteration (converges for stable A)."""
+    P = Q.copy()
+    for _ in range(max_iter):
+        K = beta * np.linalg.solve(R + beta * B.T @ P @ B, B.T @ P @ A)
+        P_next = Q + beta * A.T @ P @ (A - B @ K)
+        if np.abs(P_next - P).max() <= tol * np.abs(P_next).max():
+            return P_next
+        P = P_next
+    raise RuntimeError("Riccati iteration did not converge")
 
 
 def random_task(rng: np.random.Generator, n: int | None = None, m: int | None = None) -> dict:
@@ -28,7 +40,7 @@ def random_task(rng: np.random.Generator, n: int | None = None, m: int | None = 
     G, H = rng.normal(size=(n, n)), rng.normal(size=(m, m))
     Q, R = G @ G.T / n + 0.1 * np.eye(n), H @ H.T / m + 0.1 * np.eye(m)
     beta = rng.uniform(0.9, 0.99)
-    P = solve_discrete_are(np.sqrt(beta) * A, np.sqrt(beta) * B, Q, R)
+    P = discounted_riccati(A, B, Q, R, beta)
     K = beta * np.linalg.solve(R + beta * B.T @ P @ B, B.T @ P @ A)
     return {
         "A": A, "B": B, "C": np.diag(rng.uniform(0.2, 1.0, n)), "Q": Q, "R": R, "K": K, "beta": beta,
