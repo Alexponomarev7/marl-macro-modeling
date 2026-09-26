@@ -318,6 +318,18 @@ def test_in_context_ridge_recovers_a_linear_policy():
     assert (((pred - a) ** 2).mean(-1)[:, 10:] / a.var()).max() < 1e-3
 
 
+def test_oracle_change_is_clamped():
+    from lib.evaluation import ORACLE_CLAMP, _in_context_ridge
+    g = torch.Generator().manual_seed(0)
+    s = torch.randn(1, L, 2, generator=g, dtype=torch.float64).cumsum(1)
+    s[:, 30:, 0] += 1e3  # far outside the context
+    a = 5.0 + 2.0 * s[..., :1] + s[..., 1:]
+    pa = torch.cat([a[:, :1], a[:, :-1]], 1)
+    pred = _in_context_ridge(s, pa, a, torch.ones(1, L, dtype=torch.bool)).double()
+    rms = ((a - pa)[:, 1:30] ** 2).mean().sqrt()
+    assert (pred[:, 30] - pa[:, 30]).abs().max() <= ORACLE_CLAMP * rms * (1 + 1e-4)
+
+
 @pytest.mark.skipif(shutil.which("octave-cli") is None, reason="needs Octave + Dynare")
 def test_mit_shock_solver_matches_dynare_expectation_errors(tmp_path):
     models = Path(__file__).resolve().parent.parent / "dynare" / "docker" / "dynare_models"

@@ -23,6 +23,7 @@ from lib.models.transformer import AlgorithmDistillationTransformer
 EARLY, LATE = 5, 10  # first / last window positions
 TRUNCATED = 2
 RIDGE = 1e-2
+ORACLE_CLAMP = 10.0  # bound on the oracle's |a_t - a_{t-1}|, in running RMS of past action changes
 
 
 def load_policy(checkpoint: Path) -> AlgorithmDistillationTransformer:
@@ -72,7 +73,8 @@ def _shuffle_history(batch, generator: torch.Generator) -> dict[str, torch.Tenso
 
 def _in_context_ridge(states, prev_actions, actions, steps, lam=RIDGE):
     """At position t, ridge-regress a_tau - a_{tau-1} on s_tau - s_{tau-1} over tau < t and predict
-    a_t = a_{t-1} + G_hat (s_t - s_{t-1}); persistence until there are two more pairs than states.
+    a_t = a_{t-1} + G_hat (s_t - s_{t-1}), clamped to ORACLE_CLAMP running RMS of past action changes;
+    persistence until there are two more pairs than states.
 
     states: [B, L, S]; prev_actions, actions: [B, L, A]; steps: [B, L] bool, usable positions."""
     s, pa, a = states.double(), prev_actions.double(), actions.double()
@@ -90,6 +92,8 @@ def _in_context_ridge(states, prev_actions, actions, steps, lam=RIDGE):
     step = torch.einsum("bls,blsa->bla", torch.where(has_pairs, x / d, 0.0), coef)
     n_pairs = exclusive(use.double())  # [B, L]
     n_features = (x.abs().sum(1) > 0).sum(-1, keepdim=True)  # state slots that ever move, [B, 1]
+    bound = ORACLE_CLAMP * torch.sqrt(exclusive(ym * ym) / n_pairs.clamp(min=1).unsqueeze(-1))
+    step = torch.maximum(torch.minimum(step, bound), -bound)
     return (pa + torch.where((n_pairs >= n_features + 2).unsqueeze(-1), step, 0.0)).float()
 
 
