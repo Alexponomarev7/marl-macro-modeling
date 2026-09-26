@@ -80,6 +80,18 @@ def simulate(task: dict, periods: int, rng: np.random.Generator, behavior_noise:
     return df
 
 
+def write_tasks(out: Path, episodes: int, periods: int = 1000, behavior_noise: float = 0.0, regimes: int = 1,
+                seed: int = 0) -> list[Path]:
+    """Simulate `episodes` random tasks into out/LQ_random_config_<k>.parquet; returns the paths."""
+    out.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    paths = []
+    for k in range(episodes):
+        paths.append(out / f"{ENV_NAME}_config_{k}.parquet")
+        simulate(random_task(rng), periods, rng, behavior_noise, regimes=regimes).to_parquet(paths[-1])
+    return paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True)
@@ -89,11 +101,7 @@ def main() -> None:
     parser.add_argument("--regimes", type=int, default=1, help="systems per episode, switching at random dates")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(args.seed)
-    for k in range(args.episodes):
-        episode = simulate(random_task(rng), args.periods, rng, args.behavior_noise, regimes=args.regimes)
-        episode.to_parquet(args.out / f"{ENV_NAME}_config_{k}.parquet")
+    write_tasks(args.out, args.episodes, args.periods, args.behavior_noise, args.regimes, args.seed)
 
 
 if __name__ == "__main__":

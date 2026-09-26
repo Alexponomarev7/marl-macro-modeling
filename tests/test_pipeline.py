@@ -1,4 +1,5 @@
 """Fast invariants of the data -> model pipeline (no Dynare needed except the last test)."""
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -321,6 +322,18 @@ def test_lq_tasks(tmp_path):
     start, m = int(item["window_start"]), A.shape[1]
     assert np.allclose(item["prev_actions"][1:, :m].numpy(), executed[start:start + L - 1], atol=1e-5)
     assert np.allclose(item["actions"][:, :m].numpy(), A[start:start + L], atol=1e-5)
+
+
+def test_dataset_stage_adds_lq_tasks(episode_dir, tmp_path):
+    from lib.generate_dataset import run_generation_batch_dynare
+    index = tmp_path / "index"
+    index.mkdir()
+    run_generation_batch_dynare(episode_dir, index, lq_tasks={"episodes": 2, "regimes": 2, "periods": T})
+    meta = json.loads((index / "metadata.json").read_text())
+    assert [m["env_group"] for m in meta] == ["Hansen_1985"] * 3 + ["LQ_random"] * 2
+    assert "regime" in pd.read_parquet(meta[-1]["output_dir"]).columns
+    item = EconomicsDataset(index, **DIMS, max_seq_len=L, random_window=False)[4]
+    assert item["states_info"].ne(0).any() and torch.isfinite(item["states"]).all()
 
 
 def test_separable_utility_reward():

@@ -164,10 +164,13 @@ def run_generation_batch_dynare(
     workdir: Path,
     include_models: list[str] | None = None,
     exclude_models: list[str] | None = None,
+    lq_tasks: dict[str, Any] | None = None,
 ):
     """Index the processed Dynare episodes in place (no copies) for EconomicsDataset.
 
     include_models / exclude_models: Dynare model names to keep / drop.
+    lq_tasks: keyword arguments of lib.lq_tasks.write_tasks; those episodes are written to
+        workdir/lq_tasks and indexed too.
     """
     processed_path = dynare_output_path
 
@@ -182,6 +185,9 @@ def run_generation_batch_dynare(
         files = [f for f in files if models[f] in include_models]
     if exclude_models:
         files = [f for f in files if models[f] not in exclude_models]
+    if lq_tasks and lq_tasks.get("episodes", 0) > 0:
+        from lib.lq_tasks import write_tasks
+        files += write_tasks(workdir / "lq_tasks", **lq_tasks)
     metadata = []
     for file in files:
         parquet = pq.ParquetFile(file)
@@ -236,6 +242,7 @@ class DatasetGenerator:
                     stage_dir,
                     include_models=stage_cfg.get('include_models'),
                     exclude_models=stage_cfg.get('exclude_models'),
+                    lq_tasks=stage_cfg.get('lq_tasks'),
                 )
             else:
                 raise ValueError(f"Unknown dataset type: {stage_cfg['type']}")
