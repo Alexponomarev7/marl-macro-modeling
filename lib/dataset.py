@@ -181,6 +181,7 @@ class Tokenizer:
         "NominalDepreciationRate",
         "Land",
         "LandPrice",
+        *(f"LQState{i}" for i in range(1, 9)),  # lib/lq_tasks.py
     )
 
     # State aliases for canonicalization across environments
@@ -330,6 +331,7 @@ class Tokenizer:
         "Debt",
         "Dividends",
         "Land",
+        *(f"LQAction{j}" for j in range(1, 4)),  # lib/lq_tasks.py
     )
 
     ACTION_ALIASES: dict[str, str] = {
@@ -387,6 +389,7 @@ class Tokenizer:
         "Gali_2010": 39,
         "Jermann_1998": 40,
         "Kiyotaki_Moore_1997": 41,
+        "LQ_random": 42,
     }
 
     def __init__(self):
@@ -767,9 +770,11 @@ x
                 - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
         path = self.metadata[idx]["output_dir"]
-        # info repeats on every row: read only its first row
-        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"])
         parquet = pq.ParquetFile(path)
+        # executed actions differ from the target (optimal) ones in behavior-noise episodes
+        behavior = "behavior_action" in parquet.schema_arrow.names
+        # info repeats on every row: read only its first row
+        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"] + ["behavior_action"] * behavior)
         desc_keys = ["state_description", "action_description", "endogenous_description"]
         first_row = next(parquet.iter_batches(
             batch_size=1, columns=["info"] + [k for k in desc_keys if k in parquet.schema_arrow.names]
@@ -786,7 +791,8 @@ x
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
         # step t sees (s_t, a_{t-1}, r_{t-1}) and predicts a_t
-        prev_actions = torch.cat([torch.zeros_like(actions[:1]), actions[:-1]], dim=0)
+        executed = stack('behavior_action') if behavior else actions
+        prev_actions = torch.cat([torch.zeros_like(executed[:1]), executed[:-1]], dim=0)
         prev_rewards = torch.cat([torch.zeros_like(rewards[:1]), rewards[:-1]], dim=0)
 
         # per-episode action scale for the loss (not a model input), floored at 1% of the level

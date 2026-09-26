@@ -225,6 +225,30 @@ def test_load_policy_after_tokens_were_appended(tmp_path):
     assert torch.equal(model.state_embedding.weight[:len(rows)], rows)
 
 
+def test_lq_tasks(tmp_path):
+    """Optimal actions are linear in the state; with behavior noise the model's a_{t-1} is the
+    executed action while the target stays optimal."""
+    from lib.generate_dataset import run_generation_batch_dynare
+    from lib.lq_tasks import random_task, simulate
+    rng = np.random.default_rng(0)
+    data = tmp_path / "lq"
+    data.mkdir()
+    for k in range(3):
+        simulate(random_task(rng), T, rng, behavior_noise=0.5).to_parquet(data / f"LQ_random_config_{k}.parquet")
+    df = pd.read_parquet(data / "LQ_random_config_0.parquet")
+    S, A = np.stack(df.state), np.stack(df.action)
+    coef, *_ = np.linalg.lstsq(np.column_stack([np.ones(T), S]), A, rcond=None)
+    assert np.allclose(np.column_stack([np.ones(T), S]) @ coef, A, atol=1e-8)
+    index = tmp_path / "index"
+    index.mkdir()
+    run_generation_batch_dynare(data, index)
+    item = EconomicsDataset(index, **DIMS, max_seq_len=L, random_window=False)[0]
+    executed = np.stack(df.behavior_action)
+    start, m = int(item["window_start"]), A.shape[1]
+    assert np.allclose(item["prev_actions"][1:, :m].numpy(), executed[start:start + L - 1], atol=1e-5)
+    assert np.allclose(item["actions"][:, :m].numpy(), A[start:start + L], atol=1e-5)
+
+
 def test_separable_utility_reward():
     d = pd.DataFrame({"c": [1.0, 2.0], "h": [0.3, 0.4], "m": [2.0, 3.0], "p": [1.0, 1.5]})
     params = {"B": 2.0, "chi": 0.5, "phi": 1.5, "D": 0.1, "sigma": 2.0}
