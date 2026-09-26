@@ -333,7 +333,7 @@ def main(hydra_cfg: DictConfig) -> None:
                 dirpath=str(checkpoint_dir),
                 filename='model-{epoch:03d}',
                 save_top_k=3,
-                monitor='val_loss',
+                monitor='val_action_loss',
                 save_last=True
             )
         ],
