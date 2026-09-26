@@ -233,6 +233,21 @@ def test_ridge_skip_can_output_the_ridge_estimate():
     assert torch.allclose(pred[..., :2], pa + in_context_ridge_change(s, pa, first, first), atol=1e-4)
 
 
+def test_weight_decay_spares_biases_norms_and_embeddings():
+    import hydra
+    from omegaconf import OmegaConf
+    from pipeline.run_pipeline import decay_param_groups
+    model = _model(input_normalization="causal", ridge_channel=True, ridge_skip=True)
+    decay, no_decay = ({id(p) for p in g["params"]} for g in decay_param_groups(model))
+    norms = [p for m in model.modules() if isinstance(m, torch.nn.LayerNorm) for p in m.parameters()]
+    assert all(id(p) in no_decay for p in norms + [model.state_embedding.weight, model.ridge_gate.bias])
+    assert id(model.transformer.layers[0].linear1.weight) in decay and id(model.ridge_gate.weight) in decay
+    assert len(decay) + len(no_decay) == len(list(model.parameters()))
+    cfg = OmegaConf.load(Path(__file__).parents[1] / "pipeline/configs/train/default.yaml").optimizer
+    optimizer = hydra.utils.instantiate(cfg, _partial_=True)(decay_param_groups(model))  # as in configure_optimizers
+    assert [g["weight_decay"] for g in optimizer.param_groups] == [cfg.weight_decay, 0.0]
+
+
 def test_observed_steps_skip_padding_and_the_episode_start_placeholder():
     mask = torch.tensor([[False, False, True, True], [True, True, True, True], [True, True, True, True]])
     first = torch.tensor([True, True, False])

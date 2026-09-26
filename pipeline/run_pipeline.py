@@ -143,6 +143,16 @@ class DataModule(L.LightningDataModule):
         )
 
 
+def decay_param_groups(module: torch.nn.Module) -> list[dict]:
+    """Optimizer parameter groups: weight decay on matrices, none on biases, norms and embedding tables."""
+    embeddings = {id(m.weight) for m in module.modules() if isinstance(m, torch.nn.Embedding)}
+    params = [p for p in module.parameters() if p.requires_grad]
+    return [
+        {"params": [p for p in params if p.ndim >= 2 and id(p) not in embeddings]},
+        {"params": [p for p in params if p.ndim < 2 or id(p) in embeddings], "weight_decay": 0.0},
+    ]
+
+
 class EconomicPolicyModel(L.LightningModule):
     """PyTorch Lightning module for training economic policies."""
 
@@ -201,11 +211,9 @@ class EconomicPolicyModel(L.LightningModule):
         )
 
     def configure_optimizers(self):
-        """Optimizer from config, with a per-step linear warmup then cosine decay to eta_min."""
-        optimizer = hydra.utils.instantiate(
-            self.optimizer_cfg,
-            params=self.parameters()
-        )
+        """Optimizer from config (see decay_param_groups), with a per-step linear warmup then cosine
+        decay to eta_min."""
+        optimizer = hydra.utils.instantiate(self.optimizer_cfg, _partial_=True)(decay_param_groups(self))
         warmup = int(self.scheduler_cfg["warmup_steps"])
         total = max(int(self.trainer.estimated_stepping_batches), warmup + 1)
         floor = float(self.scheduler_cfg["eta_min"]) / optimizer.defaults["lr"]
