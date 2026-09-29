@@ -448,7 +448,8 @@ def run_models(config: dict, raw_data_dir: Path, max_draws: int = 4, resume: boo
         if not tasks:
             return output_files
 
-    num_processes = min(min(cpu_count(), len(tasks)), 32)
+    # DYNARE_WORKERS: a cap for containers, where cpu_count() is the host's
+    num_processes = min(int(os.environ.get("DYNARE_WORKERS", min(cpu_count(), 32))), len(tasks))
     print(f"Running {len(tasks)} tasks using {num_processes} processes")
 
     # shuffle so slow models spread across workers
@@ -1262,7 +1263,7 @@ def main(cfg: DictConfig) -> None:
         tasks.append((model_name, config["models"][model_name], raw_data_file, params_file,
                       path_storage.processed_root))
 
-    num_processes = max(1, min(cpu_count(), len(tasks), 32))
+    num_processes = max(1, min(int(os.environ.get("DYNARE_WORKERS", min(cpu_count(), 32))), len(tasks)))
     with Pool(processes=num_processes) as pool:
         processed = sum(pool.imap_unordered(_process_output, tasks, chunksize=4))
     logger.info(f"Processed {processed}/{len(tasks)} episodes")
