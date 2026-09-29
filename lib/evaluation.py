@@ -105,9 +105,11 @@ def evaluate(
     bootstrap: int = 0,
     batch_size: int = 64,
     hidden_states: tuple[str, ...] = (),
+    include_models: list[str] | None = None,
 ) -> pd.DataFrame:
+    """include_models: Dynare model names in data_dir to score (default: all)."""
     with tempfile.TemporaryDirectory() as index_dir:
-        run_generation_batch_dynare(Path(data_dir), Path(index_dir))
+        run_generation_batch_dynare(Path(data_dir), Path(index_dir), include_models=include_models)
         dataset = EconomicsDataset(
             Path(index_dir), model.state_dim, model.action_dim, model.pinn_output_dim,
             model.model_params_dim, model.max_seq_len, random_window=True,

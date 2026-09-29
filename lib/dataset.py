@@ -748,6 +748,37 @@ class EconomicsDataset(Dataset):
             states[:, :n] = states[:, :n] + noise * kept
         return states
 
+    @staticmethod
+    def read_episode(path: str | Path) -> tuple[dict[str, np.ndarray], dict]:
+        """Float32 arrays of an episode parquet - state [T, S], action [T, A], executed [T, A] (the
+        executed actions, which differ from the target ones in behavior-noise episodes), endogenous
+        [T, E], reward [T, 1] - and its info, with the variable descriptions."""
+        parquet = pq.ParquetFile(path)
+        behavior = "behavior_action" in parquet.schema_arrow.names
+        # info repeats on every row: read only its first row
+        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"] + ["behavior_action"] * behavior)
+        desc_keys = ["state_description", "action_description", "endogenous_description"]
+        first_row = next(parquet.iter_batches(
+            batch_size=1, columns=["info"] + [k for k in desc_keys if k in parquet.schema_arrow.names]
+        )).to_pylist()[0]
+        # descriptions: in info (python envs) or top-level columns (Dynare)
+        info = dict(first_row["info"])
+        for k in desc_keys:
+            if info.get(k) is None:
+                info[k] = first_row.get(k) or []
+
+        stack = lambda col: np.stack(data[col].values).astype(np.float32).reshape(len(data), -1)
+        arrays = {
+            "state": stack("state"), "endogenous": stack("endogenous"), "action": stack("action"),
+            "reward": data["reward"].to_numpy(np.float32).reshape(-1, 1),
+        }
+        arrays["executed"] = stack("behavior_action") if behavior else arrays["action"]
+        return arrays, info
+
+    def _load_episode(self, idx: int) -> tuple[dict[str, np.ndarray], dict]:
+        """read_episode of episode idx; subclasses may read it from elsewhere."""
+        return self.read_episode(self.metadata[idx]["output_dir"])
+
     def __getitem__(self, idx: int):
         """
         Get a single processed episode from the dataset.
@@ -770,28 +801,13 @@ x
                 - attention_mask (torch.Tensor): Boolean mask for valid positions [max_seq_len]
         """
         path = self.metadata[idx]["output_dir"]
-        parquet = pq.ParquetFile(path)
-        # executed actions differ from the target (optimal) ones in behavior-noise episodes
-        behavior = "behavior_action" in parquet.schema_arrow.names
-        # info repeats on every row: read only its first row
-        data = pd.read_parquet(path, columns=["state", "action", "reward", "endogenous"] + ["behavior_action"] * behavior)
-        desc_keys = ["state_description", "action_description", "endogenous_description"]
-        first_row = next(parquet.iter_batches(
-            batch_size=1, columns=["info"] + [k for k in desc_keys if k in parquet.schema_arrow.names]
-        )).to_pylist()[0]
-        # descriptions: in info (python envs) or top-level columns (Dynare)
-        info = dict(first_row["info"])
-        for k in desc_keys:
-            if info.get(k) is None:
-                info[k] = first_row.get(k) or []
-
-        stack = lambda col: torch.from_numpy(np.stack(data[col].values).astype(np.float32).reshape(len(data), -1))
-        states, endogenous, actions = stack('state'), stack('endogenous'), stack('action')
-        rewards = torch.tensor(data['reward'].values, dtype=torch.float32).reshape(-1, 1)
+        arrays, info = self._load_episode(idx)
+        states, endogenous, actions, executed, rewards = (
+            torch.from_numpy(arrays[k]) for k in ("state", "endogenous", "action", "executed", "reward")
+        )
         task_id = torch.tensor(self.task_ids[idx], dtype=torch.long)
 
         # step t sees (s_t, a_{t-1}, r_{t-1}) and predicts a_t
-        executed = stack('behavior_action') if behavior else actions
         prev_actions = torch.cat([torch.zeros_like(executed[:1]), executed[:-1]], dim=0)
         prev_rewards = torch.cat([torch.zeros_like(rewards[:1]), rewards[:-1]], dim=0)
 
